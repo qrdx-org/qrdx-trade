@@ -4,11 +4,11 @@
   "description": "QRDX Trade - Quantum Resistant DEX Trading Interface",
   "private": true,
   "scripts": {
-    "dev": "bun --bun run next dev --turbopack",
+    "dev": "next dev",
     "build:nobun": "pnpm exec next build",
-    "build": "bun --bun run next build",
-    "start": "bun --bun run next start",
-    "lint": "bun --bun run next lint",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
     "clean": "rm -rf .next node_modules"
   },
   "keywords": [
