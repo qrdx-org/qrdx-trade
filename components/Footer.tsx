@@ -2,19 +2,28 @@
 
 import React from 'react'
 import Link from 'next/link'
-import { Github, Twitter, MessageCircle } from 'lucide-react'
+import { Github, Twitter, MessageCircle, Shield, Sparkles } from 'lucide-react'
 
 export default function Footer() {
   return (
-    <footer className="border-t mt-auto">
-      <div className="container mx-auto px-4 py-8">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
+    <footer className="border-t mt-auto bg-card/50">
+      <div className="container mx-auto px-4 py-12">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-8">
           {/* Brand */}
           <div className="space-y-4">
-            <h3 className="text-lg font-bold">QRDX Trade</h3>
+            <div className="flex items-center gap-2">
+              <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-primary to-primary/60 flex items-center justify-center">
+                <Sparkles className="h-5 w-5 text-primary-foreground" />
+              </div>
+              <h3 className="text-lg font-bold">QRDX Trade</h3>
+            </div>
             <p className="text-sm text-muted-foreground">
-              Quantum-resistant decentralized exchange. Trade with post-quantum security.
+              The world's first quantum-resistant decentralized exchange. Trade with confidence in the post-quantum era.
             </p>
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <Shield className="h-3 w-3 text-green-500" />
+              <span>Quantum-Safe Security</span>
+            </div>
           </div>
 
           {/* Products */}
@@ -22,18 +31,23 @@ export default function Footer() {
             <h4 className="text-sm font-semibold">Products</h4>
             <ul className="space-y-2 text-sm">
               <li>
-                <Link href="/" className="text-muted-foreground hover:text-foreground transition-colors">
+                <Link href="/" className="text-muted-foreground hover:text-primary transition-colors">
                   Trade
                 </Link>
               </li>
               <li>
-                <Link href="https://qrdx.org/pools" className="text-muted-foreground hover:text-foreground transition-colors">
-                  Pools
+                <Link href="/pools" className="text-muted-foreground hover:text-primary transition-colors">
+                  Liquidity Pools
                 </Link>
               </li>
               <li>
-                <Link href="https://qrdx.org/stake" className="text-muted-foreground hover:text-foreground transition-colors">
-                  Stake
+                <Link href="/stake" className="text-muted-foreground hover:text-primary transition-colors">
+                  Staking
+                </Link>
+              </li>
+              <li>
+                <Link href="/analytics" className="text-muted-foreground hover:text-primary transition-colors">
+                  Analytics
                 </Link>
               </li>
             </ul>
@@ -44,42 +58,67 @@ export default function Footer() {
             <h4 className="text-sm font-semibold">Resources</h4>
             <ul className="space-y-2 text-sm">
               <li>
-                <Link href="https://docs.qrdx.org" className="text-muted-foreground hover:text-foreground transition-colors">
+                <a href="https://qrdx.org" target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-primary transition-colors">
+                  About QRDX
+                </a>
+              </li>
+              <li>
+                <a href="https://qrdx.org/docs" target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-primary transition-colors">
                   Documentation
-                </Link>
+                </a>
               </li>
               <li>
-                <Link href="https://qrdx.org/whitepaper" className="text-muted-foreground hover:text-foreground transition-colors">
+                <a href="https://qrdx.org/whitepaper" target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-primary transition-colors">
                   Whitepaper
-                </Link>
+                </a>
               </li>
               <li>
-                <Link href="https://github.com/qrdx-org" className="text-muted-foreground hover:text-foreground transition-colors">
-                  GitHub
-                </Link>
+                <a href="https://explorer.qrdx.org" target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-primary transition-colors">
+                  Block Explorer
+                </a>
               </li>
             </ul>
           </div>
 
-          {/* Social */}
+          {/* Community */}
           <div className="space-y-4">
             <h4 className="text-sm font-semibold">Community</h4>
-            <div className="flex space-x-4">
-              <Link href="https://twitter.com/qrdx_org" className="text-muted-foreground hover:text-foreground transition-colors">
-                <Twitter className="h-5 w-5" />
-              </Link>
-              <Link href="https://github.com/qrdx-org" className="text-muted-foreground hover:text-foreground transition-colors">
-                <Github className="h-5 w-5" />
-              </Link>
-              <Link href="https://discord.gg/qrdx" className="text-muted-foreground hover:text-foreground transition-colors">
-                <MessageCircle className="h-5 w-5" />
-              </Link>
-            </div>
+            <ul className="space-y-2 text-sm">
+              <li>
+                <a href="https://github.com/qrdx-org" target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-primary transition-colors flex items-center gap-2">
+                  <Github className="h-4 w-4" />
+                  GitHub
+                </a>
+              </li>
+              <li>
+                <a href="https://twitter.com/qrdx" target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-primary transition-colors flex items-center gap-2">
+                  <Twitter className="h-4 w-4" />
+                  Twitter
+                </a>
+              </li>
+              <li>
+                <a href="https://discord.gg/qrdx" target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-primary transition-colors flex items-center gap-2">
+                  <MessageCircle className="h-4 w-4" />
+                  Discord
+                </a>
+              </li>
+            </ul>
           </div>
         </div>
 
-        <div className="border-t mt-8 pt-8 text-center text-sm text-muted-foreground">
-          <p>&copy; {new Date().getFullYear()} QRDX Foundation. All rights reserved.</p>
+        {/* Bottom Bar */}
+        <div className="pt-8 border-t flex flex-col md:flex-row items-center justify-between gap-4">
+          <p className="text-sm text-muted-foreground">
+            © {new Date().getFullYear()} QRDX Foundation. All rights reserved.
+          </p>
+          <div className="flex items-center gap-6 text-sm">
+            <Link href="/terms" className="text-muted-foreground hover:text-primary transition-colors">
+              Terms of Service
+            </Link>
+            <Link href="/privacy" className="text-muted-foreground hover:text-primary transition-colors">
+              Privacy Policy
+            </Link>
+          </div>
         </div>
       </div>
     </footer>

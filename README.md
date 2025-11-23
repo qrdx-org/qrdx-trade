@@ -1,136 +1,200 @@
-# QRDX Trade - Quantum Resistant DEX Trading Interface
+# QRDX Trade - Quantum-Resistant DEX Trading Platform
 
-https://trade.qrdx.org
+A professional, production-ready trading platform built with Next.js 16, featuring quantum-resistant security for the post-quantum era.
 
-A professional trading interface for the world's first quantum-resistant decentralized exchange, built with Next.js 16, TypeScript, Tailwind CSS, and shadcn/ui.
+## 🌟 Features
 
-## Overview
+### Core Trading Functionality
+- **Live Trading Charts** - Real-time price charts with multiple timeframes (1H, 1D, 1W, 1M, 1Y)
+- **Advanced Swap Interface** - Professional token swap UI with slippage control
+- **Order Book** - Live order book with bid/ask spreads and depth visualization
+- **Trade History** - Real-time trade feed showing recent market activity
+- **Market Statistics** - Comprehensive platform metrics including TVL, volume, and active users
 
-QRDX Trade (trade.qrdx.org) provides a seamless trading experience for quantum-resistant assets including qETH, qBTC, and other post-quantum cryptographic tokens.
+### Dual Wallet Support
+- **Web3 Wallets** - Support for standard Ethereum wallets (MetaMask, WalletConnect, etc.)
+- **QRDX Wallets** - Native quantum-resistant QRDX chain wallets
 
-## Features
+### Professional UI/UX
+- 🎨 Modern, Uniswap/Binance-inspired design
+- 📊 Interactive charts with Recharts
+- ✨ Smooth Framer Motion animations
+- 🌓 Light/Dark mode support
+- 📱 Fully responsive mobile-first design
+- ⚡ Lightning-fast performance
 
-### Core Functionality
-- ✅ **Trading Interface** - Swap tokens with quantum-resistant security
-- ✅ **Light/Dark Mode** - Full theme support with system preference detection
-- ✅ **Responsive Design** - Mobile-first approach with desktop optimization
-- ✅ **Animated UI** - Smooth Framer Motion animations throughout
-- ✅ **Real-time Updates** - Live price feeds and order book data
+### Security
+- 🛡️ Quantum-resistant cryptography
+- 🔒 Post-quantum secure transactions
+- ✅ Audited smart contracts (coming soon)
 
-### Pages
-1. **Trading** (`/`)
-   - Token swap interface
-   - Real-time price charts
-   - Order book and trade history
-   - Liquidity pool information
-
-## Tech Stack
-
-- **Framework**: Next.js 16 (App Router)
-- **Language**: TypeScript
-- **Styling**: Tailwind CSS v4
-- **UI Components**: shadcn/ui (Radix UI)
-- **Animations**: Framer Motion
-- **Icons**: Lucide React
-- **Package Manager**: pnpm
-
-## Getting Started
+## 🚀 Getting Started
 
 ### Prerequisites
-
 - Node.js 18+ or Bun
-- pnpm (recommended) or npm
+- pnpm (recommended), npm, or yarn
 
 ### Installation
 
 ```bash
+# Clone the repository
+git clone https://github.com/qrdx-org/qrdx-trade.git
+cd qrdx-trade
+
 # Install dependencies
 pnpm install
 
 # Run development server
 pnpm dev
-
-# Build for production
-pnpm build
-
-# Start production server
-pnpm start
 ```
 
-Open [http://localhost:3000](http://localhost:3000) to view the trading interface.
+Open [http://localhost:3000](http://localhost:3000) to view the application.
 
-## Project Structure
+## 📁 Project Structure
 
 ```
 qrdx-trade/
-├── app/                 # Next.js app directory
-│   ├── globals.css     # Global styles with Tailwind
-│   ├── layout.tsx      # Root layout component
-│   └── page.tsx        # Trading page
-├── components/         # React components
-│   ├── ui/            # shadcn/ui components
-│   ├── Navigation.tsx # Navigation bar
-│   ├── Footer.tsx     # Footer component
-│   └── theme-*.tsx    # Theme components
-├── lib/               # Utility functions
-│   └── utils.ts       # Helper functions
-├── public/            # Static assets
-├── next.config.mjs    # Next.js configuration
-├── tailwind.config.js # Tailwind CSS configuration
-└── tsconfig.json      # TypeScript configuration
+├── app/                    # Next.js 16 app directory
+│   ├── page.tsx           # Main trading page
+│   ├── pools/             # Liquidity pools
+│   ├── stake/             # Staking interface
+│   ├── analytics/         # Analytics dashboard
+│   └── globals.css        # Global styles
+├── components/
+│   ├── TradingChart.tsx   # Live price chart
+│   ├── SwapInterface.tsx  # Token swap UI
+│   ├── OrderBook.tsx      # Order book display
+│   ├── TradeHistory.tsx   # Recent trades
+│   ├── MarketStats.tsx    # Platform statistics
+│   ├── WalletConnect.tsx  # Wallet connection
+│   ├── Navigation.tsx     # Main navigation
+│   ├── Footer.tsx         # Footer component
+│   └── ui/                # Reusable UI components
+└── lib/
+    └── utils.ts           # Utility functions
 ```
 
-## Configuration
+## 🛠️ Built With
 
-### Environment Variables
+- **[Next.js 16](https://nextjs.org/)** - React framework with App Router
+- **[React 19](https://react.dev/)** - UI library
+- **[TypeScript](https://www.typescriptlang.org/)** - Type safety
+- **[Tailwind CSS](https://tailwindcss.com/)** - Utility-first CSS
+- **[Framer Motion](https://www.framer.com/motion/)** - Animation library
+- **[Recharts](https://recharts.org/)** - Charting library
+- **[Radix UI](https://www.radix-ui.com/)** - Headless UI components
+- **[shadcn/ui](https://ui.shadcn.com/)** - Component library
 
-Create a `.env.local` file:
+## 🎯 Key Components
 
-```env
-NEXT_PUBLIC_API_URL=https://api.qrdx.org
-NEXT_PUBLIC_CHAIN_ID=1
-```
+### Trading Chart
+Real-time price charts with:
+- Multiple timeframe support
+- Live price updates
+- Percentage change indicators
+- Gradient area charts
+- Responsive design
 
-### Deployment
+### Swap Interface
+Professional token swap with:
+- Token selection dropdowns
+- Amount input validation
+- Exchange rate display
+- Slippage settings
+- Transaction fee estimation
+- Minimum received calculation
 
-This project is optimized for static export:
+### Order Book
+Live market depth showing:
+- Bid/ask spreads
+- Order quantity
+- Cumulative totals
+- Visual depth representation
+- Real-time updates
+
+### Wallet Integration
+Dual wallet system:
+- Web3 wallet connection (Ethereum-compatible)
+- QRDX native wallet support
+- Address display with copy function
+- Connection status indicators
+
+## 🎨 Design Philosophy
+
+The platform follows these design principles:
+- **Professional** - Clean, modern interface inspired by Uniswap and Binance
+- **Responsive** - Mobile-first design that scales beautifully
+- **Interactive** - Smooth animations and transitions throughout
+- **Accessible** - Built with accessibility in mind
+- **Performance** - Optimized for speed and efficiency
+
+## 📊 Market Statistics
+
+The platform displays comprehensive metrics:
+- Total Value Locked (TVL)
+- 24-hour trading volume
+- Active user count
+- Liquidity pool count
+- Total trades
+- Average APY
+
+## 🔒 Security Features
+
+- Quantum-resistant cryptographic algorithms
+- Post-quantum secure key exchange
+- Secure transaction signing
+- Protected liquidity pools
+- Audited smart contracts (planned)
+
+## 🌐 Environment
+
+This project is configured to run in a dev container with:
+- Debian GNU/Linux 12 (bookworm)
+- Node.js & pnpm
+- Git and development tools
+
+## 📝 Development
+
+### Available Scripts
 
 ```bash
-pnpm build
+pnpm dev          # Start development server
+pnpm build        # Build for production
+pnpm start        # Start production server
+pnpm lint         # Run linting
+pnpm clean        # Clean build artifacts
 ```
 
-The output will be in the `out/` directory, ready for deployment to any static hosting service.
+### Adding New Features
 
-## Development
+1. Create component in `/components`
+2. Add page in `/app` directory
+3. Update navigation if needed
+4. Test responsiveness
+5. Check dark mode compatibility
 
-### Adding New Components
+## 🤝 Contributing
 
-Use shadcn/ui CLI to add components:
+Contributions are welcome! Please feel free to submit a Pull Request.
 
-```bash
-npx shadcn@latest add button
-npx shadcn@latest add card
-```
+## 📄 License
 
-### Code Style
+This project is licensed under the ISC License - see the LICENSE file for details.
 
-- Use TypeScript for type safety
-- Follow the existing component structure
-- Use Tailwind CSS for styling
-- Implement responsive design mobile-first
+## 🔗 Links
 
-## License
+- **Main Site**: https://qrdx.org
+- **Documentation**: https://qrdx.org/docs
+- **Whitepaper**: https://qrdx.org/whitepaper
+- **Block Explorer**: https://explorer.qrdx.org
+- **GitHub**: https://github.com/qrdx-org
 
-ISC - See LICENSE file for details
+## 🙏 Acknowledgments
 
-## Links
+- Design inspiration from Uniswap and Binance
+- Sister project: [qrdx.org](https://qrdx.org)
+- Built with love for the quantum-resistant future
 
-- [QRDX Website](https://qrdx.org)
-- [Documentation](https://docs.qrdx.org)
-- [GitHub](https://github.com/qrdx-org)
+---
 
-## Support
-
-For issues and questions:
-- GitHub Issues: [qrdx-org/qrdx-trade](https://github.com/qrdx-org/qrdx-trade/issues)
-- Discord: [QRDX Community](https://discord.gg/qrdx)
+**QRDX Foundation** - Building the quantum-safe future of DeFi
