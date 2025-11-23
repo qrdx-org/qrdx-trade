@@ -1,8 +1,8 @@
 'use client'
 
-import React, { useState } from 'react'
+import React from 'react'
 import { motion } from 'framer-motion'
-import { Shield, Zap, Lock, Sparkles } from 'lucide-react'
+import { Shield, Zap, Sparkles } from 'lucide-react'
 import Navigation from '@/components/Navigation'
 import Footer from '@/components/Footer'
 import { TradingChart } from '@/components/TradingChart'
@@ -10,56 +10,13 @@ import { SwapInterface } from '@/components/SwapInterface'
 import { OrderBook } from '@/components/OrderBook'
 import { TradeHistory } from '@/components/TradeHistory'
 import { MarketStats } from '@/components/MarketStats'
-import { WalletConnect, WalletType } from '@/components/WalletConnect'
 
 export default function TradePage() {
-  const [walletType, setWalletType] = useState<WalletType>(null)
-
   return (
     <div className="min-h-screen flex flex-col bg-gradient-to-br from-background via-background to-primary/5">
       <Navigation />
-      
-      {/* Header with Wallet Connection */}
-      <div className="sticky top-16 z-40 bg-background/95 backdrop-blur border-b">
-        <div className="container mx-auto px-4 py-3">
-          <div className="flex items-center justify-between flex-wrap gap-4">
-            <motion.div 
-              className="flex items-center gap-6"
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-            >
-              <h1 className="text-2xl font-bold">Trade</h1>
-              <div className="flex items-center gap-2 text-sm">
-                <Shield className="h-4 w-4 text-green-500" />
-                <span className="text-muted-foreground">Quantum-Safe Trading</span>
-              </div>
-              {walletType && (
-                <motion.div 
-                  className="flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 text-xs font-medium"
-                  initial={{ scale: 0 }}
-                  animate={{ scale: 1 }}
-                >
-                  {walletType === 'web3' ? (
-                    <>
-                      <Zap className="h-3 w-3 text-blue-500" />
-                      <span>Web3 Mode</span>
-                    </>
-                  ) : (
-                    <>
-                      <Lock className="h-3 w-3 text-purple-500" />
-                      <span>QRDX Chain</span>
-                    </>
-                  )}
-                </motion.div>
-              )}
-            </motion.div>
-            
-            <WalletConnect onConnect={setWalletType} />
-          </div>
-        </div>
-      </div>
 
-      <main className="flex-1 container mx-auto px-4 py-6">
+      <main className="flex-1 container mx-auto px-4 pt-20 py-6">
         {/* Market Stats */}
         <div className="mb-6">
           <MarketStats />

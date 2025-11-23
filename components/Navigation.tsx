@@ -1,14 +1,17 @@
 'use client'
 
-import React from 'react'
+import React, { useState } from 'react'
 import Link from 'next/link'
 import { motion } from 'framer-motion'
-import { TrendingUp, Droplets, Coins, BookOpen, ExternalLink, BarChart3, Sparkles } from 'lucide-react'
+import { TrendingUp, Droplets, Coins, BookOpen, ExternalLink, BarChart3, Sparkles, Shield } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ThemeToggle } from '@/components/theme-toggle'
+import { WalletConnect, WalletType } from '@/components/WalletConnect'
 import { cn } from '@/lib/utils'
 
 const Navigation = () => {
+  const [walletType, setWalletType] = useState<WalletType>(null)
+  
   const navItems = [
     { href: '/', label: 'Trade', icon: <TrendingUp className="h-4 w-4" /> },
     { href: '/pools', label: 'Pools', icon: <Droplets className="h-4 w-4" /> },
@@ -55,6 +58,12 @@ const Navigation = () => {
         </div>
         
         <div className="flex items-center gap-3">
+          {walletType && (
+            <div className="hidden sm:flex items-center gap-2 text-xs text-muted-foreground">
+              <Shield className="h-3 w-3 text-green-500" />
+              <span>Quantum-Safe</span>
+            </div>
+          )}
           <a
             href="https://qrdx.org"
             target="_blank"
@@ -66,6 +75,7 @@ const Navigation = () => {
             <ExternalLink className="h-3 w-3" />
           </a>
           <ThemeToggle />
+          <WalletConnect onConnect={setWalletType} />
         </div>
       </div>
     </motion.nav>
