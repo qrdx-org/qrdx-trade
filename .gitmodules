@@ -1,0 +1,3 @@
+[submodule "ref/qrdx-website"]
+	path = ref/qrdx-website
+	url = https://github.com/qrdx-org/qrdx-website/
