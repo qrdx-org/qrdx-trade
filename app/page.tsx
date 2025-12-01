@@ -29,14 +29,37 @@ export default function HomePage() {
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5 }}
+            whileHover={{ scale: 1.01 }}
           >
-            <Card className="relative overflow-hidden border-0 bg-gradient-to-r from-primary/20 via-primary/10 to-background">
+            <Card className="relative overflow-hidden border-0 bg-gradient-to-r from-primary/20 via-primary/10 to-background group">
+              {/* Animated gradient orbs */}
+              <motion.div 
+                style={{ position: 'absolute', top: 0, right: 0, width: '16rem', height: '16rem', background: 'rgba(var(--primary), 0.2)', borderRadius: '9999px', filter: 'blur(48px)' }}
+                animate={{ 
+                  scale: [1, 1.2, 1],
+                  opacity: [0.3, 0.5, 0.3]
+                }}
+                transition={{ duration: 4, repeat: Infinity }}
+              />
+              <motion.div 
+                style={{ position: 'absolute', bottom: 0, left: 0, width: '16rem', height: '16rem', background: 'rgba(var(--primary), 0.1)', borderRadius: '9999px', filter: 'blur(48px)' }}
+                animate={{ 
+                  scale: [1, 1.3, 1],
+                  opacity: [0.2, 0.4, 0.2]
+                }}
+                transition={{ duration: 5, repeat: Infinity, delay: 1 }}
+              />
               <div className="absolute inset-0 bg-grid-white/5 [mask-image:linear-gradient(0deg,white,transparent)]" />
               <CardContent className="relative p-8 md:p-12">
                 <div className="flex flex-col md:flex-row items-center justify-between gap-6">
                   <div className="flex-1 text-center md:text-left">
                     <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/20 border border-primary/30 mb-4">
-                      <Sparkles className="h-4 w-4 text-primary" />
+                      <motion.div
+                        animate={{ rotate: 360 }}
+                        transition={{ duration: 3, repeat: Infinity, ease: "linear" }}
+                      >
+                        <Sparkles className="h-4 w-4 text-primary" />
+                      </motion.div>
                       <span className="text-sm font-semibold text-primary">Earn QRDX Rewards</span>
                     </div>
                     <h2 className="text-3xl md:text-4xl font-bold mb-3">
@@ -47,49 +70,71 @@ export default function HomePage() {
                     </p>
                     <div className="flex flex-col sm:flex-row items-center justify-center md:justify-start gap-4">
                       <Link href="/partner">
-                        <Button size="lg" className="h-12 px-8 text-base font-semibold shadow-lg shadow-primary/20">
-                          Start Earning Now
-                          <ArrowRight className="ml-2 h-5 w-5" />
-                        </Button>
+                        <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                          <Button size="lg" className="h-12 px-8 text-base font-semibold shadow-lg shadow-primary/20 relative overflow-hidden group">
+                            <span className="relative z-10 flex items-center">
+                              Start Earning Now
+                              <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" />
+                            </span>
+                          </Button>
+                        </motion.div>
                       </Link>
                       <div className="flex items-center gap-6 text-sm">
                         <div className="text-center">
-                          <p className="font-bold text-2xl text-primary">1-3x</p>
-                          <p className="text-muted-foreground">Reward Multiplier</p>
+                          <motion.div whileHover={{ scale: 1.1 }} transition={{ type: "spring", stiffness: 400 }}>
+                            <p className="font-bold text-2xl text-primary">1-3x</p>
+                            <p className="text-muted-foreground">Reward Multiplier</p>
+                          </motion.div>
                         </div>
                         <div className="h-10 w-px bg-border" />
                         <div className="text-center">
-                          <p className="font-bold text-2xl text-primary">Free</p>
-                          <p className="text-muted-foreground">To Join</p>
+                          <motion.div whileHover={{ scale: 1.1 }} transition={{ type: "spring", stiffness: 400 }}>
+                            <p className="font-bold text-2xl text-primary">Free</p>
+                            <p className="text-muted-foreground">To Join</p>
+                          </motion.div>
                         </div>
                       </div>
                     </div>
                   </div>
                   <div className="hidden lg:block">
-                    <div className="relative w-48 h-48">
-                      <div className="absolute inset-0 bg-gradient-to-br from-primary/30 to-primary/5 rounded-full blur-2xl" />
-                      <div className="relative bg-card/80 backdrop-blur-sm border rounded-2xl p-6 shadow-2xl">
-                        <div className="flex items-center gap-3 mb-4">
-                          <div className="h-10 w-10 rounded-full bg-primary/20 flex items-center justify-center">
-                            <Users className="h-5 w-5 text-primary" />
-                          </div>
-                          <div>
-                            <p className="text-xs text-muted-foreground">Active Partners</p>
-                            <p className="text-lg font-bold">1,247</p>
-                          </div>
-                        </div>
-                        <div className="space-y-2">
-                          <div className="flex items-center justify-between text-sm">
-                            <span className="text-muted-foreground">Posts Today</span>
-                            <span className="font-semibold text-green-500">+342</span>
-                          </div>
-                          <div className="flex items-center justify-between text-sm">
-                            <span className="text-muted-foreground">QRDX Earned</span>
-                            <span className="font-semibold">12,450</span>
-                          </div>
+                    <motion.div
+                      initial={{ opacity: 0, x: 50 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ duration: 0.8, delay: 0.3 }}
+                    >
+                      <div className="relative w-48 h-48">
+                        <motion.div 
+                          style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to bottom right, rgba(var(--primary), 0.3), rgba(var(--primary), 0.05))', borderRadius: '9999px', filter: 'blur(32px)' }}
+                          animate={{ rotate: 360 }}
+                          transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
+                        />
+                        <div className="relative bg-card/80 backdrop-blur-sm border rounded-2xl p-6 shadow-2xl">
+                          <motion.div whileHover={{ y: -5 }} transition={{ type: "spring", stiffness: 300 }}>
+                            <div className="flex items-center gap-3 mb-4">
+                              <div className="h-10 w-10 rounded-full bg-primary/20 flex items-center justify-center">
+                                <motion.div animate={{ scale: [1, 1.1, 1] }} transition={{ duration: 2, repeat: Infinity }}>
+                                  <Users className="h-5 w-5 text-primary" />
+                                </motion.div>
+                              </div>
+                              <div>
+                                <p className="text-xs text-muted-foreground">Active Partners</p>
+                                <p className="text-lg font-bold">1,247</p>
+                              </div>
+                            </div>
+                            <div className="space-y-2">
+                              <div className="flex items-center justify-between text-sm">
+                                <span className="text-muted-foreground">Posts Today</span>
+                                <span className="font-semibold text-green-500">+342</span>
+                              </div>
+                              <div className="flex items-center justify-between text-sm">
+                                <span className="text-muted-foreground">QRDX Earned</span>
+                                <span className="font-semibold">12,450</span>
+                              </div>
+                            </div>
+                          </motion.div>
                         </div>
                       </div>
-                    </div>
+                    </motion.div>
                   </div>
                 </div>
               </CardContent>
@@ -273,22 +318,25 @@ export default function HomePage() {
         {/* CTA Section */}
         <section className="container mx-auto px-4">
           <motion.div
-            className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-primary/20 via-primary/10 to-background border p-12 text-center"
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ delay: 0.5 }}
           >
-            <div className="relative z-10">
-              <h2 className="text-4xl font-bold mb-4">Ready to Start Trading?</h2>
-              <p className="text-lg text-muted-foreground mb-8 max-w-2xl mx-auto">
-                Join thousands of traders already using the most secure decentralized exchange
-              </p>
-              <Link href="/trade">
-                <Button size="lg" className="h-14 px-8 text-lg font-semibold">
-                  Launch App
-                  <ArrowRight className="ml-2 h-5 w-5" />
-                </Button>
-              </Link>
+            <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-primary/20 via-primary/10 to-background border p-12 text-center">
+              <div className="relative z-10">
+                <h2 className="text-4xl font-bold mb-4">Ready to Start Trading?</h2>
+                <p className="text-lg text-muted-foreground mb-8 max-w-2xl mx-auto">
+                  Join thousands of traders already using the most secure decentralized exchange
+                </p>
+                <Link href="/trade">
+                  <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                    <Button size="lg" className="h-14 px-8 text-lg font-semibold">
+                      Launch App
+                      <ArrowRight className="ml-2 h-5 w-5" />
+                    </Button>
+                  </motion.div>
+                </Link>
+              </div>
             </div>
           </motion.div>
         </section>
