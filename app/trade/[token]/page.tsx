@@ -2,14 +2,15 @@
 
 import React, { use } from 'react'
 import { motion } from 'framer-motion'
-import { ArrowLeft, ExternalLink, Star } from 'lucide-react'
+import { ArrowLeft, ExternalLink, Star, TrendingUp, TrendingDown, Info } from 'lucide-react'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import Navigation from '@/components/Navigation'
 import Footer from '@/components/Footer'
 import { TickerBar } from '@/components/TickerBar'
-import { TradingChart } from '@/components/TradingChart'
-import { SwapInterface } from '@/components/SwapInterface'
+import { ProfessionalChart } from '@/components/ProfessionalChart'
+import { TradingInterface } from '@/components/TradingInterface'
+import { AccountSection } from '@/components/AccountSection'
 import { OrderBook } from '@/components/OrderBook'
 import { TradeHistory } from '@/components/TradeHistory'
 import { Button } from '@/components/ui/button'
@@ -74,10 +75,11 @@ export default function TokenTradePage({ params }: PageProps) {
                 <div className="font-mono font-bold text-lg">${token.price.toLocaleString()}</div>
               </div>
               <div>
-                <div className="text-xs text-muted-foreground mb-1">24h Change</div>
-                <div className={`font-bold text-lg ${token.change24h >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-                  {token.change24h >= 0 ? '+' : ''}{token.change24h.toFixed(2)}%
-                </div>
+              <div className="text-xs text-muted-foreground mb-1">24h Change</div>
+              <div className={`font-bold text-lg flex items-center gap-1 ${token.change24h >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                {token.change24h >= 0 ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
+                {token.change24h >= 0 ? '+' : ''}{token.change24h.toFixed(2)}%
+              </div>
               </div>
               <div>
                 <div className="text-xs text-muted-foreground mb-1">Market Cap</div>
@@ -97,28 +99,32 @@ export default function TokenTradePage({ params }: PageProps) {
 
         {/* Trading Interface */}
         <div className="container mx-auto px-4 pt-4">
+          {/* Main Trading Grid - Binance Style Layout */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-            {/* Left Sidebar - Order Book */}
+            {/* Left Column - Order Book */}
             <div className="lg:col-span-3 order-3 lg:order-1">
               <div className="sticky top-4">
                 <OrderBook />
               </div>
             </div>
 
-            {/* Center - Chart and Swap */}
+            {/* Center Column - Chart and Trading Interface */}
             <div className="lg:col-span-6 space-y-4 order-1 lg:order-2">
-              {/* Trading Chart */}
-              <div className="w-full">
-                <TradingChart />
-              </div>
+              {/* Professional Trading Chart */}
+              <ProfessionalChart 
+                symbol={token.symbol}
+                currentPrice={token.price}
+                priceChange={token.change24h}
+              />
               
-              {/* Swap Interface */}
-              <div className="w-full max-w-2xl mx-auto">
-                <SwapInterface />
-              </div>
+              {/* Professional Trading Interface */}
+              <TradingInterface 
+                tokenSymbol={token.symbol}
+                currentPrice={token.price}
+              />
             </div>
 
-            {/* Right Sidebar - Trade History */}
+            {/* Right Column - Trade History */}
             <div className="lg:col-span-3 order-2 lg:order-3">
               <div className="sticky top-4">
                 <TradeHistory />
@@ -126,13 +132,13 @@ export default function TokenTradePage({ params }: PageProps) {
             </div>
           </div>
 
+          {/* Account Section - Positions, Orders, History */}
+          <div className="mt-4">
+            <AccountSection />
+          </div>
+
           {/* Token Info Section */}
-          <motion.div
-            className="mt-8 grid md:grid-cols-2 gap-6"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.3 }}
-          >
+          <div className="mt-8 grid md:grid-cols-2 gap-6">
             <Card className="bg-card/50 backdrop-blur border-0">
               <CardContent className="p-6">
                 <h3 className="text-lg font-bold mb-4">About {token.name}</h3>
@@ -177,7 +183,7 @@ export default function TokenTradePage({ params }: PageProps) {
                 </div>
               </CardContent>
             </Card>
-          </motion.div>
+          </div>
         </div>
       </main>
 
