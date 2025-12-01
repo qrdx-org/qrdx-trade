@@ -18,11 +18,87 @@ export default function HomePage() {
   return (
     <div className="min-h-screen flex flex-col bg-background">
       <Navigation />
-      <TickerBar />
+      <div className="pt-16">
+        <TickerBar />
+      </div>
 
-      <main className="flex-1 pt-24 pb-8">
+      <main className="flex-1 pb-8">
+        {/* Partnership Banner */}
+        <section className="container mx-auto px-4 py-6">
+          <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5 }}
+          >
+            <Card className="relative overflow-hidden border-0 bg-gradient-to-r from-primary/20 via-primary/10 to-background">
+              <div className="absolute inset-0 bg-grid-white/5 [mask-image:linear-gradient(0deg,white,transparent)]" />
+              <CardContent className="relative p-8 md:p-12">
+                <div className="flex flex-col md:flex-row items-center justify-between gap-6">
+                  <div className="flex-1 text-center md:text-left">
+                    <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/20 border border-primary/30 mb-4">
+                      <Sparkles className="h-4 w-4 text-primary" />
+                      <span className="text-sm font-semibold text-primary">Earn QRDX Rewards</span>
+                    </div>
+                    <h2 className="text-3xl md:text-4xl font-bold mb-3">
+                      Join Our Partner Program
+                    </h2>
+                    <p className="text-lg text-muted-foreground mb-6 max-w-2xl">
+                      Share QRDX Trade on social media and earn rewards! Get paid for every post, unlock higher tiers with more engagement, and help spread quantum-safe trading to the world.
+                    </p>
+                    <div className="flex flex-col sm:flex-row items-center justify-center md:justify-start gap-4">
+                      <Link href="/partner">
+                        <Button size="lg" className="h-12 px-8 text-base font-semibold shadow-lg shadow-primary/20">
+                          Start Earning Now
+                          <ArrowRight className="ml-2 h-5 w-5" />
+                        </Button>
+                      </Link>
+                      <div className="flex items-center gap-6 text-sm">
+                        <div className="text-center">
+                          <p className="font-bold text-2xl text-primary">1-3x</p>
+                          <p className="text-muted-foreground">Reward Multiplier</p>
+                        </div>
+                        <div className="h-10 w-px bg-border" />
+                        <div className="text-center">
+                          <p className="font-bold text-2xl text-primary">Free</p>
+                          <p className="text-muted-foreground">To Join</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="hidden lg:block">
+                    <div className="relative w-48 h-48">
+                      <div className="absolute inset-0 bg-gradient-to-br from-primary/30 to-primary/5 rounded-full blur-2xl" />
+                      <div className="relative bg-card/80 backdrop-blur-sm border rounded-2xl p-6 shadow-2xl">
+                        <div className="flex items-center gap-3 mb-4">
+                          <div className="h-10 w-10 rounded-full bg-primary/20 flex items-center justify-center">
+                            <Users className="h-5 w-5 text-primary" />
+                          </div>
+                          <div>
+                            <p className="text-xs text-muted-foreground">Active Partners</p>
+                            <p className="text-lg font-bold">1,247</p>
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between text-sm">
+                            <span className="text-muted-foreground">Posts Today</span>
+                            <span className="font-semibold text-green-500">+342</span>
+                          </div>
+                          <div className="flex items-center justify-between text-sm">
+                            <span className="text-muted-foreground">QRDX Earned</span>
+                            <span className="font-semibold">12,450</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </motion.div>
+        </section>
+
         {/* Hero Section */}
-        <section className="container mx-auto px-4 py-16 text-center">
+        <section className="container mx-auto px-4 py-8 text-center">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -33,7 +109,7 @@ export default function HomePage() {
               <span className="text-sm font-medium">Quantum-Resistant Trading</span>
             </div>
             
-            <h1 className="text-5xl md:text-7xl font-bold mb-6 bg-gradient-to-r from-primary via-primary to-primary/60 bg-clip-text text-transparent">
+            <h1 className="text-5xl md:text-7xl font-bold mb-6 text-primary">
               Trade the Future
             </h1>
             
