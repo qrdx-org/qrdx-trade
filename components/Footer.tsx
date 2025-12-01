@@ -112,6 +112,12 @@ export default function Footer() {
             © {new Date().getFullYear()} QRDX Foundation. All rights reserved.
           </p>
           <div className="flex items-center gap-6 text-sm">
+            <a href="https://qrdx.org/advertise" target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-primary transition-colors">
+              Advertise
+            </a>
+            <a href="https://trade.qrdx.org/partner" className="text-muted-foreground hover:text-primary transition-colors">
+              Partner
+            </a>
             <Link href="/terms" className="text-muted-foreground hover:text-primary transition-colors">
               Terms of Service
             </Link>
