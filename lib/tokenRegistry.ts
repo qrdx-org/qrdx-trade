@@ -67,6 +67,10 @@ export function getTokenBySymbol(symbol: string): TokenInfo | undefined {
   return tokens.find(token => token.symbol.toLowerCase() === symbol.toLowerCase())
 }
 
+export function getAllTokens(): TokenInfo[] {
+  return tokens
+}
+
 export function formatMarketCap(value: number): string {
   if (value >= 1e9) return `$${(value / 1e9).toFixed(2)}B`
   if (value >= 1e6) return `$${(value / 1e6).toFixed(2)}M`
