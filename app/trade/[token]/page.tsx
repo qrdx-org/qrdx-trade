@@ -1,6 +1,6 @@
 'use client'
 
-import React, { use } from 'react'
+import React, { use, useState } from 'react'
 import { motion } from 'framer-motion'
 import { ArrowLeft, ExternalLink, Star, TrendingUp, TrendingDown, Info } from 'lucide-react'
 import Link from 'next/link'
@@ -8,7 +8,7 @@ import { notFound } from 'next/navigation'
 import Navigation from '@/components/Navigation'
 import Footer from '@/components/Footer'
 import { TickerBar } from '@/components/TickerBar'
-import { ProfessionalChart } from '@/components/ProfessionalChart'
+import { TradingViewChart } from '@/components/TradingViewChart'
 import { TradingInterface } from '@/components/TradingInterface'
 import { AccountSection } from '@/components/AccountSection'
 import { OrderBook } from '@/components/OrderBook'
@@ -23,12 +23,22 @@ interface PageProps {
 
 export default function TokenTradePage({ params }: PageProps) {
   const { token: tokenParam } = use(params)
+  const [buyOrderPrice, setBuyOrderPrice] = useState<number | null>(null)
+  const [sellOrderPrice, setSellOrderPrice] = useState<number | null>(null)
   
   // Try to find token by slug or address
   const token = getTokenBySlug(tokenParam) || getTokenByAddress(tokenParam)
   
   if (!token) {
     notFound()
+  }
+
+  const handleOrderPriceChange = (orderType: 'buy' | 'sell', price: number | null) => {
+    if (orderType === 'buy') {
+      setBuyOrderPrice(price)
+    } else {
+      setSellOrderPrice(price)
+    }
   }
 
   return (
@@ -99,35 +109,40 @@ export default function TokenTradePage({ params }: PageProps) {
 
         {/* Trading Interface */}
         <div className="container mx-auto px-4 pt-4">
-          {/* Main Trading Grid - Binance Style Layout */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-            {/* Left Column - Order Book */}
-            <div className="lg:col-span-3 order-3 lg:order-1">
-              <div className="sticky top-4">
-                <OrderBook />
-              </div>
-            </div>
-
-            {/* Center Column - Chart and Trading Interface */}
-            <div className="lg:col-span-6 space-y-4 order-1 lg:order-2">
-              {/* Professional Trading Chart */}
-              <ProfessionalChart 
+          {/* Main Trading Grid - Full Width Chart and Trading */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            {/* Left/Center Column - Chart (takes 2/3 width) */}
+            <div className="lg:col-span-2 space-y-4">
+              {/* TradingView Style Chart with Interactive Tools */}
+              <TradingViewChart 
                 symbol={token.symbol}
                 currentPrice={token.price}
                 priceChange={token.change24h}
-              />
-              
-              {/* Professional Trading Interface */}
-              <TradingInterface 
-                tokenSymbol={token.symbol}
-                currentPrice={token.price}
+                buyOrderPrice={buyOrderPrice}
+                sellOrderPrice={sellOrderPrice}
+                onBuyOrder={(price, stopLoss, takeProfit) => {
+                  console.log('Buy order placed:', { price, stopLoss, takeProfit })
+                  // TODO: Connect to QRDX Chain API
+                }}
+                onSellOrder={(price, stopLoss, takeProfit) => {
+                  console.log('Sell order placed:', { price, stopLoss, takeProfit })
+                  // TODO: Connect to QRDX Chain API
+                }}
+                onOrderUpdate={(orderId, newPrice) => {
+                  console.log('Order updated:', { orderId, newPrice })
+                  // TODO: Update order in QRDX Chain API
+                }}
               />
             </div>
 
-            {/* Right Column - Trade History */}
-            <div className="lg:col-span-3 order-2 lg:order-3">
+            {/* Right Column - Trading Interface (takes 1/3 width) */}
+            <div className="lg:col-span-1">
               <div className="sticky top-4">
-                <TradeHistory />
+                <TradingInterface 
+                  tokenSymbol={token.symbol}
+                  currentPrice={token.price}
+                  onOrderPriceChange={handleOrderPriceChange}
+                />
               </div>
             </div>
           </div>
@@ -135,6 +150,12 @@ export default function TokenTradePage({ params }: PageProps) {
           {/* Account Section - Positions, Orders, History */}
           <div className="mt-4">
             <AccountSection />
+          </div>
+
+          {/* Order Book and Trade History - Below Main Section */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+            <OrderBook />
+            <TradeHistory />
           </div>
 
           {/* Token Info Section */}

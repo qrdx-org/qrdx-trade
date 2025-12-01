@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { TrendingUp, TrendingDown } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
@@ -11,9 +11,10 @@ import { Input } from '@/components/ui/input'
 interface TradingInterfaceProps {
   tokenSymbol: string
   currentPrice: number
+  onOrderPriceChange?: (orderType: 'buy' | 'sell', price: number | null) => void
 }
 
-export function TradingInterface({ tokenSymbol, currentPrice }: TradingInterfaceProps) {
+export function TradingInterface({ tokenSymbol, currentPrice, onOrderPriceChange }: TradingInterfaceProps) {
   const [activeTab, setActiveTab] = useState<'spot' | 'limit' | 'stop'>('spot')
   const [orderSide, setOrderSide] = useState<'buy' | 'sell'>('buy')
   const [amount, setAmount] = useState('')
@@ -22,6 +23,21 @@ export function TradingInterface({ tokenSymbol, currentPrice }: TradingInterface
   const [takeProfit, setTakeProfit] = useState('')
   const [stopLoss, setStopLoss] = useState('')
   const [percentage, setPercentage] = useState(0)
+
+  // Notify parent when price changes in limit/stop-limit orders
+  useEffect(() => {
+    if (activeTab !== 'spot' && onOrderPriceChange) {
+      const priceNum = parseFloat(price)
+      if (!isNaN(priceNum) && priceNum > 0) {
+        onOrderPriceChange(orderSide, priceNum)
+      } else {
+        onOrderPriceChange(orderSide, null)
+      }
+    } else if (activeTab === 'spot' && onOrderPriceChange) {
+      // Clear line when switching to spot
+      onOrderPriceChange(orderSide, null)
+    }
+  }, [price, activeTab, orderSide, onOrderPriceChange])
 
   // Stub balance data - would come from API
   const usdtBalance = 10000.50
