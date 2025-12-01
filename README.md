@@ -50,6 +50,27 @@ pnpm dev
 
 Open [http://localhost:3000](http://localhost:3000) to view the application.
 
+### Deployment
+
+#### Cloudflare Workers (Recommended) 🚀
+
+Deploy to Cloudflare Workers in 3 commands:
+
+```bash
+pnpm exec wrangler login
+pnpm build
+pnpm exec wrangler deploy
+```
+
+For detailed deployment instructions, see [CLOUDFLARE_DEPLOYMENT.md](./CLOUDFLARE_DEPLOYMENT.md).
+
+**Features:**
+- ✅ Full dynamic routing support
+- ✅ Server-side rendering
+- ✅ Zero cold starts
+- ✅ Global edge distribution
+- ✅ Automatic security headers
+
 ## 📁 Project Structure
 
 ```

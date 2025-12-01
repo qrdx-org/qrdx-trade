@@ -17,6 +17,8 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { getTokenBySlug, getTokenByAddress, formatMarketCap, formatVolume } from '@/lib/tokenRegistry'
 
+export const runtime = 'edge'
+
 interface PageProps {
   params: Promise<{ token: string }>
 }
