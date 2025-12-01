@@ -16,6 +16,7 @@ const Navigation = () => {
     { href: '/trade', label: 'Trade', icon: <TrendingUp className="h-4 w-4" /> },
     { href: '/pools', label: 'Pools', icon: <Droplets className="h-4 w-4" /> },
     { href: '/stake', label: 'Stake', icon: <Coins className="h-4 w-4" /> },
+    { href: '/partner', label: 'Partner', icon: <Sparkles className="h-4 w-4" /> },
     { href: '/analytics', label: 'Analytics', icon: <BarChart3 className="h-4 w-4" /> },
   ]
 

@@ -46,7 +46,7 @@ export default function TokenTradePage({ params }: PageProps) {
       <Navigation />
       <TickerBar />
 
-      <main className="flex-1 pt-20 pb-8">
+      <main className="flex-1 pb-8">
         {/* Token Header */}
         <div className="border-b bg-card/30 backdrop-blur">
           <div className="container mx-auto px-4 py-4">
