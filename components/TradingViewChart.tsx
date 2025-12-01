@@ -14,6 +14,7 @@ import {
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { useSearchParams } from 'next/navigation'
+import { ShareChartDialog } from '@/components/ShareChartDialog'
 import { 
   TrendingUp, 
   TrendingDown, 
@@ -525,14 +526,13 @@ export function TradingViewChart({
           </div>
 
           <div className="flex items-center gap-2">
+            <ShareChartDialog 
+              symbol={symbol}
+              currentUrl={typeof window !== 'undefined' ? window.location.href : ''}
+            />
             <Button variant="ghost" size="icon" className="h-8 w-8">
               <Maximize2 className="h-4 w-4" />
             </Button>
-            {isShareMode && (
-              <div className="text-xs text-muted-foreground px-2 py-1 bg-primary/10 rounded">
-                📊 Shared Chart
-              </div>
-            )}
           </div>
         </div>
 
