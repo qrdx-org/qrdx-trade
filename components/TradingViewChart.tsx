@@ -10,6 +10,7 @@ import {
   LineSeries,
   AreaSeries,
   BarSeries,
+  createImageWatermark,
 } from 'lightweight-charts'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -74,6 +75,7 @@ export function TradingViewChart({
   const chartContainerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<any>(null)
   const chartWatermarkRef = useRef<any>(null)
+  const watermarkRef = useRef<any>(null)
   const seriesRef = useRef<any>(null)
   const marketCapSeriesRef = useRef<any>(null)
   const tradingInterfaceBuyLineRef = useRef<any>(null)
@@ -121,20 +123,6 @@ export function TradingViewChart({
         secondsVisible: false,
       },
     })
-
-    // Add watermark for share mode
-    if (isShareMode) {
-      chart.applyOptions({
-        watermark: {
-          visible: true,
-          fontSize: 48,
-          horzAlign: 'center',
-          vertAlign: 'center',
-          color: 'rgba(147, 51, 234, 0.15)',
-          text: 'QRDX',
-        } as any,
-      })
-    }
 
     // Generate data
     const generateData = (): CandlestickData[] => {
@@ -240,6 +228,14 @@ export function TradingViewChart({
     }
 
     chart.timeScale().fitContent()
+
+    // Add image watermark for share mode - must be after fitContent
+    if (isShareMode) {
+      createImageWatermark(chart.panes()[0], '/logo.png', {
+        alpha: 0.3,
+        padding: 20,
+      })
+    }
 
     // Re-add existing order lines
     orderLines.forEach(line => {
