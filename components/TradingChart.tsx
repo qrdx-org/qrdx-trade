@@ -86,31 +86,31 @@ export function TradingChart() {
 
   return (
     <motion.div 
-      className="bg-card rounded-lg border p-4"
+      className="bg-card/50 backdrop-blur rounded-lg border p-4"
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5 }}
     >
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-4">
         <div>
-          <h3 className="text-lg font-semibold">qETH/USDT</h3>
+          <h3 className="text-base font-semibold">qETH/USDT</h3>
           <div className="flex items-center gap-3 mt-1">
-            <span className="text-2xl font-bold">${currentPrice.toFixed(2)}</span>
-            <span className={`flex items-center gap-1 text-sm font-medium ${priceChange >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+            <span className="text-3xl font-bold">${currentPrice.toFixed(2)}</span>
+            <span className={`flex items-center gap-1 text-sm font-medium px-2 py-1 rounded ${priceChange >= 0 ? 'text-green-500 bg-green-500/10' : 'text-red-500 bg-red-500/10'}`}>
               {priceChange >= 0 ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
               {priceChange >= 0 ? '+' : ''}{priceChange.toFixed(2)}%
             </span>
           </div>
         </div>
         
-        <div className="flex gap-2">
+        <div className="flex gap-1">
           {(['1H', '1D', '1W', '1M', '1Y'] as const).map((tf) => (
             <button
               key={tf}
               onClick={() => setTimeframe(tf)}
-              className={`px-3 py-1 rounded-md text-sm font-medium transition-colors ${
+              className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition-all ${
                 timeframe === tf
-                  ? 'bg-primary text-primary-foreground'
+                  ? 'bg-primary text-primary-foreground shadow-lg'
                   : 'hover:bg-accent text-muted-foreground'
               }`}
             >
@@ -120,7 +120,7 @@ export function TradingChart() {
         </div>
       </div>
       
-      <div className="h-[400px] w-full">
+      <div className="h-[350px] w-full mt-2">
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart data={chartData}>
             <defs>
