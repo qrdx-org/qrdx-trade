@@ -17,8 +17,10 @@ export function ShareChartDialog({ symbol, currentUrl }: ShareChartDialogProps) 
   const [copiedLink, setCopiedLink] = useState(false)
   const [copiedEmbed, setCopiedEmbed] = useState(false)
 
-  const shareUrl = `${currentUrl}${currentUrl.includes('?') ? '&' : '?'}share=true`
-  const embedUrl = `${currentUrl}${currentUrl.includes('?') ? '&' : '?'}embed=true`
+  // Remove existing query parameters to get base URL
+  const baseUrl = currentUrl.split('?')[0]
+  const shareUrl = `${baseUrl}?share=true`
+  const embedUrl = `${baseUrl}?embed=true`
   const embedCode = `<iframe src="${embedUrl}" width="800" height="600" frameborder="0" allowfullscreen></iframe>`
 
   const copyToClipboard = async (text: string, type: 'link' | 'embed') => {
