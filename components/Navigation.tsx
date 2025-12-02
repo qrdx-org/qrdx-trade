@@ -22,6 +22,7 @@ const Navigation = () => {
   
   const navItems = [
     { href: '/trade', label: 'Trade', icon: <TrendingUp className="h-4 w-4" /> },
+    //{ href: '/portfolio', label: 'Portfolio', icon: <BookOpen className="h-4 w-4" /> },
     { href: '/pools', label: 'Pools', icon: <Droplets className="h-4 w-4" /> },
     { href: '/stake', label: 'Stake', icon: <Coins className="h-4 w-4" /> },
     { href: '/partner', label: 'Partner', icon: <Sparkles className="h-4 w-4" /> },

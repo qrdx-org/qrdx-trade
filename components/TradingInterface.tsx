@@ -10,11 +10,12 @@ import { Input } from '@/components/ui/input'
 
 interface TradingInterfaceProps {
   tokenSymbol: string
+  quoteSymbol?: string
   currentPrice: number
   onOrderPriceChange?: (orderType: 'buy' | 'sell', price: number | null) => void
 }
 
-export function TradingInterface({ tokenSymbol, currentPrice, onOrderPriceChange }: TradingInterfaceProps) {
+export function TradingInterface({ tokenSymbol, quoteSymbol = 'USDT', currentPrice, onOrderPriceChange }: TradingInterfaceProps) {
   const [activeTab, setActiveTab] = useState<'spot' | 'limit' | 'stop'>('spot')
   const [orderSide, setOrderSide] = useState<'buy' | 'sell'>('buy')
   const [amount, setAmount] = useState('')
