@@ -1,9 +1,9 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
-import { TrendingUp, TrendingDown } from 'lucide-react'
-import { Card, CardContent } from '@/components/ui/card'
+import { TrendingUp, TrendingDown, Wallet } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -16,6 +16,7 @@ interface TradingInterfaceProps {
 }
 
 export function TradingInterface({ tokenSymbol, quoteSymbol = 'USDT', currentPrice, onOrderPriceChange }: TradingInterfaceProps) {
+  const router = useRouter()
   const [activeTab, setActiveTab] = useState<'spot' | 'limit' | 'stop'>('spot')
   const [orderSide, setOrderSide] = useState<'buy' | 'sell'>('buy')
   const [amount, setAmount] = useState('')
@@ -24,6 +25,25 @@ export function TradingInterface({ tokenSymbol, quoteSymbol = 'USDT', currentPri
   const [takeProfit, setTakeProfit] = useState('')
   const [stopLoss, setStopLoss] = useState('')
   const [percentage, setPercentage] = useState(0)
+  const [hasWallet, setHasWallet] = useState(false)
+
+  // Check for connected wallet on mount
+  useEffect(() => {
+    const checkWallet = () => {
+      try {
+        const web3Wallets = JSON.parse(localStorage.getItem('web3Wallets') || '[]')
+        const qrdxWallets = JSON.parse(localStorage.getItem('qrdxWallets') || '[]')
+        setHasWallet(web3Wallets.length > 0 || qrdxWallets.length > 0)
+      } catch {
+        setHasWallet(false)
+      }
+    }
+    
+    checkWallet()
+    // Listen for storage changes (e.g., wallet connected in another tab)
+    window.addEventListener('storage', checkWallet)
+    return () => window.removeEventListener('storage', checkWallet)
+  }, [])
 
   // Notify parent when price changes in limit/stop-limit orders
   useEffect(() => {
@@ -61,20 +81,47 @@ export function TradingInterface({ tokenSymbol, quoteSymbol = 'USDT', currentPri
   }
 
   return (
-    <Card className="border-0 bg-card/50 backdrop-blur">
-      <CardContent className="p-4">
+    <div className="relative">
+      {/* Wallet Connection Overlay */}
+      {!hasWallet && (
+        <div className="absolute inset-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 flex items-center justify-center rounded-lg">
+          <div className="text-center space-y-4 px-6">
+            <div className="flex justify-center">
+              <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
+                <Wallet className="w-8 h-8 text-primary" />
+              </div>
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold mb-2">Connect Your Wallet</h3>
+              <p className="text-sm text-muted-foreground max-w-xs mx-auto">
+                Connect a Web3 or QRDX wallet to start trading {tokenSymbol}
+              </p>
+            </div>
+            <Button
+              size="lg"
+              onClick={() => router.push('/wallets')}
+              className="bg-primary hover:bg-primary/90"
+            >
+              Connect Wallet
+            </Button>
+          </div>
+        </div>
+      )}
+      
+      <div className="border-0 bg-card/50 backdrop-blur rounded-lg">
+        <div className="p-4">
         {/* Buy/Sell Toggle */}
         <div className="grid grid-cols-2 gap-2 mb-4">
           <Button
             variant={orderSide === 'buy' ? 'default' : 'outline'}
-            className={`h-10 font-bold ${orderSide === 'buy' ? 'bg-green-600 hover:bg-green-700' : ''}`}
+            className={`h-10 font-bold ${orderSide === 'buy' ? 'bg-green-600/90 hover:bg-green-700/90' : ''}`}
             onClick={() => setOrderSide('buy')}
           >
             Buy
           </Button>
           <Button
             variant={orderSide === 'sell' ? 'default' : 'outline'}
-            className={`h-10 font-bold ${orderSide === 'sell' ? 'bg-red-600 hover:bg-red-700' : ''}`}
+            className={`h-10 font-bold ${orderSide === 'sell' ? 'bg-red-600/90 hover:bg-red-700/90' : ''}`}
             onClick={() => setOrderSide('sell')}
           >
             Sell
@@ -146,8 +193,8 @@ export function TradingInterface({ tokenSymbol, quoteSymbol = 'USDT', currentPri
             <Button
               className={`w-full h-10 font-bold ${
                 orderSide === 'buy' 
-                  ? 'bg-green-600 hover:bg-green-700' 
-                  : 'bg-red-600 hover:bg-red-700'
+                  ? 'bg-green-600/90 hover:bg-green-700/90' 
+                  : 'bg-red-600/90 hover:bg-red-700/90'
               }`}
             >
               {orderSide === 'buy' ? 'Buy' : 'Sell'} {tokenSymbol}
@@ -213,8 +260,8 @@ export function TradingInterface({ tokenSymbol, quoteSymbol = 'USDT', currentPri
             <Button
               className={`w-full h-10 font-bold ${
                 orderSide === 'buy' 
-                  ? 'bg-green-600 hover:bg-green-700' 
-                  : 'bg-red-600 hover:bg-red-700'
+                  ? 'bg-green-600/90 hover:bg-green-700/90' 
+                  : 'bg-red-600/90 hover:bg-red-700/90'
               }`}
             >
               {orderSide === 'buy' ? 'Buy' : 'Sell'} {tokenSymbol}
@@ -291,8 +338,8 @@ export function TradingInterface({ tokenSymbol, quoteSymbol = 'USDT', currentPri
             <Button
               className={`w-full h-10 font-bold ${
                 orderSide === 'buy' 
-                  ? 'bg-green-600 hover:bg-green-700' 
-                  : 'bg-red-600 hover:bg-red-700'
+                  ? 'bg-green-600/90 hover:bg-green-700/90' 
+                  : 'bg-red-600/90 hover:bg-red-700/90'
               }`}
             >
               {orderSide === 'buy' ? 'Buy' : 'Sell'} {tokenSymbol}
@@ -311,7 +358,8 @@ export function TradingInterface({ tokenSymbol, quoteSymbol = 'USDT', currentPri
             <span className="font-mono">{tokenBalance.toFixed(6)}</span>
           </div>
         </div>
-      </CardContent>
-    </Card>
+        </div>
+      </div>
+    </div>
   )
 }

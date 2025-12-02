@@ -1,6 +1,7 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -12,9 +13,27 @@ import Footer from '@/components/Footer'
 import { Sparkles, DollarSign, TrendingUp, Users, Share2, Wallet, CheckCircle, Twitter, MessageCircle } from 'lucide-react'
 
 export default function PartnerPage() {
+  const router = useRouter()
   const [walletConnected, setWalletConnected] = useState(false)
   const [postContent, setPostContent] = useState('')
   const [postLink, setPostLink] = useState('')
+
+  // Check for connected wallets on mount
+  useEffect(() => {
+    const checkWallet = () => {
+      try {
+        const web3Wallets = JSON.parse(localStorage.getItem('web3Wallets') || '[]')
+        const qrdxWallets = JSON.parse(localStorage.getItem('qrdxWallets') || '[]')
+        setWalletConnected(web3Wallets.length > 0 || qrdxWallets.length > 0)
+      } catch {
+        setWalletConnected(false)
+      }
+    }
+    
+    checkWallet()
+    window.addEventListener('storage', checkWallet)
+    return () => window.removeEventListener('storage', checkWallet)
+  }, [])
 
   // Stub data - would come from QRDX Chain API
   const userStats = {
@@ -72,7 +91,7 @@ export default function PartnerPage() {
                   </p>
                   <Button 
                     size="lg" 
-                    onClick={() => setWalletConnected(true)}
+                    onClick={() => router.push('/wallets')}
                     className="gap-2"
                   >
                     <Wallet className="h-5 w-5" />
