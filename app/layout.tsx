@@ -1,6 +1,7 @@
 import { Inter } from 'next/font/google'
 import './globals.css'
 import { ThemeProvider } from '@/components/theme-provider'
+import { Web3ModalProvider } from '@/components/Web3ModalProvider'
 import type { Metadata } from 'next'
 
 const inter = Inter({ subsets: ['latin'] })
@@ -61,7 +62,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           enableSystem
           disableTransitionOnChange
         >
-          {children}
+          <Web3ModalProvider>
+            {children}
+          </Web3ModalProvider>
         </ThemeProvider>
       </body>
     </html>

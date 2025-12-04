@@ -7,6 +7,7 @@ import { TrendingUp, TrendingDown, Wallet } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { hasConnectedWallet } from '@/lib/walletStore'
 
 interface TradingInterfaceProps {
   tokenSymbol: string
@@ -30,13 +31,7 @@ export function TradingInterface({ tokenSymbol, quoteSymbol = 'USDT', currentPri
   // Check for connected wallet on mount
   useEffect(() => {
     const checkWallet = () => {
-      try {
-        const web3Wallets = JSON.parse(localStorage.getItem('web3Wallets') || '[]')
-        const qrdxWallets = JSON.parse(localStorage.getItem('qrdxWallets') || '[]')
-        setHasWallet(web3Wallets.length > 0 || qrdxWallets.length > 0)
-      } catch {
-        setHasWallet(false)
-      }
+      setHasWallet(hasConnectedWallet())
     }
     
     checkWallet()

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
 import { Wallet, ChevronDown, Copy, ExternalLink, Check } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { getActiveWalletAddress } from '@/lib/walletStore'
 
 export type WalletType = 'web3' | 'qrdx' | null
 
@@ -19,52 +20,21 @@ export function WalletConnect({ onConnect }: WalletConnectProps) {
   const [address, setAddress] = useState('')
   const [copied, setCopied] = useState(false)
   
-  // Check localStorage for connected wallets on mount
+  // Check for connected wallets on mount
   useEffect(() => {
     const checkWallets = () => {
-      // First check if there's a selected pair in sessionStorage
-      const selectedPairId = sessionStorage.getItem('selectedWalletPair')
-      const storedPairs = localStorage.getItem('walletPairs')
+      const activeWallet = getActiveWalletAddress()
       
-      if (selectedPairId && storedPairs) {
-        const pairs = JSON.parse(storedPairs)
-        const selectedPair = pairs.find((p: any) => p.id === selectedPairId)
-        
-        if (selectedPair?.web3Wallet) {
-          setWalletType('web3')
-          setAddress(selectedPair.web3Wallet.address)
-          setIsConnected(true)
-          onConnect('web3')
-          return
-        } else if (selectedPair?.qrdxWallet) {
-          setWalletType('qrdx')
-          setAddress(selectedPair.qrdxWallet.address)
-          setIsConnected(true)
-          onConnect('qrdx')
-          return
-        }
-      }
-      
-      // Fall back to first wallet if no pair selected
-      const web3Wallets = localStorage.getItem('web3Wallets')
-      const qrdxWallets = localStorage.getItem('qrdxWallets')
-      
-      if (web3Wallets) {
-        const wallets = JSON.parse(web3Wallets)
-        if (wallets.length > 0) {
-          setWalletType('web3')
-          setAddress(wallets[0].address)
-          setIsConnected(true)
-          onConnect('web3')
-        }
-      } else if (qrdxWallets) {
-        const wallets = JSON.parse(qrdxWallets)
-        if (wallets.length > 0) {
-          setWalletType('qrdx')
-          setAddress(wallets[0].address)
-          setIsConnected(true)
-          onConnect('qrdx')
-        }
+      if (activeWallet) {
+        setWalletType(activeWallet.type)
+        setAddress(activeWallet.address)
+        setIsConnected(true)
+        onConnect(activeWallet.type)
+      } else {
+        setIsConnected(false)
+        setWalletType(null)
+        setAddress('')
+        onConnect(null)
       }
     }
     

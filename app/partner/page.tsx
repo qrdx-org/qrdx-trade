@@ -11,6 +11,7 @@ import { Badge } from '@/components/ui/badge'
 import Navigation from '@/components/Navigation'
 import Footer from '@/components/Footer'
 import { Sparkles, DollarSign, TrendingUp, Users, Share2, Wallet, CheckCircle, Twitter, MessageCircle } from 'lucide-react'
+import { hasConnectedWallet } from '@/lib/walletStore'
 
 export default function PartnerPage() {
   const router = useRouter()
@@ -21,13 +22,7 @@ export default function PartnerPage() {
   // Check for connected wallets on mount
   useEffect(() => {
     const checkWallet = () => {
-      try {
-        const web3Wallets = JSON.parse(localStorage.getItem('web3Wallets') || '[]')
-        const qrdxWallets = JSON.parse(localStorage.getItem('qrdxWallets') || '[]')
-        setWalletConnected(web3Wallets.length > 0 || qrdxWallets.length > 0)
-      } catch {
-        setWalletConnected(false)
-      }
+      setWalletConnected(hasConnectedWallet())
     }
     
     checkWallet()

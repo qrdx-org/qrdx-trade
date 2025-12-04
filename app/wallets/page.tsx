@@ -1,8 +1,8 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
-import { Wallet, Shield, Plus, Trash2, CheckCircle2, Link2, ExternalLink } from 'lucide-react'
+import { Wallet, Shield, Plus, Trash2, CheckCircle2, Link2, ExternalLink, QrCode } from 'lucide-react'
 import Navigation from '@/components/Navigation'
 import Footer from '@/components/Footer'
 import { Button } from '@/components/ui/button'
@@ -12,22 +12,36 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { cn } from '@/lib/utils'
-
-interface WalletConnection {
-  id: string
-  type: 'web3' | 'qrdx'
-  address: string
-  name: string
-  provider?: string
-  connected: boolean
-}
-
-interface WalletPair {
-  id: string
-  name: string
-  web3Wallet: WalletConnection | null
-  qrdxWallet: WalletConnection | null
-}
+import { useWeb3Modal } from '@web3modal/wagmi/react'
+import { useAccount, useDisconnect } from 'wagmi'
+import {
+  connectMetaMask,
+  isMetaMaskInstalled,
+  isWalletConnectAvailable,
+  getWalletName,
+  onAccountsChanged,
+  onChainChanged
+} from '@/lib/web3Wallets'
+import {
+  WalletConnection,
+  WalletPair,
+  getWeb3Wallets,
+  getQrdxWallets,
+  getWalletPairs,
+  getSelectedPairId,
+  saveWeb3Wallets,
+  saveQrdxWallets,
+  saveWalletPairs,
+  saveSelectedPairId,
+  clearSelectedPairId,
+  addWeb3Wallet,
+  addQrdxWallet,
+  removeWeb3Wallet,
+  removeQrdxWallet,
+  addWalletPair,
+  updateWalletPair,
+  removeWalletPair
+} from '@/lib/walletStore'
 
 export default function WalletsPage() {
   const [web3Wallets, setWeb3Wallets] = useState<WalletConnection[]>([])
@@ -35,39 +49,115 @@ export default function WalletsPage() {
   const [walletPairs, setWalletPairs] = useState<WalletPair[]>([])
   const [selectedPairId, setSelectedPairId] = useState<string | null>(null)
   const [showConnectModal, setShowConnectModal] = useState<'web3' | 'qrdx' | null>(null)
+  
+  // WalletConnect hooks
+  const { open } = useWeb3Modal()
+  const { address: wcAddress, isConnected: wcIsConnected } = useAccount()
+  const { disconnect: wcDisconnect } = useDisconnect()
+
+  // Define available Web3 wallet connectors
+  const connectors = [
+    {
+      id: 'walletconnect',
+      name: 'WalletConnect',
+      icon: <QrCode className="h-5 w-5" />,
+      description: 'Scan with Uniswap, Rainbow, Trust & 300+ wallets',
+      ready: isWalletConnectAvailable()
+    },
+    {
+      id: 'metamask',
+      name: 'MetaMask',
+      icon: <Wallet className="h-5 w-5" />,
+      description: 'Browser extension wallet',
+      ready: isMetaMaskInstalled()
+    },
+    {
+      id: 'browser',
+      name: 'Browser Wallet',
+      icon: <Wallet className="h-5 w-5" />,
+      description: 'Any injected Ethereum wallet',
+      ready: typeof window !== 'undefined' && !!window.ethereum
+    }
+  ]
+  
+  // Sync WalletConnect state
+  useEffect(() => {
+    if (wcIsConnected && wcAddress) {
+      const existingWallet = web3Wallets.find(w => w.address.toLowerCase() === wcAddress.toLowerCase())
+      if (!existingWallet) {
+        const newWallet: WalletConnection = {
+          id: Date.now().toString(),
+          type: 'web3',
+          address: wcAddress,
+          name: 'WalletConnect',
+          provider: 'WalletConnect',
+          connected: true
+        }
+        const updated = [...web3Wallets, newWallet]
+        setWeb3Wallets(updated)
+        saveWeb3Wallets(updated)
+      }
+    }
+  }, [wcIsConnected, wcAddress])
 
   // Load state from storage on mount
-  React.useEffect(() => {
-    try {
-      const storedWeb3 = localStorage.getItem('web3Wallets')
-      const storedQrdx = localStorage.getItem('qrdxWallets')
-      const storedPairs = localStorage.getItem('walletPairs')
-      const storedSelectedPair = sessionStorage.getItem('selectedWalletPair')
-
-      if (storedWeb3) setWeb3Wallets(JSON.parse(storedWeb3))
-      if (storedQrdx) setQrdxWallets(JSON.parse(storedQrdx))
-      if (storedPairs) setWalletPairs(JSON.parse(storedPairs))
-      if (storedSelectedPair) setSelectedPairId(storedSelectedPair)
-    } catch (error) {
-      console.error('Error loading wallet data:', error)
-    }
+  useEffect(() => {
+    setWeb3Wallets(getWeb3Wallets())
+    setQrdxWallets(getQrdxWallets())
+    setWalletPairs(getWalletPairs())
+    setSelectedPairId(getSelectedPairId())
   }, [])
 
-  const handleConnectWeb3 = (provider: string) => {
-    // Mock wallet connection
-    const newWallet: WalletConnection = {
-      id: Date.now().toString(),
-      type: 'web3',
-      address: `0x${Math.random().toString(16).substr(2, 40)}`,
-      name: provider,
-      provider,
-      connected: true
+  // Listen for account/chain changes
+  useEffect(() => {
+    const unsubAccounts = onAccountsChanged((accounts) => {
+      if (accounts.length === 0) {
+        // Wallet disconnected
+        const updated = web3Wallets.map(w => ({ ...w, connected: false }))
+        setWeb3Wallets(updated)
+        saveWeb3Wallets(updated)
+      }
+    })
+
+    const unsubChain = onChainChanged(() => {
+      // Chain changed - could update chain info if needed
+    })
+
+    return () => {
+      unsubAccounts()
+      unsubChain()
     }
-    setWeb3Wallets([...web3Wallets, newWallet])
-    setShowConnectModal(null)
+  }, [web3Wallets])
+
+  const handleConnectWeb3 = async (connectorId?: string) => {
+    // Handle WalletConnect separately
+    if (connectorId === 'walletconnect') {
+      await open()
+      setShowConnectModal(null)
+      return
+    }
     
-    // Store in localStorage
-    localStorage.setItem('web3Wallets', JSON.stringify([...web3Wallets, newWallet]))
+    // Handle MetaMask and other browser wallets
+    const result = await connectMetaMask()
+    if (result) {
+      const walletName = getWalletName()
+      const existingWallet = web3Wallets.find(w => w.address.toLowerCase() === result.address.toLowerCase())
+      
+      if (!existingWallet) {
+        const newWallet: WalletConnection = {
+          id: Date.now().toString(),
+          type: 'web3',
+          address: result.address,
+          name: walletName,
+          provider: walletName,
+          connected: true
+        }
+        const updated = [...web3Wallets, newWallet]
+        setWeb3Wallets(updated)
+        saveWeb3Wallets(updated)
+      }
+      setShowConnectModal(null)
+    }
   }
 
   const handleConnectQRDX = (name: string) => {
@@ -79,22 +169,28 @@ export default function WalletsPage() {
       name: name || 'QRDX Wallet',
       connected: true
     }
-    setQrdxWallets([...qrdxWallets, newWallet])
+    const updated = [...qrdxWallets, newWallet]
+    setQrdxWallets(updated)
+    saveQrdxWallets(updated)
     setShowConnectModal(null)
-    
-    // Store in localStorage
-    localStorage.setItem('qrdxWallets', JSON.stringify([...qrdxWallets, newWallet]))
   }
 
   const handleDisconnect = (id: string, type: 'web3' | 'qrdx') => {
     if (type === 'web3') {
+      const wallet = web3Wallets.find(w => w.id === id)
+      
+      // Disconnect WalletConnect if it's a WalletConnect wallet
+      if (wallet?.provider === 'WalletConnect' && wcIsConnected) {
+        wcDisconnect()
+      }
+      
       const updated = web3Wallets.filter(w => w.id !== id)
       setWeb3Wallets(updated)
-      localStorage.setItem('web3Wallets', JSON.stringify(updated))
+      saveWeb3Wallets(updated)
     } else {
       const updated = qrdxWallets.filter(w => w.id !== id)
       setQrdxWallets(updated)
-      localStorage.setItem('qrdxWallets', JSON.stringify(updated))
+      saveQrdxWallets(updated)
     }
   }
 
@@ -107,7 +203,7 @@ export default function WalletsPage() {
     }
     const updatedPairs = [...walletPairs, newPair]
     setWalletPairs(updatedPairs)
-    localStorage.setItem('walletPairs', JSON.stringify(updatedPairs))
+    saveWalletPairs(updatedPairs)
   }
 
   const handleUpdatePair = (pairId: string, type: 'web3' | 'qrdx', walletId: string | null) => {
@@ -122,22 +218,20 @@ export default function WalletsPage() {
       return pair
     })
     setWalletPairs(updatedPairs)
-    localStorage.setItem('walletPairs', JSON.stringify(updatedPairs))
+    saveWalletPairs(updatedPairs)
   }
 
   const handleDeletePair = (pairId: string) => {
-    const updatedPairs = walletPairs.filter(p => p.id !== pairId)
-    setWalletPairs(updatedPairs)
-    localStorage.setItem('walletPairs', JSON.stringify(updatedPairs))
+    removeWalletPair(pairId)
+    setWalletPairs(walletPairs.filter(p => p.id !== pairId))
     if (selectedPairId === pairId) {
-      sessionStorage.removeItem('selectedWalletPair')
       setSelectedPairId(null)
     }
   }
 
   const handleSelectPair = (pairId: string) => {
     setSelectedPairId(pairId)
-    sessionStorage.setItem('selectedWalletPair', pairId)
+    saveSelectedPairId(pairId)
   }
 
   return (
@@ -336,15 +430,28 @@ export default function WalletsPage() {
                   <CardDescription>Choose your Web3 wallet provider</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-2">
-                  {['MetaMask', 'WalletConnect', 'Coinbase Wallet', 'Rainbow'].map(provider => (
+                  {connectors.map(connector => (
                     <Button
-                      key={provider}
+                      key={connector.id}
                       variant="outline"
-                      className="w-full justify-start gap-3"
-                      onClick={() => handleConnectWeb3(provider)}
+                      className="w-full justify-start gap-3 h-auto py-4"
+                      onClick={() => handleConnectWeb3(connector.id)}
+                      disabled={!connector.ready}
                     >
-                      <Wallet className="h-5 w-5" />
-                      {provider}
+                      <div className="flex items-center gap-3 flex-1 text-left">
+                        {connector.icon}
+                        <div className="flex flex-col gap-0.5">
+                          <span className="font-semibold">{connector.name}</span>
+                          {connector.description && (
+                            <span className="text-xs text-muted-foreground font-normal">
+                              {connector.description}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      {!connector.ready && (
+                        <Badge variant="secondary" className="text-xs">Not Available</Badge>
+                      )}
                     </Button>
                   ))}
                   <Button

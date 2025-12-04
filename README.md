@@ -13,6 +13,9 @@ A professional, production-ready trading platform built with Next.js 16, featuri
 
 ### Dual Wallet Support
 - **Web3 Wallets** - Support for standard Ethereum wallets (MetaMask, WalletConnect, etc.)
+  - 🔗 **WalletConnect Integration** - Connect 300+ wallets via QR code (Uniswap, Rainbow, Trust Wallet, and more)
+  - 🦊 MetaMask and browser extension wallets
+  - 📱 Mobile wallet support through WalletConnect
 - **QRDX Wallets** - Native quantum-resistant QRDX chain wallets
 
 ### Professional UI/UX
@@ -49,6 +52,19 @@ pnpm dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000) to view the application.
+
+### WalletConnect Setup (Optional)
+
+To enable WalletConnect for connecting mobile wallets:
+
+1. Get a free Project ID from [WalletConnect Cloud](https://cloud.walletconnect.com)
+2. Create a `.env.local` file:
+   ```bash
+   NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID=your_project_id_here
+   ```
+3. Restart the dev server
+
+See [docs/WALLETCONNECT.md](./docs/WALLETCONNECT.md) for detailed instructions.
 
 ### Deployment
 
