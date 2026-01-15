@@ -51,10 +51,12 @@
     "postcss": "^8.5.6",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
+    "react-tsparticles": "^2.12.2",
     "recharts": "^3.5.0",
     "server-only": "^0.0.1",
     "tailwind-merge": "^3.3.1",
-    "tailwindcss": "^4.1.16"
+    "tailwindcss": "^4.1.16",
+    "tsparticles": "^3.9.1"
   },
   "devDependencies": {
     "@cloudflare/next-on-pages": "^1.4.42",
