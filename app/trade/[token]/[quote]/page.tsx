@@ -15,6 +15,7 @@ import { OrderBook } from '@/components/OrderBook'
 import { TradeHistory } from '@/components/TradeHistory'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import { TokenImage } from '@/components/TokenImage'
 import { getTokenBySlug, getTokenByAddress, getTokenBySymbol, formatMarketCap, formatVolume } from '@/lib/tokenRegistry'
 
 export const runtime = 'edge'
@@ -70,9 +71,19 @@ export default function TradingPairPage({ params }: PageProps) {
                 
                 <div className="flex items-center gap-3">
                   <div className="flex items-center">
-                    <span className="text-4xl">{baseToken.logo}</span>
+                    <TokenImage 
+                      symbol={baseToken.symbol}
+                      address={baseToken.address}
+                      isNative={baseToken.isNative}
+                      size="xl"
+                    />
                     <span className="text-2xl mx-1 text-muted-foreground">/</span>
-                    <span className="text-3xl">{quoteToken.logo}</span>
+                    <TokenImage 
+                      symbol={quoteToken.symbol}
+                      address={quoteToken.address}
+                      isNative={quoteToken.isNative}
+                      size="lg"
+                    />
                   </div>
                   <div>
                     <div className="flex items-center gap-2">

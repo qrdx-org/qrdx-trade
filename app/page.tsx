@@ -10,6 +10,7 @@ import { MarketStats } from '@/components/MarketStats'
 import { TickerBar } from '@/components/TickerBar'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import { TokenImage } from '@/components/TokenImage'
 import { tokens } from '@/lib/tokenRegistry'
 
 export default function HomePage() {
@@ -238,7 +239,12 @@ export default function HomePage() {
                     <CardContent className="p-6">
                       <div className="flex items-start justify-between mb-4">
                         <div className="flex items-center gap-3">
-                          <span className="text-3xl">{token.logo}</span>
+                          <TokenImage 
+                            symbol={token.symbol}
+                            address={token.address}
+                            isNative={token.isNative}
+                            size="lg"
+                          />
                           <div>
                             <h3 className="font-bold text-lg">{token.symbol}</h3>
                             <p className="text-sm text-muted-foreground">{token.name}</p>

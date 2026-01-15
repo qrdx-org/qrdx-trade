@@ -9,6 +9,7 @@ import Footer from '@/components/Footer'
 import { TickerBar } from '@/components/TickerBar'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
+import { TokenImage } from '@/components/TokenImage'
 import { tokens, formatMarketCap, formatVolume } from '@/lib/tokenRegistry'
 
 export default function TradePage() {
@@ -144,7 +145,12 @@ export default function TradePage() {
 
                     {/* Token Info */}
                     <div className="col-span-1 md:col-span-3 flex items-center gap-3">
-                      <span className="text-3xl">{token.logo}</span>
+                      <TokenImage 
+                        symbol={token.symbol}
+                        address={token.address}
+                        isNative={token.isNative}
+                        size="lg"
+                      />
                       <div>
                         <div className="flex items-center gap-2">
                           <span className="font-bold">{token.symbol}</span>

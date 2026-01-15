@@ -4,12 +4,16 @@ import React, { useState, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Search, X, Star, TrendingUp } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { TokenImage } from '@/components/TokenImage'
 
 export interface Token {
   symbol: string
   name: string
   balance: number
   logo: string
+  imageUrl?: string
+  address?: string
+  isNative?: boolean
   price: number
   change24h: number
   isPopular?: boolean
@@ -54,7 +58,12 @@ export function TokenSelector({ tokens, selectedToken, onSelectToken, label }: T
         className="w-full justify-between h-12 px-4 bg-accent/50 hover:bg-accent border-0"
       >
         <div className="flex items-center gap-2">
-          <span className="text-2xl">{selectedToken.logo}</span>
+          <TokenImage 
+            symbol={selectedToken.symbol}
+            address={selectedToken.address || ''}
+            isNative={selectedToken.isNative}
+            size="md"
+          />
           <div className="flex flex-col items-start">
             <span className="font-bold">{selectedToken.symbol}</span>
             {label && <span className="text-xs text-muted-foreground">{label}</span>}
@@ -125,7 +134,12 @@ export function TokenSelector({ tokens, selectedToken, onSelectToken, label }: T
                         onClick={() => handleSelectToken(token)}
                         className="px-3 py-1.5 rounded-full bg-accent hover:bg-accent/70 text-sm font-medium flex items-center gap-1 transition-colors"
                       >
-                        <span>{token.logo}</span>
+                        <TokenImage 
+                          symbol={token.symbol}
+                          address={token.address || ''}
+                          isNative={token.isNative}
+                          size="sm"
+                        />
                         <span>{token.symbol}</span>
                       </button>
                     ))}
@@ -148,7 +162,12 @@ export function TokenSelector({ tokens, selectedToken, onSelectToken, label }: T
                         className="w-full p-3 rounded-lg hover:bg-accent transition-colors flex items-center justify-between group"
                       >
                         <div className="flex items-center gap-3">
-                          <span className="text-2xl">{token.logo}</span>
+                          <TokenImage 
+                            symbol={token.symbol}
+                            address={token.address || ''}
+                            isNative={token.isNative}
+                            size="lg"
+                          />
                           <div className="flex flex-col items-start">
                             <span className="font-bold">{token.symbol}</span>
                             <span className="text-xs text-muted-foreground">

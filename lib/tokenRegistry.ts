@@ -6,11 +6,14 @@ interface TokenMapping {
   name: string
   address: string
   slug: string
+  isNative?: boolean
 }
 
 // Full token info with market data (stub generated or from API)
 export interface TokenInfo extends TokenMapping {
   logo: string
+  imageUrl: string
+  isNative: boolean
   price: number
   change24h: number
   marketCap: number
@@ -24,7 +27,14 @@ function generateStubData(token: TokenMapping): TokenInfo {
   const basePrice = Math.random() * 10000 + 1
   const marketCap = basePrice * (Math.random() * 1000000000 + 100000000)
   
-  // Emoji mapping
+  const isNative = token.isNative || token.address === 'native'
+  
+  // Generate image URL based on whether it's a native token or contract
+  const imageUrl = isNative 
+    ? `/tokens/${token.symbol.toLowerCase()}.png`
+    : `https://explorer.qrdx.org/contracts/${token.address}/image`
+  
+  // Emoji mapping (kept for backward compatibility)
   const emojiMap: Record<string, string> = {
     'qETH': '💎',
     'qBTC': '₿',
@@ -40,7 +50,9 @@ function generateStubData(token: TokenMapping): TokenInfo {
   
   return {
     ...token,
+    isNative,
     logo: emojiMap[token.symbol] || '🪙',
+    imageUrl,
     price: parseFloat(basePrice.toFixed(2)),
     change24h: parseFloat((Math.random() * 30 - 15).toFixed(2)),
     marketCap: Math.floor(marketCap),

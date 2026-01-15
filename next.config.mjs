@@ -9,6 +9,16 @@ const nextConfig = {
   },
   // Ensure proper server-side rendering for Workers
   outputFileTracingRoot: process.cwd(),
+  images: {
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: 'explorer.qrdx.org',
+        port: '',
+        pathname: '/contracts/**',
+      },
+    ],
+  },
 }
 
 export default nextConfig
