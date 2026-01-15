@@ -16,6 +16,7 @@ import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { useSearchParams } from 'next/navigation'
 import { ShareChartDialog } from '@/components/ShareChartDialog'
+import { useChartData } from '@/lib/api'
 import { 
   TrendingUp, 
   TrendingDown, 
@@ -40,6 +41,7 @@ interface TradingViewChartProps {
   symbol: string
   currentPrice: number
   priceChange: number
+  tokenAddress?: string  // Contract address for API calls
   onBuyOrder?: (price: number, stopLoss?: number, takeProfit?: number) => void
   onSellOrder?: (price: number, stopLoss?: number, takeProfit?: number) => void
   onOrderUpdate?: (orderId: string, newPrice: number) => void
@@ -66,6 +68,7 @@ export function TradingViewChart({
   symbol, 
   currentPrice, 
   priceChange,
+  tokenAddress,
   onBuyOrder,
   onSellOrder,
   onOrderUpdate,
@@ -90,6 +93,12 @@ export function TradingViewChart({
   const [draggedLine, setDraggedLine] = useState<string | null>(null)
   const [showMarketCap, setShowMarketCap] = useState(false)
   const isShareMode = searchParams?.get('share') === 'true'
+
+  // Fetch chart data from API
+  const { data: chartData, loading: chartLoading } = useChartData(
+    tokenAddress || symbol.toLowerCase(),
+    timeframe
+  )
 
   useEffect(() => {
     if (!chartContainerRef.current) return
@@ -124,20 +133,28 @@ export function TradingViewChart({
       },
     })
 
-    // Generate data
-    const generateData = (): CandlestickData[] => {
-      const data: CandlestickData[] = []
-      const basePrice = currentPrice
+    // Use API data if available, otherwise generate fallback data
+    const data: CandlestickData[] = chartData && chartData.length > 0 
+      ? chartData.map(d => ({
+          time: d.time as any,
+          open: d.open,
+          high: d.high,
+          low: d.low,
+          close: d.close,
+        }))
+      : []
+
+    if (data.length === 0 && !chartLoading) {
+      // Fallback data generation if API fails
       const now = Math.floor(Date.now() / 1000)
       const interval = timeframe === '1' ? 60 : timeframe === '5' ? 300 : timeframe === '15' ? 900 : timeframe === '60' ? 3600 : timeframe === '240' ? 14400 : timeframe === 'D' ? 86400 : 604800
       const bars = 200
-      
-      let price = basePrice * 0.95
+      let price = currentPrice * 0.95
       
       for (let i = bars; i >= 0; i--) {
         const time = (now - (i * interval))
-        const volatility = basePrice * 0.015
-        const trend = (priceChange / 100) * basePrice / bars
+        const volatility = currentPrice * 0.015
+        const trend = (priceChange / 100) * currentPrice / bars
         
         const open = price
         const change = (Math.random() - 0.5) * volatility + trend
@@ -155,11 +172,7 @@ export function TradingViewChart({
         
         price = close
       }
-      
-      return data
     }
-
-    const data = generateData()
 
     // Add series based on chart type
     let series: any
@@ -318,7 +331,7 @@ export function TradingViewChart({
       window.removeEventListener('mouseup', handleMouseUp)
       chart.remove()
     }
-  }, [timeframe, currentPrice, priceChange, drawingMode, chartType, showMarketCap, isShareMode])
+  }, [timeframe, currentPrice, priceChange, drawingMode, chartType, showMarketCap, isShareMode, chartData, chartLoading])
 
   // Effect to handle buy/sell order price lines from TradingInterface
   useEffect(() => {

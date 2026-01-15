@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ChevronDown, ChevronUp, BookOpen } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { useOrderBook } from '@/lib/api'
 
 interface OrderBookEntry {
   price: number
@@ -11,53 +12,31 @@ interface OrderBookEntry {
   total: number
 }
 
-export function OrderBook() {
-  const [asks, setAsks] = useState<OrderBookEntry[]>([])
-  const [bids, setBids] = useState<OrderBookEntry[]>([])
+interface OrderBookProps {
+  tokenAddress?: string
+  basePrice?: number
+}
+
+export function OrderBook({ tokenAddress, basePrice }: OrderBookProps) {
   const [isExpanded, setIsExpanded] = useState(false)
   const [isMinimized, setIsMinimized] = useState(true)
   
-  useEffect(() => {
-    // Generate initial order book
-    const generateOrders = (basePrice: number, isBid: boolean) => {
-      const orders: OrderBookEntry[] = []
-      let total = 0
-      
-      for (let i = 0; i < 15; i++) {
-        const priceOffset = (Math.random() * 50 + i * 2) * (isBid ? -1 : 1)
-        const price = basePrice + priceOffset
-        const amount = Math.random() * 5 + 0.1
-        total += amount
-        
-        orders.push({
-          price: parseFloat(price.toFixed(2)),
-          amount: parseFloat(amount.toFixed(4)),
-          total: parseFloat(total.toFixed(4))
-        })
-      }
-      
-      return isBid ? orders.sort((a, b) => b.price - a.price) : orders.sort((a, b) => a.price - b.price)
-    }
-    
-    const updateOrders = () => {
-      setAsks(generateOrders(2850, false))
-      setBids(generateOrders(2845, true))
-    }
-    
-    updateOrders()
-    const interval = setInterval(updateOrders, 5000)
-    
-    return () => clearInterval(interval)
-  }, [])
+  // Fetch order book data from API
+  const { data: orderbookData } = useOrderBook(
+    tokenAddress || 'default',
+    basePrice,
+    2000 // refresh every 2 seconds
+  )
+  
+  const asks = orderbookData?.asks || []
+  const bids = orderbookData?.bids || []
+  const spread = orderbookData?.spread?.toFixed(2) || '0.00'
 
   const maxTotal = Math.max(
     ...asks.map(a => a.total),
-    ...bids.map(b => b.total)
+    ...bids.map(b => b.total),
+    1 // Avoid division by zero
   )
-
-  const spread = asks.length > 0 && bids.length > 0 
-    ? ((asks[0].price - bids[0].price) / bids[0].price * 100).toFixed(2)
-    : '0.00'
 
   const OrderRow = ({ order, type }: { order: OrderBookEntry; type: 'ask' | 'bid' }) => {
     const percentage = (order.total / maxTotal) * 100

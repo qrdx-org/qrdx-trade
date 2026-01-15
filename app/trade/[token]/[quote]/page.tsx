@@ -143,6 +143,7 @@ export default function TradingPairPage({ params }: PageProps) {
                 symbol={`${baseToken.symbol}/${quoteToken.symbol}`}
                 currentPrice={pairPrice}
                 priceChange={baseToken.change24h}
+                tokenAddress={baseToken.address}
                 buyOrderPrice={buyOrderPrice}
                 sellOrderPrice={sellOrderPrice}
                 onBuyOrder={(price, stopLoss, takeProfit) => {
@@ -180,8 +181,8 @@ export default function TradingPairPage({ params }: PageProps) {
 
           {/* Order Book and Trade History - Below Main Section */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-            <OrderBook />
-            <TradeHistory />
+            <OrderBook tokenAddress={baseToken.address} basePrice={pairPrice} />
+            <TradeHistory tokenAddress={baseToken.address} basePrice={pairPrice} />
           </div>
 
           {/* Token Info Section */}

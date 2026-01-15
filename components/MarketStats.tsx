@@ -3,6 +3,7 @@
 import React from 'react'
 import { motion } from 'framer-motion'
 import { TrendingUp, Users, Droplets, Activity, DollarSign, BarChart3 } from 'lucide-react'
+import { useMarketStats } from '@/lib/api'
 
 interface StatCardProps {
   icon: React.ReactNode
@@ -41,7 +42,64 @@ function StatCard({ icon, label, value, change, positive = true }: StatCardProps
 }
 
 export function MarketStats() {
-  const stats = [
+  // Fetch market stats from API
+  const { data: marketData } = useMarketStats(5000)
+  
+  const formatValue = (value: number, prefix: string = '', suffix: string = '') => {
+    if (value >= 1_000_000_000) {
+      return `${prefix}${(value / 1_000_000_000).toFixed(1)}B${suffix}`
+    } else if (value >= 1_000_000) {
+      return `${prefix}${(value / 1_000_000).toFixed(0)}M${suffix}`
+    } else if (value >= 1_000) {
+      return `${prefix}${(value / 1_000).toFixed(0)}K${suffix}`
+    }
+    return `${prefix}${value.toFixed(0)}${suffix}`
+  }
+  
+  const stats = marketData ? [
+    {
+      icon: <DollarSign className="h-5 w-5 text-primary" />,
+      label: 'Total Value Locked',
+      value: formatValue(marketData.tvl, '$'),
+      change: `${marketData.tvlChange24h.toFixed(1)}%`,
+      positive: marketData.tvlChange24h >= 0
+    },
+    {
+      icon: <Activity className="h-5 w-5 text-primary" />,
+      label: '24h Volume',
+      value: formatValue(marketData.volume24h, '$'),
+      change: `${marketData.volumeChange24h.toFixed(1)}%`,
+      positive: marketData.volumeChange24h >= 0
+    },
+    {
+      icon: <Users className="h-5 w-5 text-primary" />,
+      label: 'Active Users',
+      value: formatValue(marketData.activeUsers, '', '+'),
+      change: `${marketData.usersChange24h.toFixed(1)}%`,
+      positive: marketData.usersChange24h >= 0
+    },
+    {
+      icon: <Droplets className="h-5 w-5 text-primary" />,
+      label: 'Liquidity Pools',
+      value: marketData.liquidityPools.toLocaleString(),
+      change: '+24',
+      positive: true
+    },
+    {
+      icon: <TrendingUp className="h-5 w-5 text-primary" />,
+      label: 'Total Trades',
+      value: formatValue(marketData.totalTrades, '', '+'),
+      change: '+5.4%',
+      positive: true
+    },
+    {
+      icon: <BarChart3 className="h-5 w-5 text-primary" />,
+      label: 'Avg. APY',
+      value: `${marketData.avgAPY.toFixed(1)}%`,
+      change: '+2.1%',
+      positive: true
+    }
+  ] : [
     {
       icon: <DollarSign className="h-5 w-5 text-primary" />,
       label: 'Total Value Locked',

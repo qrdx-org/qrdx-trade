@@ -7,6 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, CandlestickChart } from 'recharts'
 import { TrendingUp, TrendingDown, Maximize2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { useChartData } from '@/lib/api'
 
 interface ChartDataPoint {
   time: string
@@ -18,15 +19,57 @@ interface ProfessionalChartProps {
   symbol: string
   currentPrice: number
   priceChange: number
+  tokenAddress?: string
 }
 
-export function ProfessionalChart({ symbol, currentPrice, priceChange }: ProfessionalChartProps) {
+export function ProfessionalChart({ symbol, currentPrice, priceChange, tokenAddress }: ProfessionalChartProps) {
   const [timeframe, setTimeframe] = useState<'1m' | '5m' | '15m' | '1h' | '4h' | '1D' | '1W'>('1h')
   const [chartType, setChartType] = useState<'line' | 'candle'>('line')
   const [chartData, setChartData] = useState<ChartDataPoint[]>([])
 
+  // Map timeframe to API format
+  const timeframeMap: Record<string, string> = {
+    '1m': '1',
+    '5m': '5', 
+    '15m': '15',
+    '1h': '60',
+    '4h': '240',
+    '1D': 'D',
+    '1W': 'W'
+  }
+
+  // Fetch chart data from API
+  const { data: apiChartData } = useChartData(
+    tokenAddress || symbol.toLowerCase(),
+    timeframeMap[timeframe] || '60'
+  )
+
   useEffect(() => {
-    // Generate realistic stub chart data
+    // Use API data if available
+    if (apiChartData && apiChartData.length > 0) {
+      const formattedData = apiChartData.map(d => {
+        const date = new Date(d.time * 1000)
+        let timeLabel = ''
+        
+        if (['1m', '5m', '15m'].includes(timeframe)) {
+          timeLabel = date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+        } else if (['1h', '4h'].includes(timeframe)) {
+          timeLabel = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit' })
+        } else {
+          timeLabel = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+        }
+        
+        return {
+          time: timeLabel,
+          price: d.close,
+          volume: d.volume
+        }
+      })
+      setChartData(formattedData)
+      return
+    }
+
+    // Fallback: Generate realistic stub chart data
     const generateData = () => {
       const basePrice = currentPrice
       const points = timeframe === '1m' ? 60 : timeframe === '5m' ? 288 : timeframe === '15m' ? 96 : timeframe === '1h' ? 168 : timeframe === '4h' ? 180 : timeframe === '1D' ? 90 : 365
@@ -66,7 +109,7 @@ export function ProfessionalChart({ symbol, currentPrice, priceChange }: Profess
     
     generateData()
     
-    // Simulate live updates for short timeframes
+    // Simulate live updates for short timeframes (only if no API data)
     if (['1m', '5m', '15m'].includes(timeframe)) {
       const interval = setInterval(() => {
         setChartData(prev => {
@@ -94,7 +137,7 @@ export function ProfessionalChart({ symbol, currentPrice, priceChange }: Profess
       
       return () => clearInterval(interval)
     }
-  }, [timeframe, currentPrice, priceChange])
+  }, [timeframe, currentPrice, priceChange, apiChartData])
 
   const CustomTooltip = ({ active, payload }: any) => {
     if (active && payload && payload.length) {

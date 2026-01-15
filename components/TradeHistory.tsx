@@ -3,49 +3,35 @@
 import React, { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { Clock } from 'lucide-react'
+import { useTrades } from '@/lib/api'
 
 interface Trade {
   id: string
   price: number
   amount: number
-  time: string
+  timestamp: number
   type: 'buy' | 'sell'
 }
 
-export function TradeHistory() {
-  const [trades, setTrades] = useState<Trade[]>([])
+interface TradeHistoryProps {
+  tokenAddress?: string
+  basePrice?: number
+}
+
+export function TradeHistory({ tokenAddress, basePrice }: TradeHistoryProps) {
+  // Fetch trades from API
+  const { data: apiTrades } = useTrades(
+    tokenAddress || 'default',
+    basePrice,
+    50,
+    3000 // refresh every 3 seconds
+  )
   
-  useEffect(() => {
-    // Generate initial trades
-    const generateTrade = (): Trade => {
-      const basePrice = 2845
-      const price = basePrice + (Math.random() - 0.5) * 100
-      const amount = Math.random() * 2 + 0.01
-      
-      return {
-        id: Math.random().toString(36).substr(2, 9),
-        price: parseFloat(price.toFixed(2)),
-        amount: parseFloat(amount.toFixed(4)),
-        time: new Date().toLocaleTimeString(),
-        type: Math.random() > 0.5 ? 'buy' : 'sell'
-      }
-    }
-    
-    // Initialize with some trades
-    const initialTrades = Array.from({ length: 20 }, generateTrade)
-    setTrades(initialTrades)
-    
-    // Add new trades periodically
-    const interval = setInterval(() => {
-      setTrades(prev => {
-        const newTrade = generateTrade()
-        const updated = [newTrade, ...prev]
-        return updated.slice(0, 50)
-      })
-    }, 4000)
-    
-    return () => clearInterval(interval)
-  }, [])
+  // Format trades with time string
+  const trades = apiTrades.map(trade => ({
+    ...trade,
+    time: new Date(trade.timestamp).toLocaleTimeString()
+  }))
 
   return (
     <motion.div
