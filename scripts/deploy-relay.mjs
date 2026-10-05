@@ -38,7 +38,22 @@ if (env.CF_PAGES === '1' && env.CF_PAGES_BRANCH && env.CF_PAGES_BRANCH !== produ
 
 const wrangler = (args) => spawnSync('npx', ['wrangler', ...args], { stdio: 'pipe', encoding: 'utf8', env })
 
-if (!env.CLOUDFLARE_API_TOKEN) {
+// A pasted token often carries a trailing newline or quotes; Cloudflare then answers 400 / 9106.
+if (env.CLOUDFLARE_API_TOKEN) {
+  const clean = env.CLOUDFLARE_API_TOKEN.trim().replace(/^["']|["']$/g, '')
+  if (clean !== env.CLOUDFLARE_API_TOKEN) log('note: removed whitespace / quotes around CLOUDFLARE_API_TOKEN')
+  env.CLOUDFLARE_API_TOKEN = clean
+  // The dashboard's Global API Key is 37 hex characters; API tokens are 40 (letters, digits, - and _).
+  if (/^[0-9a-f]{37}$/.test(clean)) {
+    log('CLOUDFLARE_API_TOKEN holds a Global API Key, not an API token, so Cloudflare rejects it (400, code 9106).')
+    log('Create an API token instead: dashboard → My Profile → API Tokens → Create Token → "Edit Cloudflare Workers",')
+    log('scoped to your account and the qrdx.org zone, and put that in CLOUDFLARE_API_TOKEN (plus CLOUDFLARE_ACCOUNT_ID).')
+    log('(Or use the global key as CLOUDFLARE_API_KEY with CLOUDFLARE_EMAIL; it grants far more than a build needs.)')
+    process.exit(1)
+  }
+}
+
+if (!env.CLOUDFLARE_API_TOKEN && !(env.CLOUDFLARE_API_KEY && env.CLOUDFLARE_EMAIL)) {
   const who = wrangler(['whoami'])
   if (who.status !== 0 || /not authenticated/i.test(`${who.stdout}${who.stderr}`)) {
     log('skipped: no Cloudflare credentials (set CLOUDFLARE_API_TOKEN, or run `npx wrangler login`).')
