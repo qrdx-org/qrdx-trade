@@ -6,7 +6,8 @@ import { motion } from 'framer-motion'
 import { TrendingUp, Droplets, Coins, BookOpen, ExternalLink, BarChart3, Sparkles, Shield, Menu } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ThemeToggle } from '@/components/theme-toggle'
-import { WalletConnect, WalletType } from '@/components/WalletConnect'
+import { ConnectButton } from '@/components/wallet/ConnectButton'
+import { useWallet } from '@/lib/wallet/WalletContext'
 import { cn } from '@/lib/utils'
 import {
   Sheet,
@@ -17,13 +18,15 @@ import {
 } from '@/components/ui/sheet'
 
 const Navigation = () => {
-  const [walletType, setWalletType] = useState<WalletType>(null)
+  const walletType = useWallet().status === 'connected'
   const [isOpen, setIsOpen] = useState(false)
   
   const navItems = [
     { href: '/trade', label: 'Trade', icon: <TrendingUp className="h-4 w-4" /> },
-    //{ href: '/portfolio', label: 'Portfolio', icon: <BookOpen className="h-4 w-4" /> },
+    { href: '/perps', label: 'Perps', icon: <BarChart3 className="h-4 w-4" /> },
+    { href: '/swap', label: 'Swap', icon: <Coins className="h-4 w-4" /> },
     { href: '/pools', label: 'Pools', icon: <Droplets className="h-4 w-4" /> },
+    { href: '/portfolio', label: 'Portfolio', icon: <BookOpen className="h-4 w-4" /> },
     { href: '/stake', label: 'Stake', icon: <Coins className="h-4 w-4" /> },
     { href: '/partner', label: 'Partner', icon: <Sparkles className="h-4 w-4" /> },
     { href: '/analytics', label: 'Analytics', icon: <BarChart3 className="h-4 w-4" /> },
@@ -86,7 +89,7 @@ const Navigation = () => {
           </a>
           <ThemeToggle />
           <div className="hidden md:block">
-            <WalletConnect onConnect={setWalletType} />
+            <ConnectButton />
           </div>
           
           {/* Mobile Menu */}
@@ -110,7 +113,7 @@ const Navigation = () => {
               <div className="flex flex-col gap-4 mt-8">
                 {/* Wallet Connection - Mobile */}
                 <div className="pb-4 border-b">
-                  <WalletConnect onConnect={setWalletType} />
+                  <ConnectButton />
                   {walletType && (
                     <div className="flex items-center gap-2 text-xs text-muted-foreground mt-3">
                       <Shield className="h-3 w-3 text-green-500" />

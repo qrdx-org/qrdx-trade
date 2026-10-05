@@ -1,0 +1,9 @@
+# What qrdx-node's exchange engine imports, plus a pure-Python ML-DSA (FIPS 204)
+# standing in for liboqs so no native build is needed.
+python-dotenv
+fastecdsa
+eth-keys
+eth-hash[pycryptodome]
+eth-utils
+blake3
+dilithium-py

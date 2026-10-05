@@ -3,7 +3,7 @@
     "lib": [
       "dom",
       "dom.iterable",
-      "es6"
+      "es2020"
     ],
     "allowJs": true,
     "skipLibCheck": true,
@@ -27,7 +27,7 @@
         "./*"
       ]
     },
-    "target": "ES2017"
+    "target": "ES2020"
   },
   "include": [
     "next-env.d.ts",
@@ -37,6 +37,7 @@
     ".next/dev/types/**/*.ts"
   ],
   "exclude": [
-    "node_modules"
+    "node_modules",
+    "relay"
   ]
 }

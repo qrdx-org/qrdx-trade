@@ -1,0 +1,14 @@
+{
+  // QRDX Connect relay (docs/CONNECT.md). Deploy: pnpm relay:deploy
+  "name": "qrdx-relay",
+  "main": "src/worker.ts",
+  "compatibility_date": "2025-11-01",
+  "durable_objects": {
+    "bindings": [{ "name": "RELAY", "class_name": "RelaySession" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["RelaySession"] }],
+  // Served under the trade site, so the API lives at trade.qrdx.org/api/relay
+  // (the qrdx.org zone must be on the account that deploys this).
+  "routes": [{ "pattern": "trade.qrdx.org/api/relay/*", "zone_name": "qrdx.org" }],
+  "observability": { "enabled": true }
+}

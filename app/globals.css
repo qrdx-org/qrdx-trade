@@ -1,5 +1,41 @@
 @import "tailwindcss";
 
+/* Dark mode follows the `dark` class next-themes sets on <html>. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/*
+ * Theme colours as Tailwind utilities (bg-background, text-muted-foreground, …).
+ * Tailwind v4 does not read tailwind.config.js unless asked, so the shadcn
+ * tokens are declared here, pointing at the HSL variables below.
+ */
+@theme inline {
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+  --color-popover: hsl(var(--popover));
+  --color-popover-foreground: hsl(var(--popover-foreground));
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+  --color-secondary: hsl(var(--secondary));
+  --color-secondary-foreground: hsl(var(--secondary-foreground));
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+  --color-destructive: hsl(var(--destructive));
+  --color-destructive-foreground: hsl(var(--destructive-foreground));
+  --color-border: hsl(var(--border));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
+  /* Trading: bids / buys and asks / sells. */
+  --color-bid: hsl(var(--bid));
+  --color-ask: hsl(var(--ask));
+  --radius-lg: var(--radius);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-sm: calc(var(--radius) - 4px);
+}
+
 @layer base {
   :root {
     --background: 0 0% 100%;
@@ -22,6 +58,8 @@
     --input: 214.3 31.8% 91.4%;
     --ring: 262 83% 58%;
     --radius: 0.5rem;
+    --bid: 158 64% 36%;
+    --ask: 354 70% 50%;
   }
 
   .dark {
@@ -44,6 +82,8 @@
     --border: 217.2 32.6% 17.5%;
     --input: 217.2 32.6% 17.5%;
     --ring: 262 83% 58%;
+    --bid: 160 60% 45%;
+    --ask: 355 78% 60%;
   }
 }
 
@@ -115,4 +155,8 @@ input[type="number"]::-webkit-outer-spin-button {
 
 input[type="number"] {
   -moz-appearance: textfield;
+}
+/* Numbers in tables and books line up. */
+.tabular {
+  font-variant-numeric: tabular-nums;
 }

@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 import Navigation from '@/components/Navigation'
+import { MockupWarning } from '@/components/MockupWarning'
 import Footer from '@/components/Footer'
 import { Sparkles, DollarSign, TrendingUp, Users, Share2, Wallet, CheckCircle, Twitter, MessageCircle } from 'lucide-react'
 
@@ -52,6 +53,7 @@ export default function PartnerPage() {
   return (
     <div className="min-h-screen flex flex-col bg-background">
       <Navigation />
+      <div className="pt-16"><MockupWarning /></div>
 
       <main className="flex-1 pt-20 pb-8">
         <div className="container mx-auto px-4">

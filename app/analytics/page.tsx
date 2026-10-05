@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { BarChart3, TrendingUp, Activity, DollarSign, Users, Zap, ArrowUpRight, ArrowDownRight } from 'lucide-react'
 import Navigation from '@/components/Navigation'
+import { MockupWarning } from '@/components/MockupWarning'
 import Footer from '@/components/Footer'
 import { Card, CardContent } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -54,6 +55,7 @@ export default function AnalyticsPage() {
   return (
     <div className="min-h-screen flex flex-col bg-gradient-to-br from-background via-background to-primary/5">
       <Navigation />
+      <div className="pt-16"><MockupWarning /></div>
       
       <main className="flex-1 container mx-auto px-4 pt-24 pb-12">
         {/* Header */}
