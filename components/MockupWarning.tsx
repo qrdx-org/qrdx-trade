@@ -7,14 +7,14 @@ export function MockupWarning() {
   const [isVisible, setIsVisible] = useState(false);
 
   useEffect(() => {
-    const dismissed = localStorage.getItem('mockup-warning-dismissed');
+    const dismissed = localStorage.getItem('sample-data-warning-dismissed');
     if (!dismissed) {
       setIsVisible(true);
     }
   }, []);
 
   const handleDismiss = () => {
-    localStorage.setItem('mockup-warning-dismissed', 'true');
+    localStorage.setItem('sample-data-warning-dismissed', 'true');
     setIsVisible(false);
   };
 
@@ -36,13 +36,14 @@ export function MockupWarning() {
             >
               <path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
             </svg>
-            <p className="text-sm text-yellow-200">
-              <strong className="font-semibold">Notice:</strong> This is only a mockup at the moment. The trading features are not functional.
+            <p className="text-sm text-yellow-700 dark:text-yellow-200">
+              <strong className="font-semibold">Sample data:</strong> the figures on this page are placeholders. Trade, Perps,
+              Swap, Pools and Portfolio use live QRDX chain data.
             </p>
           </div>
           <button
             onClick={handleDismiss}
-            className="text-yellow-200 hover:text-yellow-100 transition-colors p-1 rounded hover:bg-yellow-500/10"
+            className="text-yellow-700 dark:text-yellow-200 hover:text-yellow-900 dark:hover:text-yellow-100 transition-colors p-1 rounded hover:bg-yellow-500/10"
             aria-label="Dismiss warning"
           >
             <X className="w-4 h-4" />

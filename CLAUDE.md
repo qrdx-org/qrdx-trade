@@ -2,7 +2,13 @@
 
 ## Project Overview
 
-QRDX Trade is a Next.js 16 application that provides a trading interface for quantum-resistant cryptocurrency assets. The project uses modern web technologies and follows best practices for performance and maintainability.
+QRDX Trade is the trading frontend for the QRDX chain's native exchange (spot books, swaps, pools, perps) and the public API at `/api/v1`. Read `docs/ARCHITECTURE.md` before changing anything that touches market data, pair orientation or what gets signed; `docs/API.md` is the API contract.
+
+Rules that matter:
+- Order books, quotes, prices and balances come from the QRDX node only. Never generate or pad market data. External prices are reference data and must be labelled.
+- Amounts and prices are decimal strings; use `lib/decimal.ts` for anything displayed as node data or signed. No floats in signed values.
+- Pairs are URLs: `/trade/{base}/{quote}`, verified assets by slug, everything else by token address.
+- `../qrdx-node` is reference only: never edit it. `scripts/local-node` imports it read-only (run with `PYTHONDONTWRITEBYTECODE=1`).
 
 ## Architecture
 
@@ -101,25 +107,18 @@ Available components: button, card, dialog, tabs, tooltip, etc.
 
 ### Environment Variables
 
-Create `.env.local` for local development:
-
-```env
-NEXT_PUBLIC_API_URL=https://api.qrdx.org
-NEXT_PUBLIC_CHAIN_ID=1
-NEXT_PUBLIC_SOURCE_MAPS=false
-```
+Copy `.env.example` to `.env.local`. The site serves mainnet (`/api/v1`) and testnet (`/api/v1-test`) at once and follows the wallet's network; `NEXT_PUBLIC_QRDX_TEST_NETWORK=local` points the test slot at `scripts/local-node`. Every `lib/server` function takes a `Net` (per-network config, node client, cache namespace); never call a node without one. See docs/ARCHITECTURE.md §9.
 
 ### Next.js Configuration
 
-- Static export for production (`output: 'export'`)
-- Image optimization disabled for static hosting
+- Server-rendered (API routes and pair pages run on the edge runtime for Cloudflare)
 - Package import optimizations for lucide-react
 - Server Components HMR caching enabled
 
 ### Tailwind Configuration
 
-- Custom color system using CSS variables
-- Dark mode support via class strategy
+- Tailwind v4: theme colours are declared in `app/globals.css` (`@theme inline`), not read from tailwind.config.js
+- `bid` / `ask` colours for trading; dark mode via the `dark` class (`@custom-variant`)
 - shadcn/ui design tokens
 - Typography plugin for markdown content
 
@@ -173,15 +172,11 @@ import { cn } from "@/lib/utils"
 <div className={cn("base-class", conditional && "conditional-class")}>
 ```
 
-## Future Enhancements
+## Testing
 
-- [ ] Integrate wallet connection (WalletConnect, MetaMask)
-- [ ] Add real-time price feeds
-- [ ] Implement order book display
-- [ ] Add trading chart visualization
-- [ ] Create liquidity pool management
-- [ ] Add transaction history
-- [ ] Implement user portfolio view
+- `pnpm test` runs the unit tests in `tests/unit`.
+- `tests/e2e/trade-wallet.mjs` drives the wallet extension against the site and the local node; its header lists the setup.
+- The dev server on this machine's mounted volume may miss file changes; restart it (and clear `.next`) if a change does not show up.
 
 ## Troubleshooting
 

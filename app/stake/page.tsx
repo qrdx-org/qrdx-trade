@@ -4,6 +4,7 @@ import React, { useState } from 'react'
 import { motion } from 'framer-motion'
 import { Wallet, Shield, TrendingUp, Lock, Clock, Coins, AlertCircle, Info, ChevronDown, Calculator } from 'lucide-react'
 import Navigation from '@/components/Navigation'
+import { MockupWarning } from '@/components/MockupWarning'
 import Footer from '@/components/Footer'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -44,6 +45,7 @@ export default function StakePage() {
   return (
     <div className="min-h-screen flex flex-col bg-gradient-to-br from-background via-background to-primary/5">
       <Navigation />
+      <div className="pt-16"><MockupWarning /></div>
       
       <main className="flex-1 container mx-auto px-4 pt-24 pb-12">
         {/* Header */}

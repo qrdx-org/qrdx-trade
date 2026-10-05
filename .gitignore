@@ -40,3 +40,10 @@ next-env.d.ts
 # IDE
 .vscode
 .idea
+
+# local node harness (scripts/local-node)
+.venv/
+__pycache__/
+
+# wrangler local state (pnpm relay:dev)
+.wrangler/

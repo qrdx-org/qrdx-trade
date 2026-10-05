@@ -12,7 +12,12 @@
     "lint": "next lint",
     "deploy": "pnpm run build:worker && wrangler pages deploy",
     "deploy:preview": "pnpm run build:worker && wrangler pages deploy .vercel/output/static --branch preview",
-    "clean": "rm -rf .next node_modules .vercel"
+    "clean": "rm -rf .next node_modules .vercel",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "relay:dev": "wrangler dev --config relay/wrangler.jsonc --port 8787",
+    "relay:deploy": "wrangler deploy --config relay/wrangler.jsonc",
+    "relay:typecheck": "tsc --noEmit -p relay/tsconfig.json"
   },
   "keywords": [
     "nextjs",
@@ -27,6 +32,7 @@
   "license": "ISC",
   "packageManager": "pnpm@10.6.4",
   "dependencies": {
+    "@noble/hashes": "^2.4.0",
     "@radix-ui/react-dialog": "^1.1.15",
     "@radix-ui/react-dropdown-menu": "^2.1.16",
     "@radix-ui/react-hover-card": "^1.1.15",
@@ -49,6 +55,7 @@
     "next": "^16.0.1",
     "next-themes": "^0.4.6",
     "postcss": "^8.5.6",
+    "qrcode.react": "^4.2.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-tsparticles": "^2.12.2",
@@ -60,6 +67,7 @@
   },
   "devDependencies": {
     "@cloudflare/next-on-pages": "^1.4.42",
+    "@cloudflare/workers-types": "^5.20261005.1",
     "@cloudflare/wrangler": "^1.21.0",
     "@tailwindcss/aspect-ratio": "^0.4.2",
     "@tailwindcss/forms": "^0.5.10",
@@ -71,6 +79,7 @@
     "eslint": "^9.0.0",
     "eslint-config-next": "^15.1.3",
     "typescript": "^5.7.2",
+    "vitest": "^3",
     "wrangler": "^4.51.0"
   }
 }

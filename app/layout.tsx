@@ -1,7 +1,7 @@
 import { Inter } from 'next/font/google'
 import './globals.css'
 import { ThemeProvider } from '@/components/theme-provider'
-import { MockupWarning } from '@/components/MockupWarning'
+import { WalletProvider } from '@/lib/wallet/WalletContext'
 import type { Metadata } from 'next'
 
 const inter = Inter({ subsets: ['latin'] })
@@ -62,8 +62,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           enableSystem
           disableTransitionOnChange
         >
-          <MockupWarning />
-          {children}
+          <WalletProvider>{children}</WalletProvider>
         </ThemeProvider>
       </body>
     </html>
