@@ -12,8 +12,12 @@ import { apiAsset } from './markets'
 import type { Net } from './net'
 import type { NodeSpotOrder } from './node'
 import { refForAddress, resolveSegment, tokenIndex } from './resolve'
+import { mapLimit } from './util'
 
 const PQ_ADDRESS_RE = /^0xPQ[0-9a-fA-F]{64}$/
+/** Tokens checked per account read, newest first (plus verified, requested, and in-use ones). */
+const MAX_SCANNED_TOKENS = 300
+const BALANCE_CONCURRENCY = 16
 
 export function checkTraderAddress(address: string): void {
   // Exchange operations are signed by the PQ key; accounts are keyed by the 0xPQ address.
@@ -28,12 +32,17 @@ export async function account(net: Net, address: string, extraTokens: string[]):
   const idx = await tokenIndex(net)
   if (!idx.nodeOk) throw new ApiError('node_unavailable', 'QRDX node unreachable')
 
+  // Every native token the node knows, so unverified coins (launches, pools against
+  // them) show up too: the node has no "all balances of an address" read, and its
+  // HTTP endpoint refuses JSON-RPC batches, so this is one call per token, bounded.
   const tokens = new Set<string>()
   for (const a of VERIFIED_ASSETS) {
     const t = idx.verified.get(a.slug)
     if (t) tokens.add(t.token_address.toLowerCase())
   }
   for (const t of extraTokens) if (isTokenAddress(t)) tokens.add(t.toLowerCase())
+  const newest = [...idx.byAddress.values()].sort((a, b) => b.created_height - a.created_height).slice(0, MAX_SCANNED_TOKENS)
+  for (const t of newest) tokens.add(t.token_address.toLowerCase())
 
   const [orders, positions, perp, nonce] = await Promise.all([
     node.spotOrders(address),
@@ -42,10 +51,13 @@ export async function account(net: Net, address: string, extraTokens: string[]):
     node.nonce(address).catch(() => null),
   ])
   for (const o of orders) for (const t of o.pair.split(':')) tokens.add(t.toLowerCase())
+  for (const p of positions) for (const t of [p.token0, p.token1]) tokens.add(t.toLowerCase())
 
-  const balances = await Promise.all(
-    [...tokens].map(async (t) => ({ t, balance: await node.tokenBalance(t, address).catch(() => '0') }))
-  )
+  const balances = await mapLimit([...tokens], BALANCE_CONCURRENCY, async (t) => ({
+    t,
+    // The node may write small balances in exponent form ("2.82E-16"); clients expect plain decimals.
+    balance: str(dec(await node.tokenBalance(t, address).catch(() => '0'))),
+  }))
 
   // Funds escrowed by resting orders: buys hold quote (token1) at their price, sells hold base.
   const escrow = new Map<string, bigint>()

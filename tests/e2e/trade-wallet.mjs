@@ -297,7 +297,8 @@ for (let i = 0; i < 20; i++) {
   after = Number(l?.market?.price)
   if (after > startPrice) break
 }
-const frog = (await api(`/api/v1/accounts/${pq}?tokens=${launched?.token.address}`)).balances.find((b) => b.asset.address === launched?.token.address)
+// No ?tokens=: the account read must include unverified coins on its own (pool and sell forms rely on it).
+const frog = (await api(`/api/v1/accounts/${pq}`)).balances.find((b) => b.asset.address === launched?.token.address)
 check('buying walked the price up the curve', after > startPrice, `${startPrice} → ${after} QRDX`)
 check('the creator kept 10 % plus what it bought', frog && Number(frog.balance) > 100_000_000, frog && `${frog.balance} QFROG`)
 

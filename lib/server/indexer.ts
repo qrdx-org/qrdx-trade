@@ -15,6 +15,7 @@
 import { canonicalPair } from '../pairs'
 import { dec, div, str } from '../decimal'
 import { cached } from './cache'
+import { mapLimit } from './util'
 import type { Net } from './net'
 import type { NodeReceipt } from './node'
 
@@ -56,20 +57,6 @@ function stateFor(net: Net): State {
   let s = states.get(net.slot)
   if (!s) states.set(net.slot, (s = { fromBlock: null, toBlock: null, byPair: new Map() }))
   return s
-}
-
-async function mapLimit<T, R>(items: T[], limit: number, fn: (t: T) => Promise<R>): Promise<R[]> {
-  const out: R[] = new Array(items.length)
-  let i = 0
-  await Promise.all(
-    Array.from({ length: Math.min(limit, items.length) }, async () => {
-      while (i < items.length) {
-        const k = i++
-        out[k] = await fn(items[k])
-      }
-    })
-  )
-  return out
 }
 
 export function tradeFromSwap(
