@@ -145,10 +145,20 @@ export function canonicalInitialPrice(tokenA: string, tokenB: string, bPerA: str
 export interface LaunchSpec {
   name: string
   symbol: string
+  /** Initial supply, all of it to the creator at deploy. */
   supply: string
-  /** Percent of supply on the curve (the rest stays with the creator). */
-  curvePercent: number
+  /** Of the initial supply, how much the creator keeps; the rest goes on the launch curve. */
+  keep: string
+  /** No market yet: the whole supply stays with the creator. */
+  tokenOnly: boolean
+  /** Who may mint more later; null for a fixed supply. */
+  mintAuthority: string | null
+  /** Cap on total supply when mintable; "" for none. */
+  maxSupply: string
 }
+
+const DECIMAL = /^\d+(\.\d+)?$/
+export const isAuthorityAddress = (a: string) => /^0x[0-9a-fA-F]{40}$/.test(a) || /^0xPQ[0-9a-fA-F]{64}$/.test(a)
 
 /** Field-level problems with a launch, or null. Mirrors qrdx-node tokens.py deploy rules. */
 export function validateLaunch(s: LaunchSpec): string | null {
@@ -157,7 +167,30 @@ export function validateLaunch(s: LaunchSpec): string | null {
   if (name.length < 1 || name.length > 64) return 'The name must be 1–64 characters.'
   if (symbol.length < 1 || symbol.length > 16) return 'The ticker must be 1–16 characters.'
   if (/[\s:]/.test(symbol) || /[^\x21-\x7e]/.test(symbol)) return 'The ticker cannot contain spaces, ":" or unusual characters.'
-  if (!/^\d+(\.\d+)?$/.test(s.supply) || dec(s.supply) <= 0n) return 'Enter a supply.'
-  if (s.curvePercent < 50 || s.curvePercent > 100) return 'Put between 50 % and 100 % of the supply on the curve.'
+  if (!DECIMAL.test(s.supply)) return 'Enter a supply.'
+  if (s.mintAuthority !== null && !isAuthorityAddress(s.mintAuthority)) return 'The mint authority must be a 0x… or 0xPQ… address.'
+  if (dec(s.supply) <= 0n && s.mintAuthority === null) return 'A token with no initial supply needs a mint authority.'
+  if (s.maxSupply) {
+    if (s.mintAuthority === null) return 'A supply cap only matters for a mintable token.'
+    if (!DECIMAL.test(s.maxSupply) || dec(s.maxSupply) <= 0n) return 'Enter a valid max supply, or leave it empty.'
+    if (dec(s.maxSupply) < dec(s.supply)) return 'The max supply cannot be below the initial supply.'
+  }
+  if (!s.tokenOnly) {
+    if (dec(s.supply) <= 0n) return 'A market needs an initial supply to put on the curve.'
+    if (!DECIMAL.test(s.keep || '0')) return 'Enter how much to keep (0 for none).'
+    if (dec(s.keep || '0') >= dec(s.supply)) return 'Keep less than the whole supply: the rest goes on the curve.'
+  }
   return null
+}
+
+/** TOKEN_DEPLOY params for a spec. */
+export function deployParams(s: LaunchSpec): Record<string, string | number> {
+  return {
+    name: s.name.trim(),
+    symbol: s.symbol.trim(),
+    decimals: 18,
+    initial_supply: s.supply,
+    ...(s.mintAuthority ? { mint_authority: s.mintAuthority } : {}),
+    ...(s.mintAuthority && s.maxSupply ? { max_supply: s.maxSupply } : {}),
+  }
 }

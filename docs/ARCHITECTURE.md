@@ -397,9 +397,11 @@ the unverified banner everywhere.
 
 **What a launch is.** Three exchange operations, all from the creator's PQ key:
 
-1. `TOKEN_DEPLOY` — name, ticker, 18 decimals, the whole supply to the creator,
-   **no mint authority and no freeze authority**: the supply is fixed forever
-   and no one can lock a holder's coins.
+1. `TOKEN_DEPLOY` — name, ticker, 18 decimals, the whole initial supply to the
+   creator, and **no freeze authority**, so no one can lock a holder's coins.
+   By default there is **no mint authority** either and the supply is fixed
+   forever; the creator may instead make it mintable by themselves or another
+   address, with an optional max supply. The feed and the approval say so.
 2. `CREATE_POOL` — the coin against a verified asset (QRDX first, like SOL on
    pump.fun), 1 % fee by default, opening just outside the launch curve.
 3. `ADD_LIQUIDITY` — the **launch curve**: the coin alone, deposited in a price
@@ -427,7 +429,8 @@ half a tick outside the range so the deposit needs none of the quote asset
 the pool is withdrawn. The form reads the creator's QRDX balance from the
 wallet and refuses to start without enough. The curve is the creator's own
 liquidity position, and they can withdraw it; the launch page says so.
-Creators may keep up to half the supply; the feed shows each coin's supply
+Creators choose how much of the supply to keep ("Keep for yourself"); the rest
+goes on the curve. The feed shows each coin's supply
 flags, creator, age, price, market cap (in USD when the quote has an index
 price) and 24 h change and volume.
 
@@ -446,11 +449,18 @@ only mode offered.
 
 **Pairing with QRDX.** Spot trades QRC-20 tokens only, so "QRDX" in a pair is
 **wrapped QRDX (wQRDX)**, the verified `qrdx` asset. Where a network has one,
-it is the default quote. The node has no wrap / unwrap operation yet (§7), so a
+it is the default quote. On testnet it is "Wrapped QRDX" (WQRDX) at
+`0xe13ef577f2d8c6cb55e49c70e6ed48f64d0fc106`, pinned in `lib/assets.ts`
+(`addresses.testnet`). The node has no wrap / unwrap operation yet (§7), so a
 wQRDX token today is only as good as whoever mints it; a 1:1 native-backed
 wQRDX needs a node change: a `WRAP` op moving native QRDX to a protocol holder
 and minting the token, and an `UNWRAP` op reversing it (the same pattern as
 perps collateral, `PERP_DEPOSIT` / `PERP_WITHDRAW`).
+
+**Your tokens** (on `/launch`) lists tokens the connected account created or
+may mint, with its balance: **Mint** (`TOKEN_MINT`, to itself or any address,
+within the cap), **Give up minting** (`TOKEN_SET_AUTHORITY` to nobody; this
+cannot be undone), and links to start a market or a pool.
 
 `/pools/new` creates a pool for any two tokens, for anyone who wants a market
 without the launch curve.

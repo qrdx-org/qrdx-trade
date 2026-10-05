@@ -243,18 +243,21 @@ console.log('Launch: token + pool in one block, then the curve')
 await page.goto(`${SITE}/launch`, { waitUntil: 'networkidle' })
 await page.getByPlaceholder('Quantum Frog').fill('Quantum Frog')
 await page.getByPlaceholder('QFROG').fill('QFROG')
+// Keep 10 % of the supply, and keep the right to mint more.
+await page.getByRole('button', { name: '10%', exact: true }).click()
+await page.getByRole('button', { name: 'I can mint', exact: true }).click()
 await page.waitForTimeout(3000) // assets, prices and the QRDX balance load
 ap = nextApproval()
 await page.getByRole('button', { name: /^Launch QFROG$/ }).click()
 approval = await ap
-check('deploy approval is decoded (fixed supply)', await approval.getByText(/^Create token Quantum Frog \(QFROG\) with 1,000,000,000 supply/).first().waitFor({ timeout: 15_000 }).then(() => true, () => false))
+check('deploy approval is decoded, and says it is mintable', await approval.getByText(/^Create token Quantum Frog \(QFROG\) with 1,000,000,000 supply/).first().waitFor({ timeout: 15_000 }).then(() => true, () => false) && await approval.getByText(/able to mint more QFROG/).first().isVisible())
 ap = nextApproval()
 await approval.getByRole('button', { name: /^Confirm$/ }).click().catch(closedOk)
 approval = await ap
 check('pool approval names the not-yet-created token and the burn', await approval.getByText(/^Create pool wQRDX\/0x[0-9a-f]{6}…/).first().waitFor({ timeout: 15_000 }).then(() => true, () => false) && await approval.getByText(/5,000 QRDX is burned/).first().isVisible())
 await approval.screenshot({ path: `${SHOTS}/approval-create-pool.png` })
 await approval.getByRole('button', { name: /^Confirm$/ }).click().catch(closedOk)
-const deposit = page.getByRole('button', { name: /^Deposit .* QFROG on the curve$/ })
+const deposit = page.getByRole('button', { name: /^Deposit 900\.00M QFROG on the curve$/ })
 await deposit.waitFor({ timeout: 90_000 })
 check('token and pool created in one block', true)
 ap = nextApproval()
@@ -270,8 +273,8 @@ for (let i = 0; i < 10 && !launched?.market; i++) {
   if (!launched?.market) await page.waitForTimeout(2000)
 }
 check(
-  'launch feed lists it with a market, fixed supply, not freezable',
-  launched && launched.market && launched.fixedSupply && !launched.freezable,
+  'launch feed lists it with a market, mintable, not freezable',
+  launched && launched.market && !launched.fixedSupply && !launched.freezable,
   launched && `${launched.token.address} · price ${launched.market?.price} ${launched.market?.quote.symbol} · cap ${launched.market?.marketCap}`
 )
 const startPrice = Number(launched?.market?.price)
@@ -296,7 +299,39 @@ for (let i = 0; i < 20; i++) {
 }
 const frog = (await api(`/api/v1/accounts/${pq}?tokens=${launched?.token.address}`)).balances.find((b) => b.asset.address === launched?.token.address)
 check('buying walked the price up the curve', after > startPrice, `${startPrice} → ${after} QRDX`)
-check('the buyer holds the coin', frog && Number(frog.balance) > 0, frog && `${frog.balance} QFROG`)
+check('the creator kept 10 % plus what it bought', frog && Number(frog.balance) > 100_000_000, frog && `${frog.balance} QFROG`)
+
+console.log('Mint more, then give up minting')
+await page.goto(`${SITE}/launch`, { waitUntil: 'networkidle' })
+const card = page.getByTestId('token-QFROG')
+await card.waitFor({ timeout: 30_000 })
+await card.getByRole('button', { name: /^Mint$/ }).click()
+await card.getByPlaceholder(/Amount of QFROG/).fill('5000')
+ap = nextApproval()
+await card.getByRole('button', { name: /^Mint 5000 QFROG$/ }).click()
+approval = await ap
+check('mint approval is decoded', await approval.getByText(/^Mint 5,000 new QFROG to you$/).first().waitFor({ timeout: 15_000 }).then(() => true, () => false))
+await approval.getByRole('button', { name: /^Confirm$/ }).click().catch(closedOk)
+let supply
+for (let i = 0; i < 20; i++) {
+  await page.waitForTimeout(3000)
+  supply = (await api('/api/v1/assets?all=1')).tokens.find((t) => t.symbol === 'QFROG')?.totalSupply
+  if (supply === '1000005000') break
+}
+check('supply grew by the minted amount', supply === '1000005000', supply)
+await card.getByRole('button', { name: /^Give up minting$/ }).click()
+ap = nextApproval()
+await card.getByRole('button', { name: /^Give up minting QFROG for good$/ }).click()
+approval = await ap
+check('renounce approval warns it is permanent', await approval.getByText(/no one will ever be able to mint QFROG again/).first().waitFor({ timeout: 15_000 }).then(() => true, () => false))
+await approval.getByRole('button', { name: /^Confirm$/ }).click().catch(closedOk)
+let authority = 'x'
+for (let i = 0; i < 20 && authority; i++) {
+  await page.waitForTimeout(3000)
+  authority = (await api('/api/v1/assets?all=1')).tokens.find((t) => t.symbol === 'QFROG')?.mintAuthority
+}
+check('minting given up: the supply is now fixed', authority === null)
+await page.screenshot({ path: `${SHOTS}/your-tokens.png` })
 
 // ── token only, market later ────────────────────────────────────────────────
 console.log('Token only, then its market later')

@@ -4,7 +4,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { blake2b } from '@noble/hashes/blake2.js'
-import { canonicalInitialPrice, decimalString, deriveTokenAddress, launchCurve, validateLaunch } from '@/lib/launch'
+import { canonicalInitialPrice, decimalString, deployParams, deriveTokenAddress, launchCurve, validateLaunch } from '@/lib/launch'
 
 const LOW = '0x0000000000000000000000000000000000000001'
 const HIGH = '0xffffffffffffffffffffffffffffffffffffffff'
@@ -64,11 +64,32 @@ describe('helpers', () => {
     expect(canonicalInitialPrice(HIGH, LOW, '4')).toBe('0.25')
   })
   it('applies the node token rules', () => {
-    const ok = { name: 'Pepe', symbol: 'PEPE', supply: '1000000000', curvePercent: 100 }
+    const ok = { name: 'Pepe', symbol: 'PEPE', supply: '1000000000', keep: '0', tokenOnly: false, mintAuthority: null, maxSupply: '' }
     expect(validateLaunch(ok)).toBeNull()
     expect(validateLaunch({ ...ok, symbol: 'PE PE' })).toMatch(/spaces/)
     expect(validateLaunch({ ...ok, symbol: 'A:B' })).toMatch(/spaces/)
     expect(validateLaunch({ ...ok, name: 'x'.repeat(65) })).toMatch(/name/)
-    expect(validateLaunch({ ...ok, supply: '0' })).toMatch(/supply/)
+    expect(validateLaunch({ ...ok, supply: '0' })).toMatch(/mint authority/)
+  })
+
+  it('lets the creator keep part of the supply, but not all of it, when there is a market', () => {
+    const ok = { name: 'Pepe', symbol: 'PEPE', supply: '1000', keep: '250', tokenOnly: false, mintAuthority: null, maxSupply: '' }
+    expect(validateLaunch(ok)).toBeNull()
+    expect(validateLaunch({ ...ok, keep: '1000' })).toMatch(/Keep less/)
+    expect(validateLaunch({ ...ok, keep: '1000', tokenOnly: true })).toBeNull()
+  })
+
+  it('takes an optional mint authority and cap, as the node does', () => {
+    const me = '0xPQ' + 'ab'.repeat(32)
+    const base = { name: 'Pepe', symbol: 'PEPE', supply: '1000', keep: '0', tokenOnly: true, mintAuthority: me, maxSupply: '' }
+    expect(validateLaunch(base)).toBeNull()
+    expect(validateLaunch({ ...base, supply: '0' })).toBeNull() // mintable: may start empty
+    expect(validateLaunch({ ...base, mintAuthority: 'bob' })).toMatch(/0x/)
+    expect(validateLaunch({ ...base, maxSupply: '500' })).toMatch(/below/)
+    expect(validateLaunch({ ...base, mintAuthority: null, maxSupply: '5000' })).toMatch(/mintable/)
+    expect(deployParams({ ...base, maxSupply: '5000' })).toEqual({
+      name: 'Pepe', symbol: 'PEPE', decimals: 18, initial_supply: '1000', mint_authority: me, max_supply: '5000',
+    })
+    expect(deployParams({ ...base, mintAuthority: null })).not.toHaveProperty('mint_authority')
   })
 })

@@ -18,6 +18,8 @@ import {
   deriveTokenAddress,
   launchCurve,
   tickSpacing,
+  deployParams,
+  isAuthorityAddress,
   validateLaunch,
 } from '@/lib/launch'
 import type { AccountResponse, ApiAsset, IndexPrice } from '@/lib/types'
@@ -92,7 +94,14 @@ export function LaunchForm({ existingToken, onLaunched }: { existingToken?: stri
   const [quoteSeg, setQuoteSeg] = useState<string>('')
   const [startCap, setStartCap] = useState('')
   const [multiple, setMultiple] = useState(100)
-  const [curvePercent, setCurvePercent] = useState(100)
+  // New coin: how much of the supply the creator keeps (the rest goes on the curve).
+  const [keep, setKeep] = useState('0')
+  // Existing token: how much of the holder's balance goes on the curve ("" = all of it).
+  const [curveInput, setCurveInput] = useState('')
+  // Who may mint more later.
+  const [mintMode, setMintMode] = useState<'none' | 'self' | 'other'>('none')
+  const [mintOther, setMintOther] = useState('')
+  const [maxSupply, setMaxSupply] = useState('')
   const [feeTier, setFeeTier] = useState<number>(10000)
   const [poolType, setPoolType] = useState<PoolType>('SUBSIDIZED')
   const [qrdxBalance, setQrdxBalance] = useState<string | null>(null)
@@ -179,11 +188,29 @@ export function LaunchForm({ existingToken, onLaunched }: { existingToken?: stri
     return Number(startCap) / Number(totalSupply)
   }, [startCap, totalSupply])
 
+  const isDec = (v: string) => /^\d+(\.\d+)?$/.test(v)
   const curveAmount = useMemo(() => {
-    const from = kind === 'market' ? myBalance ?? '0' : supply
-    if (!/^\d+(\.\d+)?$/.test(from)) return '0'
-    return round(str((dec(from) * BigInt(curvePercent)) / 100n), 18, 'down')
-  }, [kind, myBalance, supply, curvePercent])
+    if (kind === 'market') {
+      const v = curveInput || myBalance || '0'
+      return isDec(v) ? v : '0'
+    }
+    if (!isDec(supply) || !isDec(keep || '0')) return '0'
+    const rest = dec(supply) - dec(keep || '0')
+    return rest > 0n ? str(rest) : '0'
+  }, [kind, curveInput, myBalance, supply, keep])
+
+  const mintAuthority = mintMode === 'self' ? w.trader : mintMode === 'other' ? mintOther.trim() : null
+  const spec = {
+    name,
+    symbol,
+    supply,
+    keep: kind === 'token' ? supply : keep || '0',
+    tokenOnly: kind === 'token',
+    mintAuthority,
+    maxSupply: maxSupply.trim(),
+  }
+  /** A share of `of`, rounded down to 18 places. */
+  const share = (of: string, pct: number) => (isDec(of) ? round(str((dec(of) * BigInt(pct)) / 100n), 18, 'down') : '0')
 
   const preview = useMemo(() => {
     if (!withMarket || !quote?.address || !startPrice) return null
@@ -202,8 +229,10 @@ export function LaunchForm({ existingToken, onLaunched }: { existingToken?: stri
       if (existing.error) return existing.error.message
       if (!ex?.token) return 'Loading the token…'
       if (dec(curveAmount) <= 0n) return `You hold no ${tokenSymbol} to put on the curve.`
+      if (dec(curveAmount) > dec(myBalance ?? '0')) return `You hold only ${compact(myBalance ?? '0')} ${tokenSymbol}.`
     } else {
-      const v = validateLaunch({ name, symbol, supply, curvePercent: kind === 'token' ? 100 : curvePercent })
+      if (mintMode === 'other' && mintOther && !isAuthorityAddress(mintOther.trim())) return 'The mint authority must be a 0x… or 0xPQ… address.'
+      const v = validateLaunch(spec)
       if (v) return v
     }
     if (!withMarket) return null
@@ -255,7 +284,7 @@ export function LaunchForm({ existingToken, onLaunched }: { existingToken?: stri
       const sym = symbol.trim()
       const deploy = await w.sendExchange({
         op: 'TOKEN_DEPLOY',
-        params: { name: name.trim(), symbol: sym, decimals: 18, initial_supply: supply },
+        params: deployParams(spec),
         label: `Create ${sym} (${supply} supply)`,
       })
       if (deploy.nonce === undefined) throw new Error('This wallet version does not report the nonce it signed with. Update QRDX Wallet.')
@@ -441,8 +470,36 @@ export function LaunchForm({ existingToken, onLaunched }: { existingToken?: stri
             <Field label="Ticker">
               <Input value={symbol} onChange={(e) => setSymbol(e.target.value.replace(/\s/g, '').toUpperCase())} maxLength={16} placeholder="QFROG" />
             </Field>
-            <Field label="Total supply" hint="Fixed forever: no one can mint more.">
+            <Field label={mintAuthority ? 'Initial supply' : 'Total supply'} hint={mintAuthority ? 'Minted to you now; more can be minted later.' : 'Fixed forever: no one can mint more.'}>
               <Input value={supply} onChange={(e) => setSupply(e.target.value.trim())} inputMode="decimal" className="tabular" />
+            </Field>
+            <Field label="Minting">
+              <div className="grid grid-cols-3 gap-1">
+                {(
+                  [
+                    ['none', 'Fixed supply'],
+                    ['self', 'I can mint'],
+                    ['other', 'Another address'],
+                  ] as const
+                ).map(([k, label]) => (
+                  <button key={k} onClick={() => setMintMode(k)} className={cn('rounded border py-1 text-xs', mintMode === k ? 'border-primary bg-accent' : 'text-muted-foreground')}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+              {mintMode === 'other' && (
+                <Input value={mintOther} onChange={(e) => setMintOther(e.target.value)} placeholder="0xPQ… or 0x… mint authority" className="mt-2 font-mono text-xs" />
+              )}
+              {mintMode !== 'none' && (
+                <>
+                  <Input value={maxSupply} onChange={(e) => setMaxSupply(e.target.value.trim())} inputMode="decimal" placeholder="Max supply (optional)" className="mt-2 tabular" />
+                  <p className="mt-1 text-[11px] text-amber-500">
+                    {mintMode === 'self' ? 'You' : 'That address'} can create more {symbol || 'tokens'}
+                    {maxSupply ? `, up to ${compact(maxSupply)}` : ' with no limit'}. Buyers see the coin as mintable; you can give
+                    up minting later under Your tokens.
+                  </p>
+                </>
+              )}
             </Field>
           </>
         )}
@@ -470,12 +527,20 @@ export function LaunchForm({ existingToken, onLaunched }: { existingToken?: stri
                 ))}
               </div>
             </Field>
-            <Field
-              label={`On the curve: ${curvePercent}% of ${kind === 'market' ? 'your balance' : 'the supply'}`}
-              hint={`${compact(curveAmount)} ${tokenSymbol || 'tokens'} on the curve${curvePercent < 100 ? `; you keep ${100 - curvePercent}%. Buyers can see this.` : '.'}`}
-            >
-              <input type="range" min={kind === 'market' ? 10 : 50} max={100} step={5} value={curvePercent} onChange={(e) => setCurvePercent(Number(e.target.value))} className="w-full" />
-            </Field>
+            {kind === 'market' ? (
+              <Field label={`Put on the curve (${tokenSymbol || 'tokens'})`} hint={`You hold ${compact(myBalance ?? '0')}; whatever you do not put on the curve stays in your wallet.`}>
+                <Input value={curveInput || myBalance || ''} onChange={(e) => setCurveInput(e.target.value.trim())} inputMode="decimal" className="tabular" />
+                <Pcts onPick={(p) => setCurveInput(share(myBalance ?? '0', p))} options={[25, 50, 75, 100]} />
+              </Field>
+            ) : (
+              <Field
+                label={`Keep for yourself (${symbol || 'tokens'})`}
+                hint={`${compact(curveAmount)} go on the curve${dec(isDec(keep || '0') ? keep || '0' : '0') > 0n ? `, ${compact(keep)} stay in your wallet to use as you like (another pool, your own liquidity). Buyers can see what you hold.` : '; you keep none.'}`}
+              >
+                <Input value={keep} onChange={(e) => setKeep(e.target.value.trim())} inputMode="decimal" className="tabular" />
+                <Pcts onPick={(p) => setKeep(share(supply, p))} options={[0, 10, 25, 50]} />
+              </Field>
+            )}
             <details className="text-xs">
               <summary className="cursor-pointer text-muted-foreground">Pool settings</summary>
               <div className="mt-2 space-y-2">
@@ -528,7 +593,9 @@ export function LaunchForm({ existingToken, onLaunched }: { existingToken?: stri
       <p className="mt-2 text-[10px] leading-snug text-muted-foreground">
         {kind === 'market'
           ? 'The curve is ordinary pool liquidity in your name; you can withdraw it from the pool page, and buyers can see that you can.'
-          : 'The token has no mint or freeze authority: its supply is fixed and no one can lock a holder’s coins.' +
+          : (mintAuthority
+              ? 'The token can be minted by its mint authority; it has no freeze authority, so no one can lock a holder’s coins.'
+              : 'The token has no mint or freeze authority: its supply is fixed and no one can lock a holder’s coins.') +
             (kind === 'launch' ? ' The curve is ordinary pool liquidity in your name; you can withdraw it from the pool page, and buyers can see that you can.' : '')}
       </p>
     </Panel>
@@ -572,7 +639,8 @@ function LaunchProgress({
   return (
     <Panel>
       <h2 className="text-base font-semibold">
-        {job.kind === 'market' ? 'Starting a market for' : tokenOnlyDone ? 'Created' : 'Creating'} {job.name}{' '}
+        {s === 'done' ? (job.kind === 'token' ? 'Created' : job.kind === 'market' ? 'Market started for' : 'Launched') : job.kind === 'market' ? 'Starting a market for' : 'Creating'}{' '}
+        {job.name}{' '}
         <span className="text-muted-foreground">({job.symbol})</span>
       </h2>
       <button
@@ -640,6 +708,18 @@ function LaunchProgress({
         </Button>
       )}
     </Panel>
+  )
+}
+
+function Pcts({ options, onPick }: { options: number[]; onPick: (pct: number) => void }) {
+  return (
+    <div className="mt-1 flex gap-1">
+      {options.map((p) => (
+        <button key={p} type="button" onClick={() => onPick(p)} className="flex-1 rounded border py-0.5 text-[11px] text-muted-foreground hover:bg-accent">
+          {p}%
+        </button>
+      ))}
+    </div>
   )
 }
 

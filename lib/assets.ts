@@ -8,10 +8,13 @@
  * because native token addresses derive from their deploy transaction
  * (blake2b(sender:nonce:symbol), qrdx-node docs/NATIVE_TOKENS.md). Otherwise a
  * node token is this asset when its on-chain symbol matches AND its creator is
- * one of the network's verified issuers (lib/server/resolve.ts).
+ * one of the network's verified issuers (lib/server/resolve.ts). An entry's
+ * `addresses` pins it outright on a network where its token is known.
  *
  * Anything not resolved through this file is unverified and trades by address.
  */
+
+import type { NetworkId } from './config'
 
 export interface PriceIds {
   /** Coinbase Exchange product, e.g. "BTC-USD". */
@@ -37,6 +40,11 @@ export interface VerifiedAsset {
   quoteRank: number
   /** Brand colour for the token badge when there is no image. */
   color: string
+  /**
+   * Known token addresses per network. A deployment's QRDX_{MAIN,TEST}_ASSET_ADDRESSES
+   * overrides these; without either, the verified-issuer rule applies.
+   */
+  addresses?: Partial<Record<NetworkId, string>>
 }
 
 export const VERIFIED_ASSETS: VerifiedAsset[] = [
@@ -50,6 +58,11 @@ export const VERIFIED_ASSETS: VerifiedAsset[] = [
     prices: {},
     quoteRank: 60,
     color: '#8b5cf6',
+    addresses: {
+      // "Wrapped QRDX" (WQRDX) on test.qrdx.org. A fixed-supply token held by its
+      // creator, not yet backed 1:1 by a wrap operation (ARCHITECTURE.md §10).
+      testnet: '0xe13ef577f2d8c6cb55e49c70e6ed48f64d0fc106',
+    },
   },
   {
     slug: 'usdc',

@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { LaunchFeed } from '@/components/launch/LaunchFeed'
 import { LaunchForm } from '@/components/launch/LaunchForm'
+import { MyTokens } from '@/components/launch/MyTokens'
 import { isTokenAddress } from '@/lib/assets'
 
 export function LaunchPage() {
@@ -25,6 +26,7 @@ export function LaunchPage() {
         </div>
         <div className="order-1 lg:order-2 lg:sticky lg:top-16 lg:self-start">
           <LaunchForm key={existingToken ?? 'new'} existingToken={existingToken} onLaunched={() => setRefresh((r) => r + 1)} />
+          <MyTokens />
         </div>
       </div>
     </main>

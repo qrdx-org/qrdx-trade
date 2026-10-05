@@ -42,7 +42,7 @@ function buildIndex(tokens: NodeToken[], cfg: ServerConfig): TokenIndex {
   const verified: TokenIndex['verified'] = new Map()
   const slugByAddress = new Map<string, string>()
   for (const asset of VERIFIED_ASSETS) {
-    const pinned = cfg.pinnedAssets[asset.slug]
+    const pinned = cfg.pinnedAssets[asset.slug] ?? asset.addresses?.[cfg.id]?.toLowerCase()
     if (pinned) {
       verified.set(asset.slug, byAddress.get(pinned) ?? { token_address: pinned, pinnedOnly: true })
       slugByAddress.set(pinned, asset.slug)
