@@ -72,8 +72,9 @@ account: `curl -X POST localhost:3007/faucet -d '{"address":"0xPQ…"}'`.
 | `pnpm typecheck` | TypeScript |
 | `node tests/e2e/trade-wallet.mjs` | wallet extension + site + local node, end to end (see the file header) |
 | `node tests/e2e/trade-phone.mjs` | phone wallet + relay + site + local node, end to end (see the file header) |
-| `pnpm relay:dev` / `pnpm relay:deploy` | the QRDX Connect relay (Cloudflare Worker + Durable Object) |
-| `pnpm deploy` | Cloudflare Pages via next-on-pages |
+| `pnpm relay:dev` / `pnpm relay:deploy` | the QRDX Connect relay on its own (Cloudflare Worker + Durable Object) |
+| `pnpm build:worker` | Pages build (next-on-pages), then deploys the QRDX Connect relay when Cloudflare credentials are present (docs/CONNECT.md) |
+| `pnpm deploy` | the above, then `wrangler pages deploy` |
 
 ## Configuration
 

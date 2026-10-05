@@ -110,12 +110,27 @@ still applies: a locked wallet asks to be unlocked first.
 
 ## Deploying and developing
 
-The relay is its own Worker (`relay/wrangler.jsonc`), deployed with
-`pnpm relay:deploy`. It is routed under the trade site
-(`trade.qrdx.org/api/relay/*`, in the config), so the default
-`NEXT_PUBLIC_QRDX_RELAY_URL` works; to serve it elsewhere, change the route and
-set that variable. Next.js route handlers cannot hold WebSockets, which is why the
-relay is not an `app/api` route.
+The relay is its own small Worker (`relay/wrangler.jsonc`), routed under the
+trade site at `trade.qrdx.org/api/relay/*`. It cannot be a Pages / edge
+function like the API: the phone and the laptop must meet in shared state, and
+edge functions are stateless isolates (two requests rarely share one).
+Cloudflare's shared state for this is a Durable Object, and only a Worker can
+define one; Pages can bind to a Durable Object but cannot contain it.
+
+It deploys with the site: `pnpm build:worker` builds the Pages output, then
+runs `scripts/deploy-relay.mjs`, which deploys the relay when
+
+- Cloudflare credentials are present (`CLOUDFLARE_API_TOKEN`, or a
+  `wrangler login`); without them it prints a note and the build carries on;
+- and, in a Cloudflare Pages build, the branch is the production branch
+  (`QRDX_RELAY_BRANCH`, default `main`), so previews never replace the live
+  relay. `pnpm deploy:preview` skips it too.
+
+`QRDX_SKIP_RELAY_DEPLOY=1` turns it off. When it runs and fails, the build
+fails. For Pages builds from Git, add `CLOUDFLARE_API_TOKEN` (permissions:
+Workers Scripts Edit, Workers Routes Edit on `qrdx.org`) as an encrypted
+variable in the Pages project's build settings. `pnpm relay:deploy` deploys
+the relay alone.
 
 Locally, `pnpm relay:dev` runs the real Durable Object in workerd on
 `127.0.0.1:8787`. Point the site at it and at a locally served wallet:
