@@ -209,6 +209,11 @@ there is no tape; charts and 24 h stats then come from pool history.
 
 `{ "perps": [ <perp market>, … ], "nodeOk": true, … }`
 
+Perp markets include `collateralToken`: what perps settle in on this network
+(a token address, `"QRDX"` for native QRDX, `""` when the nodes configure none
+and refuse deposits, or `null` if unknown). `markPrice` / `oraclePrice` are
+`null` until validators have priced the market.
+
 ### `GET /api/v1/perps/check?base=SOL`
 
 Before creating a market (ARCHITECTURE.md §13): whether it exists, and whether

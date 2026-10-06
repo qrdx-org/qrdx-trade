@@ -349,6 +349,7 @@ limits, and what the node would need to lift them:
 |---|---|---|
 | Spot order-book fills are not journaled (`journal.py` records `fill` events only for `PERP_ORDER`); a `PLACE_ORDER` receipt has `filled` but no fill prices. | Spot trade history and candles include `SWAP` executions only. Limit-order fills show in the user's own order status, not in the public tape. | Record spot fills in the journal and serve `exchange_getTrades(pair, limit)`. |
 | No wrapped native QRDX token. | `qrdx/*` spot pairs have no on-chain market until a `wQRDX` token is deployed. | Deploy a wQRDX token with a wrap/unwrap op, or let spot settle `QRDX` natively as perps collateral does. |
+| Perps collateral is a node setting (`QRDX_PERP_COLLATERAL_TOKEN`): a token address (production: the USD stablecoin), `QRDX` for native QRDX (the node marks it development-only), or empty, which refuses every deposit. Testnet runs with it empty, and its validators vote no oracle prices (`QRDX_ORACLE_FEED`). | Perps on testnet cannot take deposits or trade; the API reports `collateralToken` and the perps screen says so. | Set `QRDX_PERP_COLLATERAL_TOKEN` (the same on every node: it is a consensus parameter) and `QRDX_ORACLE_FEED=exchanges` on validators. |
 | `exchange_getNonce` ignores the mempool. | Handled in the wallet (§4). | A `pending` flag on `exchange_getNonce`. |
 | Streams (`/ws`) are opt-in per node (`QRDX_ENABLE_STREAMING`). | The site polls (book 2 s, account 5 s). | Enable streaming on public nodes; the client already has the channel names. |
 | Spot books exist only for pairs that have a pool (`CREATE_POOL` creates both). | A pair with no pool has no book. | — (by design) |
@@ -474,7 +475,9 @@ only mode offered.
 **wrapped QRDX (wQRDX)**, the verified `qrdx` asset. Where a network has one,
 it is the default quote. On testnet it is "Wrapped QRDX" (WQRDX) at
 `0xe13ef577f2d8c6cb55e49c70e6ed48f64d0fc106`, pinned in `lib/assets.ts`
-(`addresses.testnet`). The node has no wrap / unwrap operation yet (§7), so a
+(`addresses.testnet`). Testnet USDC is `0x4227d3846511a16656b521361c10faf6358f0708`
+(18 decimals), pinned the same way; with its USDC/wQRDX pool, every coin
+paired with wQRDX gets a USD price routed through it. The node has no wrap / unwrap operation yet (§7), so a
 wQRDX token today is only as good as whoever mints it; a 1:1 native-backed
 wQRDX needs a node change: a `WRAP` op moving native QRDX to a protocol holder
 and minting the token, and an `UNWRAP` op reversing it (the same pattern as
@@ -558,6 +561,14 @@ continuous. Volume counts both directions: what was paid in of each token, plus
 the other side of each step valued at the mean of the pool price before and
 after it. 24 h stats compare the price now with the price at or before 24 h
 ago (or the first recorded, for a younger pool).
+
+On Cloudflare the site reaches the worker through the `HISTORY_SERVICE`
+service binding (`wrangler.jsonc`): a Pages function cannot `fetch()` a worker
+routed on its own zone (error 1042). Without the binding (local development)
+it uses `QRDX_HISTORY_URL`. Failures are logged once per isolate.
+
+When a pair has no trades, no recorded history and no public price, its chart
+shows the pool's current price as one labelled point rather than nothing.
 
 Served by the worker at `trade.qrdx.org/api/history/v1/{network}/`:
 `candles?market=pool:<id>&interval=<sec>&limit=`, `stats?markets=pool:<a>,…`,

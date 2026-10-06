@@ -364,6 +364,7 @@ export async function spotTrades(net: Net, baseSeg: string, quoteSeg: string, li
 
 export async function spotCandles(net: Net, baseSeg: string, quoteSeg: string, interval: Interval, limit: number): Promise<CandleSeries> {
   const r = await resolvePair(net, baseSeg, quoteSeg)
+  let pool: { price: string; inverted: boolean } | null = null
   if (r.base.address && r.quote.address) {
     const { pair, token0 } = canonicalPair(r.base.address, r.quote.address)
     const inverted = isInverted(r.base.address, token0)
@@ -383,6 +384,7 @@ export async function spotCandles(net: Net, baseSeg: string, quoteSeg: string, i
     // The pool's recorded prices (relay/ cron), from the deepest pool of the pair.
     const pools = await allPools(net).catch(() => [] as NodePool[])
     const ref = referencePool(poolsForPair(pools, r.base.address, r.quote.address))
+    pool = ref ? { price: ref.price, inverted } : null
     if (ref) {
       const rows = await poolCandles(net, ref.pool_id, INTERVALS[interval], limit).catch(() => [])
       if (rows.length) {
@@ -399,18 +401,49 @@ export async function spotCandles(net: Net, baseSeg: string, quoteSeg: string, i
       }
     }
   }
-  return referenceSeries(r.id, r.baseAsset, r.quoteAsset, interval, limit)
+  const index = await referenceSeries(r.id, r.baseAsset, r.quoteAsset, interval, limit)
+  if (index.kind !== 'none' || !pool) return index
+  // No trades, no recorded history yet and no public price: the pool's price now,
+  // the exchange rate a swap would get. One real point, labelled as such.
+  const last = orientPrice(pool.price, pool.inverted)
+  if (!last || dec(last) <= 0n) return index
+  const seconds = INTERVALS[interval]
+  const t = Math.floor(nowSec() / seconds) * seconds
+  return {
+    market: r.id,
+    interval,
+    kind: 'market',
+    exact: true,
+    label: `${r.base.symbol}/${r.quote.symbol} · current pool price`,
+    candles: [{ t, o: last, h: last, l: last, c: last, v: '0' }],
+    source: 'node',
+    asOf: nowSec(),
+  }
 }
 
 // ─── Perps ─────────────────────────────────────────────────────────────────────
 
-const optNum = (s: string | null) => (s === null || s === undefined ? null : Math.floor(Number(s)))
+const optNum = (s: string | null) => (s === null || s === undefined || Number(s) === 0 ? null : Math.floor(Number(s)))
+/** The node reports a price that was never set as "0". */
+const optPrice = (s: string | null) => (s === null || s === undefined || dec(s) <= 0n ? null : s)
+
+/**
+ * What perps settle in on this network (qrdx-node QRDX_PERP_COLLATERAL_TOKEN): a token
+ * address, "QRDX" for native QRDX, or "" when the nodes configure none and refuse deposits.
+ * A network-wide setting, read from any account (the zero account here).
+ */
+export function perpCollateral(net: Net): Promise<string | null> {
+  return cached(net.key('perp-collateral'), 60_000, async () =>
+    (await net.node.perpAccount('0xPQ' + '0'.repeat(64))).collateral_token ?? ''
+  ).catch(() => null)
+}
 
 async function perpSummary(net: Net, m: NodePerpMarket, idx: TokenIndex): Promise<PerpMarket> {
   const asset = verifiedBySlug(m.base)
-  const [ticker, fills] = await Promise.all([
+  const [ticker, fills, collateral] = await Promise.all([
     asset ? indexTicker(asset).catch(() => null) : null,
     cached(net.key(`perp-trades:${m.market_id}:500`), 3_000, () => net.node.perpTrades(m.market_id, 500)).catch(() => []),
+    perpCollateral(net),
   ])
   const s = stats24h(fills.map((f) => ({ time: Math.floor(f.block_time), price: f.price, size: f.amount })))
   return {
@@ -420,10 +453,10 @@ async function perpSummary(net: Net, m: NodePerpMarket, idx: TokenIndex): Promis
     base: m.base,
     quote: m.quote,
     baseAsset: asset ? apiAsset(verifiedRef(asset, idx)) : null,
-    markPrice: m.mark_price,
-    oraclePrice: m.oracle_price,
+    markPrice: optPrice(m.mark_price),
+    oraclePrice: optPrice(m.oracle_price),
     oracleTime: optNum(m.oracle_time),
-    lastTradePrice: m.last_trade_price,
+    lastTradePrice: optPrice(m.last_trade_price),
     openInterest: m.open_interest,
     bestBid: m.best_bid,
     bestAsk: m.best_ask,
@@ -436,6 +469,7 @@ async function perpSummary(net: Net, m: NodePerpMarket, idx: TokenIndex): Promis
     volume24h: s.volume24h,
     indexPrice: ticker?.price ?? null,
     indexSource: ticker?.source ?? null,
+    collateralToken: collateral,
     source: 'node',
     asOf: nowSec(),
   }

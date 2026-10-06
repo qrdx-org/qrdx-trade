@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
-import { Plus } from 'lucide-react'
+import { AlertTriangle, Plus } from 'lucide-react'
 import { AccountPanel } from '@/components/trade/AccountPanel'
 import { MarketSelector } from '@/components/trade/MarketSelector'
 import { PairError } from '@/components/trade/MarketStatus'
@@ -32,7 +32,7 @@ function useNow(ms = 1000) {
 }
 
 export function PerpTradeView({ base, quote }: { base: string; quote: string }) {
-  const { apiBase, slot } = useNet()
+  const { apiBase, slot, network } = useNet()
   const api = `${apiBase}/perps/${base}/${quote}`
   const market = useApi<PerpMarket>(api, 4_000)
   const book = useApi<OrderBook>(market.data ? `${api}/orderbook?depth=40` : null, 2_000)
@@ -108,6 +108,19 @@ export function PerpTradeView({ base, quote }: { base: string; quote: string }) 
         }
       />
 
+      {m.collateralToken === '' && (
+        <Notice>
+          Perps on {network.name} cannot take deposits yet: its nodes have no collateral asset configured (the node setting{' '}
+          <code className="font-mono">QRDX_PERP_COLLATERAL_TOKEN</code>). Every order needs collateral, so this market cannot trade until it is set.
+        </Notice>
+      )}
+      {!m.oraclePrice && (
+        <Notice>
+          No oracle price yet: validators have not voted a {m.base} price, so the market refuses new positions. It opens once the committee
+          prices it.
+        </Notice>
+      )}
+
       <div className="flex border-b bg-card text-sm lg:hidden">
         {(['chart', 'book', 'trades'] as const).map((t) => (
           <button
@@ -160,6 +173,15 @@ export function PerpTradeView({ base, quote }: { base: string; quote: string }) 
           />
         </Panel>
       </div>
+    </div>
+  )
+}
+
+function Notice({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="flex items-start gap-2 border-b border-warn/30 bg-warn/10 px-3 py-2 text-xs lg:rounded-lg lg:border">
+      <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-warn" />
+      <span>{children}</span>
     </div>
   )
 }

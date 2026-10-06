@@ -2,6 +2,10 @@
   "name": "qrdx-trade",
   "pages_build_output_dir": ".vercel/output/static",
   "compatibility_date": "2024-12-01",
-  "compatibility_flags": ["nodejs_compat"]
+  "compatibility_flags": ["nodejs_compat"],
+  // The market history service lives in the relay worker (relay/wrangler.jsonc). A Pages
+  // function cannot fetch() a worker routed on its own zone (Cloudflare error 1042), so it
+  // reaches it through this binding; lib/server/history.ts falls back to QRDX_HISTORY_URL.
+  "services": [{ "binding": "HISTORY_SERVICE", "service": "qrdx-relay" }]
 }
 

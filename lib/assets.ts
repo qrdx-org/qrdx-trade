@@ -74,6 +74,10 @@ export const VERIFIED_ASSETS: VerifiedAsset[] = [
     usdStable: true,
     quoteRank: 100,
     color: '#2775ca',
+    addresses: {
+      // "USDC" on test.qrdx.org (18 decimals; the node's token, not bridged USDC).
+      testnet: '0x4227d3846511a16656b521361c10faf6358f0708',
+    },
   },
   {
     slug: 'usdt',

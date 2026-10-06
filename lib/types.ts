@@ -107,6 +107,8 @@ export interface PerpMarket {
   volume24h: string | null
   indexPrice: string | null
   indexSource: DataSource | null
+  /** What perps settle in here: a token address, "QRDX" (native), "" (none configured: deposits refused), or null (unknown). */
+  collateralToken: string | null
   source: DataSource
   asOf: number
 }
