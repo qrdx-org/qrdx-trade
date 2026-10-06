@@ -586,3 +586,25 @@ A token with no pool path to an anchor has no USD price; the API returns
 `null`/404 rather than a guess. QRDX itself is priced this way until it has an
 index price, which needs a QRDX pool against an anchored asset (BTC, ETH,
 USDC, …) on that network.
+
+## 13. Creating perpetual markets (testnet)
+
+`/perps/new` creates a perp market with `CREATE_MARKET` (`base_token`,
+`max_leverage`). The node lets anyone create one; the site offers it on the
+test network only (on mainnet the page offers to switch), and links to it from
+the perps header, the market search and `/perps` when no market exists yet.
+
+- **Quote.** Validators vote prices only for markets quoted in the node's
+  `PERP_QUOTE` (USD), so the form never sets `quote_token`; the market is
+  `{BASE}-USD-PERP`.
+- **Will it trade?** A market trades once the validator committee votes its
+  oracle price, which validators running the `exchanges` feed take from public
+  USD spot prices of the base (`qrdx-node validator/price_feed.py`; a "qBTC"
+  base is priced as BTC). `GET /api/{v}/perps/check?base=SOL` asks the same
+  public endpoints (Coinbase, Kraken) and reports whether the market exists, so
+  the form can warn before anything is signed. It previews the validators'
+  input; it is not the oracle.
+- **Leverage.** `max_leverage` 1 to 20 (default 20). Initial margin is
+  1 ÷ leverage and maintenance half of that, both set by the node.
+- **After signing** the page follows the receipt, then the market's first
+  oracle price, and links to the new market.

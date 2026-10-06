@@ -30,18 +30,19 @@ export function DefaultPairRedirect({ base }: { base: string }) {
 /** /perps → the perp market with the most open interest on the active network, else the markets list. */
 export function FirstPerpRedirect() {
   const router = useRouter()
-  const { apiBase } = useNet()
+  const { apiBase, slot } = useNet()
   useEffect(() => {
     const ctrl = new AbortController()
     apiGet<{ perps: PerpMarket[] }>(`${apiBase}/perps`, ctrl.signal)
       .then(({ data }) => {
         const first = [...data.perps].sort((a, b) => Number(b.openInterest ?? 0) - Number(a.openInterest ?? 0))[0]
-        router.replace(first ? first.path : '/trade')
+        // No markets yet: on testnet, offer to create one.
+        router.replace(first ? first.path : slot === 'test' ? '/perps/new' : '/trade')
       })
       .catch((e) => {
         if ((e as Error).name !== 'AbortError') router.replace('/trade')
       })
     return () => ctrl.abort()
-  }, [apiBase, router])
+  }, [apiBase, router, slot])
   return <p className="p-10 text-center text-sm text-muted-foreground">Opening perps…</p>
 }

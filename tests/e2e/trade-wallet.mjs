@@ -3,7 +3,8 @@
  * node harness (qrdx-node's real exchange engine). Checks connect, network
  * switch, decoded approvals, two orders in one block window, an inverted-pair
  * order, cancel, a market swap, a perps deposit + long, a coin launch with a
- * first buy on its curve, and a token created alone whose market starts later.
+ * first buy on its curve, a token created alone whose market starts later, and
+ * a new perp market created on testnet.
  *
  * Prerequisites (mono-repo layout: ../qrdx-wallet, ../qrdx-node):
  *   1. (cd ../qrdx-wallet && pnpm install && pnpm extension:build)
@@ -380,6 +381,28 @@ for (let i = 0; i < 10 && !later?.market; i++) {
 }
 check('market started later for the existing token', !!later?.market, later?.market && `${later.market.price} ${later.market.quote.symbol}`)
 await page.screenshot({ path: `${SHOTS}/launch-later.png` })
+
+// ── create a perp market (testnet) ─────────────────────────────────────────
+console.log('Create a perp market')
+await page.goto(`${SITE}/perps/new`, { waitUntil: 'networkidle' })
+await page.getByLabel('Underlying asset symbol').fill('SOL')
+check('the form checks validators can price it', await page.getByText(/Validators can price SOL/).waitFor({ timeout: 30_000 }).then(() => true, () => false))
+ap = nextApproval()
+await page.getByRole('button', { name: /^Create SOL-USD market/ }).click()
+approval = await ap
+check(
+  'create-market approval is decoded',
+  await approval.getByText(/^Create the SOL-USD perpetual market, up to 10× leverage$/).first().waitFor({ timeout: 15_000 }).then(() => true, () => false)
+)
+await approval.getByRole('button', { name: /^Confirm$/ }).click().catch(closedOk)
+let sol
+for (let i = 0; i < 20 && !sol; i++) {
+  await page.waitForTimeout(3000)
+  sol = (await api('/api/v1/perps')).perps.find((m) => m.id === 'SOL-USD-PERP')
+}
+check('market exists after the block', !!sol, sol && `${sol.id} · max ${sol.maxLeverage}×`)
+check('the form follows it to created', await page.getByRole('link', { name: /^Open SOL-USD-PERP/ }).waitFor({ timeout: 30_000 }).then(() => true, () => false))
+await page.screenshot({ path: `${SHOTS}/perp-created.png` })
 
 // ── transactions tab ────────────────────────────────────────────────────────
 await page.goto(`${SITE}/perps/btc/usd`, { waitUntil: 'networkidle' })

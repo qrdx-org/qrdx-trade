@@ -1,6 +1,8 @@
 'use client'
 
+import Link from 'next/link'
 import { useEffect, useState } from 'react'
+import { Plus } from 'lucide-react'
 import { AccountPanel } from '@/components/trade/AccountPanel'
 import { MarketSelector } from '@/components/trade/MarketSelector'
 import { PairError } from '@/components/trade/MarketStatus'
@@ -30,7 +32,7 @@ function useNow(ms = 1000) {
 }
 
 export function PerpTradeView({ base, quote }: { base: string; quote: string }) {
-  const { apiBase } = useNet()
+  const { apiBase, slot } = useNet()
   const api = `${apiBase}/perps/${base}/${quote}`
   const market = useApi<PerpMarket>(api, 4_000)
   const book = useApi<OrderBook>(market.data ? `${api}/orderbook?depth=40` : null, 2_000)
@@ -94,6 +96,16 @@ export function PerpTradeView({ base, quote }: { base: string; quote: string }) 
         priceClass={tone(m.change24h)}
         priceSub="mark price"
         stats={stats}
+        right={
+          slot === 'test' ? (
+            <Link
+              href="/perps/new"
+              className="flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:border-foreground/30 hover:text-foreground"
+            >
+              <Plus className="h-3.5 w-3.5" /> New market
+            </Link>
+          ) : null
+        }
       />
 
       <div className="flex border-b bg-card text-sm lg:hidden">

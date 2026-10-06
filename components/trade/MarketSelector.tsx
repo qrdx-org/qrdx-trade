@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { ChevronDown, Search, Star } from 'lucide-react'
+import { ChevronDown, Plus, Search, Star } from 'lucide-react'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { PairBadge, TokenBadge } from '@/components/trade/TokenBadge'
 import { isTokenAddress } from '@/lib/assets'
@@ -71,7 +71,7 @@ const TABS: { id: Tab; label: string }[] = [
 ]
 
 export function MarketList({ onPick, dense = true, autoFocus }: { onPick?: () => void; dense?: boolean; autoFocus?: boolean }) {
-  const { apiBase } = useNet()
+  const { apiBase, slot } = useNet()
   const router = useRouter()
   const { data, error } = useApi<MarketsResponse>(`${apiBase}/markets`, 10_000)
   const fav = useFavorites()
@@ -172,6 +172,13 @@ export function MarketList({ onPick, dense = true, autoFocus }: { onPick?: () =>
           </button>
         ))}
       </div>
+      {tab === 'perps' && slot === 'test' && (
+        <button onClick={() => go('/perps/new')} className="flex items-center gap-2 border-b px-4 py-2.5 text-left text-sm hover:bg-accent">
+          <Plus className="h-4 w-4 text-muted-foreground" />
+          Create a perpetual market
+          <span className="ml-auto rounded-sm bg-warn/15 px-1.5 text-[10px] font-semibold uppercase tracking-wide text-warn">Testnet</span>
+        </button>
+      )}
       {isTokenAddress(q.trim()) && tab !== 'perps' && (
         <button onClick={() => go(`/trade/${q.trim().toLowerCase()}`)} className="border-b px-4 py-2.5 text-left text-sm hover:bg-accent">
           Open token <span className="font-mono text-xs">{q.trim()}</span>

@@ -38,7 +38,7 @@ export function TradeGate({ children, action = 'trade' }: { children: React.Reac
               <>
                 <h3 className="mt-3 text-sm font-semibold">Connect a wallet to {action}</h3>
                 <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                  Orders are signed by your QRDX Wallet with a post-quantum key. Nothing leaves it without your approval.
+                  Everything here is signed by your QRDX Wallet with a post-quantum key. Nothing leaves it without your approval.
                 </p>
                 <Button className="mt-4 w-full" onClick={() => setDialog(true)}>
                   <Wallet className="mr-2 h-4 w-4" /> Connect wallet

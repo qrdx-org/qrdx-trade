@@ -209,6 +209,21 @@ there is no tape; charts and 24 h stats then come from pool history.
 
 `{ "perps": [ <perp market>, … ], "nodeOk": true, … }`
 
+### `GET /api/v1/perps/check?base=SOL`
+
+Before creating a market (ARCHITECTURE.md §13): whether it exists, and whether
+validators can price its base from public USD spot prices.
+
+```json
+{ "base": "SOL", "quote": "USD", "marketId": "SOL-USD-PERP", "exists": false,
+  "path": "/perps/sol/usd", "nodeOk": true,
+  "oracle": { "underlying": "SOL", "price": "120.0425",
+              "sources": [ { "source": "coinbase", "price": "120.045" },
+                           { "source": "kraken", "price": "120.04" } ] } }
+```
+
+`oracle.price` is null when no public exchange lists the base against USD.
+
 ### `GET /api/v1/perps/{base}/{quote}`
 
 `/perps/btc/usd` is the node market whose base is `BTC` and quote `USD`
