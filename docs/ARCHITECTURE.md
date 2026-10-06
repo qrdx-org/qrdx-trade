@@ -44,7 +44,9 @@ replace it:
 | Spot order book | `exchange_getOrderBook(pair, depth)` | Canonical pair is the address-sorted `token0:token1`; prices are token1 per token0. The API re-orients to the URL's base/quote (inverting prices and swapping sides when needed). |
 | Spot pools | `exchange_getPools`, `exchange_getPool` | Price, liquidity, ticks, positions, TWAP. |
 | Swap quote | `exchange_quoteSwap` | The exact fill the next block gives if nothing trades first. |
-| Spot trades / candles | trade API indexer over `/get_blocks` + `exchange_getTransactionReceipt` | `SWAP` receipts carry exact `amount_in`, `amount_out`, `price`. See §7 for the gap. |
+| Spot trades / candles | trade API indexer over `/get_blocks` + `exchange_getTransactionReceipt` | `SWAP` receipts carry exact `amount_in`, `amount_out`, `price`. Only on nodes without the block-read cost limit (local by default); see §7. |
+| Pool history: candles, 24 h change and volume | market history recorder (§12): `exchange_getPools` sampled every minute | Used when there is no trade tape, which is the case on the public nodes. |
+| USD price of any token | index price of a verified anchor, routed through pools (§12) | `source: "route"`, with the route and pools it went through. |
 | Perp markets, book, trades | `perp_getMarkets`, `perp_getOrderBook`, `perp_getTrades`, `perp_getEvents` | Oracle, mark, funding, OI come from the node. |
 | Accounts | `perp_getAccount`, `exchange_getOpenOrders`, `exchange_getPositions`, `exchange_getTokenBalance` | |
 | Index price (USD) | Coinbase Exchange → Kraken → CoinGecko | First healthy source wins; the response names it. Binance is not used: it returns HTTP 451 from US edge locations. |
@@ -111,24 +113,41 @@ show the index price and "no on-chain market yet" instead of a book. Perps use
 
 ## 3. Trading page layout
 
-Modelled on Hyperliquid: one dense screen, no page scroll on desktop.
+Modelled on Hyperliquid: one dense screen, no page scroll on desktop. Panels
+are cards on a darker canvas.
 
 ```
-┌ nav: Trade · Perps · Swap · Pools · Portfolio ················ network · wallet ┐
-├ market bar: [QRDX/BTC ▾]  last  24h Δ  24h vol  index  (perps: mark · oracle · funding · OI) ┤
-├──────────────────────────────────────┬───────────────────┬────────────────────────┤
-│ chart (lightweight-charts)           │ order book │ trades│ order form             │
-│  candles: market history, or the     │ asks (red)          │  Buy | Sell           │
-│  reference index when the market has │ spread · mid        │  Limit | Market       │
-│  none (labelled)                     │ bids (green)        │  price, size, %       │
-│                                      │ click a level →     │  (perps: leverage,    │
-│                                      │ fills the price     │   reduce-only, TIF)   │
-├──────────────────────────────────────┴───────────────────┤  fee · est. fill ·    │
-│ Balances · Open orders · Positions · Trade history · Pending                     │
-└───────────────────────────────────────────────────────────────────────────────────┘
+┌ nav: Q Trade · Perps · Swap · Pools · Launch · Portfolio   [Search ⌘K] network · theme · wallet ┐
+├ ticker: starred, then most-traded markets · NEW community coins · perps · USD index (labelled) ┤
+├ header: ☆ [QRDX/BTC ▾]  price (flashes on change) ≈ $  │ 24h Δ · vol · USD · index · bid/ask · fees ┤
+├──────────────────────────────────────┬──────────────────────┬─────────────────────┤
+│ chart: 1m…1d · candles | line · OHLC │ Order book | Trades  │ order form          │
+│  legend · pair watermark             │  both / bids / asks  │  Buy | Sell         │
+│  market history (trades or recorded  │  rows fit the panel  │  Limit | Market     │
+│  pool prices), else the labelled     │  mid ↑↓ · spread     │  bid/mid/ask, %     │
+│  reference index                     │  click a level →     │  your balances      │
+│                                      │  fills the price     │  (frosted behind a  │
+├──────────────────────────────────────┴──────────────────────┤   wallet gate when  │
+│ Balances · Open orders · Transactions · Info (tokens, pools) │   not connected)    │
+├──────────────────────────────────────────────────────────────┴─────────────────────┤
+│ status: ● Operational · ms · network · chain · #height · seen Xs ago   API · Docs · Explorer │
+└──────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-Mobile collapses to tabs: Chart · Book · Trades, with the order form in a sheet.
+- **Wallet gate** (`TradeGate`): without a wallet, or on the wrong network, the
+  order form stays visible but blurred and inert under a card that connects or
+  switches. The launch form uses the same gate.
+- **Favorites** (`lib/hooks/useFavorites.ts`) are per browser; they lead the
+  ticker and have their own tab in the market search.
+- **Status bar** reads `/api/{v}/status` (`/get_status`, which the node does not
+  cost-limit) every 5 s.
+- **Themes:** dark is QRDX navy with QRDX blue (#3b82f6) as the only accent;
+  light is strictly black on white. Green/red mark buys/sells, amber warns.
+  Tokens live in `app/globals.css`; verified assets show their logo
+  (`public/tokens`), anything else an initials disc with a dashed warning ring.
+
+Phones get one panel at a time (Chart · Order book · Trades), then the form
+and the account panel below.
 
 Behaviour that follows from the chain:
 
@@ -334,6 +353,8 @@ limits, and what the node would need to lift them:
 | Streams (`/ws`) are opt-in per node (`QRDX_ENABLE_STREAMING`). | The site polls (book 2 s, account 5 s). | Enable streaming on public nodes; the client already has the channel names. |
 | Spot books exist only for pairs that have a pool (`CREATE_POOL` creates both). | A pair with no pool has no book. | — (by design) |
 | No spot trade history endpoint at all. | The indexer keeps trades in isolate memory, re-reads the last ~600 blocks on a cold start, and resets when the chain gets shorter than what it read; it does not detect a same-height reorg. | Same as the first row; until then, phase 4 below. |
+| `/get_blocks` is cost-limited per IP (`offset/100 + limit/50` per call, 1000 per hour), so reading recent blocks at a real height costs more than the budget. | The trade tape is off on the public nodes (`QRDX_{SLOT}_INDEX_BLOCKS`); charts, 24 h change and volume come from the history recorder (§12) instead, and the trades panel says no tape is available. | Exempt recent-block reads from the cost, or the trades endpoint in the first row. |
+| Pools keep 64 TWAP observations, and pool `volume` counts only what was paid in per token. | History is recorded by sampling (§12); the side not paid in is valued at the pool price. | Per-swap events (`exchange_getTrades`), or a longer observation buffer. |
 
 ## 8. Phases
 
@@ -344,9 +365,11 @@ limits, and what the node would need to lift them:
 3. **Perps, swap, pools** — done: perps page (leverage, reduce-only, IOC market
    orders, collateral, positions), swap, pools with add / remove liquidity,
    portfolio.
-4. **Indexer and streams** — next: durable spot trade storage (Cloudflare D1
-   or a Durable Object) with block-hash reorg detection; WebSocket streams
-   where nodes enable them, replacing polling.
+4. **Indexer and streams** — in part: the market history recorder (§12)
+   gives every pool durable candles, 24 h change and volume. Next: a durable
+   trade tape with block-hash reorg detection once the node serves trades or
+   cheap block reads; WebSocket streams where nodes enable them, replacing
+   polling.
 5. **Phone wallet** — done: QRDX Connect, so the web wallet and iPhone PWA
    can trade by QR code (CONNECT.md).
 6. **The older pages** (analytics, stake, partner, wallets) still show sample
@@ -492,3 +515,74 @@ NEXT_PUBLIC_QRDX_TEST_NETWORK=local pnpm dev   # the local node serves as testne
 The harness differs from a node in what it leaves out: no consensus, balances in
 memory, oracle prices set by the harness. Run against a real testnet node
 before trusting anything about those.
+
+To try the history recorder locally, run the worker against the harness and
+point the site at it; `POST …/sample` records immediately instead of waiting
+for the cron. `QRDX_TEST_INDEX_BLOCKS=0` turns the trade tape off, as on the
+public nodes.
+
+```bash
+npx wrangler dev --config relay/wrangler.jsonc --port 8787 --ip 127.0.0.1 \
+  --var 'NETWORKS:{"local":"http://127.0.0.1:3007/rpc"}'
+curl -X POST http://127.0.0.1:8787/api/history/v1/local/sample
+NEXT_PUBLIC_QRDX_TEST_NETWORK=local QRDX_TEST_INDEX_BLOCKS=0 \
+  QRDX_HISTORY_URL=http://127.0.0.1:8787/api/history pnpm dev
+```
+
+## 12. Market history and USD prices
+
+### Why
+
+The public nodes serve no trade history: spot fills are not journaled, and
+`/get_blocks` is cost-limited per IP, so the indexer cannot read recent blocks
+at a real chain height (§7). Unverified coins have no outside market either,
+so before this a launched coin's chart and 24 h change were blank.
+
+### The recorder
+
+The `relay/` worker (the same one that runs QRDX Connect) has a cron that
+runs every minute. It calls `exchange_getPools` on each network in its `NETWORKS`
+variable and writes one row per pool to a SQLite Durable Object per network
+(`MarketHistory`, `relay/src/history-do.ts`): `(pool, minute, price, v0, v1)`,
+where `v0`/`v1` are the pool's cumulative amounts paid in. A row is stored only
+when something changed, plus an hourly heartbeat, and kept 90 days.
+
+A pool's state changes only at a block, and blocks are ~180 s apart, so this
+records each block's closing pool price exactly. What it cannot see is the
+price path inside one block, or blocks closer together than a minute (the
+last one in a minute wins).
+
+`relay/src/history.ts` (pure, unit-tested) turns rows into candles: OHLC from
+the stored prices, the previous close carried into quiet buckets so the line is
+continuous. Volume counts both directions: what was paid in of each token, plus
+the other side of each step valued at the mean of the pool price before and
+after it. 24 h stats compare the price now with the price at or before 24 h
+ago (or the first recorded, for a younger pool).
+
+Served by the worker at `trade.qrdx.org/api/history/v1/{network}/`:
+`candles?market=pool:<id>&interval=<sec>&limit=`, `stats?markets=pool:<a>,…`,
+and `POST sample`. `lib/server/history.ts` reads it (`QRDX_HISTORY_URL`).
+
+Where it is used: a spot market with no trade tape takes its 24 h change and
+volume from its reference pool's history, and its chart from the pool's
+candles (`source: "history"`, labelled "· pool price"). With a tape, the tape
+wins.
+
+### USD prices through pools
+
+`lib/server/usd.ts` prices every token in USD. Anchors are verified assets with
+a USD index price (BTC, ETH, USDC, …). Every other token is reached from the
+anchors by breadth-first search over unpaused pools with liquidity: the fewest
+hops win, then stablecoin anchors, then deeper pools. A memecoin trading only
+against QRDX is priced as `MEME → QRDX → BTC`: MEME's QRDX price × QRDX's BTC
+price × Coinbase BTC-USD.
+
+The routed 24 h change is the product of each hop's 24 h ratio (from history)
+and the anchor's own, so it is exactly the change of the routed price. It is
+`null` when any hop lacks history or the anchor's change is unknown (Kraken
+gives no rolling 24 h open).
+
+A token with no pool path to an anchor has no USD price; the API returns
+`null`/404 rather than a guess. QRDX itself is priced this way until it has an
+index price, which needs a QRDX pool against an anchored asset (BTC, ETH,
+USDC, …) on that network.

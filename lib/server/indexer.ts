@@ -132,13 +132,22 @@ export function syncIndexer(net: Net): Promise<void> {
   return cached(net.key('indexer-sync'), 5_000, () => syncOnce(net))
 }
 
+const withTimeout = <T,>(p: Promise<T>, ms: number) =>
+  Promise.race([p, new Promise<T>((_, reject) => setTimeout(() => reject(new Error('indexer timed out')), ms))])
+
+/** Is the trade tape available on this network? */
+export const tapeAvailable = (net: Net) => net.cfg.indexBlocks
+
 /** Trades for a canonical pair, oldest first. */
 export async function pairTrades(
   net: Net,
   pair: string
 ): Promise<{ trades: IndexedTrade[]; coverage: { fromBlock: number | null; toBlock: number | null } }> {
   const state = stateFor(net)
-  await syncIndexer(net).catch((err) => console.warn(`[indexer] ${(err as Error).message}`))
+  // Public nodes cost-limit block reads per IP (a few calls an hour at real heights), and
+  // waiting on them is what used to hang requests; the tape is opt-in per network.
+  if (!net.cfg.indexBlocks) return { trades: [], coverage: { fromBlock: null, toBlock: null } }
+  await withTimeout(syncIndexer(net), 8_000).catch((err) => console.warn(`[indexer] ${(err as Error).message}`))
   return {
     trades: state.byPair.get(pair.toLowerCase()) ?? [],
     coverage: { fromBlock: state.fromBlock, toBlock: state.toBlock },

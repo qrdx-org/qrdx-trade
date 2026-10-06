@@ -354,6 +354,8 @@ export function createNodeClient(cfg: ServerConfig) {
     perpAccount: (address: string) => rpc<NodePerpAccount>(cfg, 'perp_getAccount', [address]),
     perpTrades: (id: string, limit: number) => rpc<NodeFillEvent[]>(cfg, 'perp_getTrades', [id, limit]),
 
+    /** Height and last block hash (`/get_status`, which the node does not cost-limit). */
+    status: () => rest<{ height: number; last_block_hash?: string }>(cfg, '/get_status'),
     /** Chain height (last block). REST, because the eth_* namespace is optional on a node. */
     height: async (): Promise<number> => (await rest<{ height: number }>(cfg, '/get_status')).height,
     /** Blocks from `start` (inclusive), ascending, with their exchange sections. */

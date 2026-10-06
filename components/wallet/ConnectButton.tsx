@@ -48,7 +48,7 @@ export function ConnectButton({ className }: { className?: string }) {
   return (
     <div className="relative">
       <Button size="sm" variant="outline" onClick={() => setOpen((o) => !o)} className={className}>
-        <span className={cn('mr-2 h-2 w-2 rounded-full', !w.rightNetwork ? 'bg-amber-500' : reachable ? 'bg-bid' : 'bg-muted-foreground')} />
+        <span className={cn('mr-2 h-2 w-2 rounded-full', !w.rightNetwork ? 'bg-warn' : reachable ? 'bg-bid' : 'bg-muted-foreground')} />
         {remote && <Smartphone className="mr-1 h-3.5 w-3.5" />}
         <span className="font-mono text-xs">{shortAddress(pq, 5)}</span>
       </Button>
@@ -74,7 +74,7 @@ export function ConnectButton({ className }: { className?: string }) {
             {remote ? (
               <>
                 QRDX Wallet on your phone ·{' '}
-                <span className={reachable ? 'text-bid' : 'text-amber-500'}>{reachable ? 'online' : 'app closed'}</span>
+                <span className={reachable ? 'text-bid' : 'text-warn'}>{reachable ? 'online' : 'app closed'}</span>
               </>
             ) : (
               'QRDX Wallet extension'

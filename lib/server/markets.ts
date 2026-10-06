@@ -21,7 +21,9 @@ import type {
 } from '../types'
 import { cached } from './cache'
 import { ApiError, nowSec } from './http'
-import { IndexedTrade, pairTrades } from './indexer'
+import { IndexedTrade, pairTrades, tapeAvailable } from './indexer'
+import { HistoryCandle, HistoryStats, poolCandles, poolStats } from './history'
+import { usdQuote } from './usd'
 import type { Net } from './net'
 import type { NodePerpMarket, NodePool } from './node'
 import { IndexTicker, Interval, INTERVALS, impliedPrice, indexTicker, pairIndexCandles } from './reference'
@@ -175,11 +177,30 @@ export async function resolvePair(net: Net, baseSeg: string, quoteSeg: string): 
   return { base: b.ref, quote: q.ref, baseAsset: b.asset, quoteAsset: q.asset, id: `${b.ref.segment}/${q.ref.segment}` }
 }
 
+/** A pool's history candle in the market's orientation (base/quote, base volume). */
+export function orientHistoryCandle(c: HistoryCandle, inverted: boolean): Candle {
+  if (!inverted) return { t: c.t, o: c.o, h: c.h, l: c.l, c: c.c, v: c.v0 }
+  const inv = (x: string) => S.inv(x) ?? '0'
+  return { t: c.t, o: inv(c.o), h: inv(c.l), l: inv(c.h), c: inv(c.c), v: c.v1 }
+}
+
+/** 24 h change (percent) and quote volume from a pool's recorded history. */
+export function historyMarketStats(h: HistoryStats | undefined, inverted: boolean) {
+  if (!h || !h.last || !h.open24h) return { change24h: null, volume24h: null }
+  const last = orientPrice(h.last, inverted)
+  const open = orientPrice(h.open24h, inverted)
+  return {
+    change24h: last && open ? pctChange(open, last) : null,
+    volume24h: inverted ? h.v0_24h : h.v1_24h,
+  }
+}
+
 async function spotMarketFor(
   net: Net,
   r: ResolvedPair,
   pools: NodePool[] | null,
-  withBook: boolean
+  withBook: boolean,
+  history?: Record<string, HistoryStats>
 ): Promise<SpotMarket> {
   const [baseIdx, quoteIdx] = await Promise.all([
     r.baseAsset ? indexTicker(r.baseAsset).catch(() => null) : null,
@@ -204,6 +225,7 @@ async function spotMarketFor(
     volume24h: null,
     pools: [],
     indexPrice: impliedPrice(baseIdx, quoteIdx),
+    baseUsd: await usdQuote(net, r.base.address, r.base.slug).catch(() => null),
     baseIndex: toIndex(baseIdx),
     quoteIndex: toIndex(quoteIdx),
     source: 'node',
@@ -221,9 +243,11 @@ async function spotMarketFor(
   if (!pairPools.length) return { ...market, status: 'no_market' }
   market.status = 'live'
 
-  const [book, history] = await Promise.all([
+  const ref = referencePool(pairPools)
+  const [book, tape, hist] = await Promise.all([
     withBook ? cached(net.key(`book:${pair}:1`), 1_500, () => net.node.spotBook(pair, 1)).catch(() => null) : null,
     pairTrades(net, pair).catch(() => null),
+    history ?? (ref ? poolStats(net, [ref.pool_id]) : Promise.resolve({} as Record<string, HistoryStats>)),
   ])
   if (book) {
     const oriented = orientBook(book.bids, book.asks, inverted)
@@ -231,15 +255,17 @@ async function spotMarketFor(
     market.bestAsk = oriented.asks[0]?.[0] ?? null
     Object.assign(market, (({ mid, spread }) => ({ mid, spread }))(bookStats(market.bestBid, market.bestAsk)))
   }
-  const trades = (history?.trades ?? []).map((t) => orientTrade(t, inverted))
-  const s = stats24h(trades)
-  market.change24h = s.change24h
-  market.volume24h = s.volume24h
-  if (s.last) {
+  const trades = (tape?.trades ?? []).map((t) => orientTrade(t, inverted))
+  if (trades.length) {
+    // The swap tape, where the node allows reading it.
+    const s = stats24h(trades)
+    market.change24h = s.change24h
+    market.volume24h = s.volume24h
     market.last = s.last
     market.lastSource = 'trade'
   } else {
-    const ref = referencePool(pairPools)
+    // Otherwise the recorded pool history (relay/ cron), and the pool's price now.
+    Object.assign(market, historyMarketStats(ref ? hist[ref.pool_id] : undefined, inverted))
     market.last = ref ? orientPrice(ref.price, inverted) : null
     market.lastSource = market.last ? 'pool' : null
   }
@@ -263,6 +289,9 @@ export async function spotMarkets(net: Net): Promise<{ markets: SpotMarket[]; no
     const { pair, token0, token1 } = canonicalPair(p.token0.toLowerCase(), p.token1.toLowerCase())
     pairs.set(pair, [token0, token1])
   }
+  // One history read for every pair's reference pool.
+  const refs = [...pairs.keys()].map((pair) => referencePool(pools.filter((p) => canonicalPair(p.token0.toLowerCase(), p.token1.toLowerCase()).pair === pair)))
+  const history = await poolStats(net, refs.filter(Boolean).map((p) => p!.pool_id))
   const markets = await Promise.all(
     [...pairs.values()].map(async ([a, b]) => {
       const [base, quote] = preferredOrder(refForAddress(a, idx), refForAddress(b, idx))
@@ -276,7 +305,8 @@ export async function spotMarkets(net: Net): Promise<{ markets: SpotMarket[]; no
           id: `${base.segment}/${quote.segment}`,
         },
         pools,
-        true
+        true,
+        history
       )
     })
   )
@@ -326,6 +356,7 @@ export async function spotTrades(net: Net, baseSeg: string, quoteSeg: string, li
     market: r.id,
     trades: trades.slice(-limit).reverse().map((t) => orientTrade(t, inverted)),
     source: 'indexer',
+    available: tapeAvailable(net),
     coverage,
     asOf: nowSec(),
   }
@@ -347,6 +378,24 @@ export async function spotCandles(net: Net, baseSeg: string, quoteSeg: string, i
         candles: buildCandles(trades.map((t) => orientTrade(t, inverted)), INTERVALS[interval], limit),
         source: 'indexer',
         asOf: nowSec(),
+      }
+    }
+    // The pool's recorded prices (relay/ cron), from the deepest pool of the pair.
+    const pools = await allPools(net).catch(() => [] as NodePool[])
+    const ref = referencePool(poolsForPair(pools, r.base.address, r.quote.address))
+    if (ref) {
+      const rows = await poolCandles(net, ref.pool_id, INTERVALS[interval], limit).catch(() => [])
+      if (rows.length) {
+        return {
+          market: r.id,
+          interval,
+          kind: 'market',
+          exact: true,
+          label: `${r.base.symbol}/${r.quote.symbol} · pool price`,
+          candles: rows.map((c) => orientHistoryCandle(c, inverted)),
+          source: 'history',
+          asOf: nowSec(),
+        }
       }
     }
   }

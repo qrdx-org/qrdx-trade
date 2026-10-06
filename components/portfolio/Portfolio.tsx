@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { PieChart } from 'lucide-react'
 import { AccountPanel, BalancesTable, SpotOrdersTable } from '@/components/trade/AccountPanel'
 import { PerpOrdersTable, PositionsTable } from '@/components/trade/PerpTables'
 import { collateralLabel } from '@/components/trade/PerpOrderForm'
@@ -20,19 +21,39 @@ export function Portfolio() {
 
   if (!w.trader) {
     return (
-      <main className="mx-auto max-w-md px-3 py-20 text-center">
-        <h1 className="text-xl font-semibold">Portfolio</h1>
-        <p className="mt-2 text-sm text-muted-foreground">Connect the QRDX Wallet to see balances, orders and positions.</p>
-        <div className="mt-6 flex justify-center">
-          <ConnectButton />
+      <main className="hero-glow">
+        <div className="mx-auto max-w-3xl px-4 py-20 text-center">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border bg-card shadow-sm">
+            <PieChart className="h-6 w-6 text-primary" />
+          </div>
+          <h1 className="mt-5 text-3xl font-semibold tracking-tight">Your portfolio</h1>
+          <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-muted-foreground">
+            Connect the QRDX Wallet to see everything your account holds on this network, read straight from the chain.
+          </p>
+          <div className="mt-6 flex justify-center">
+            <ConnectButton className="h-10 px-6" />
+          </div>
+          <div className="mt-12 grid gap-3 text-left sm:grid-cols-4">
+            {[
+              ['Balances', 'Every token the account holds, and what is locked in orders.'],
+              ['Orders', 'Open limit orders on any spot book, cancellable here.'],
+              ['Liquidity', 'Your pool positions and the fees they have earned.'],
+              ['Perps', 'Positions, margin and unrealized PnL.'],
+            ].map(([t, d]) => (
+              <div key={t} className="rounded-xl border bg-card p-4">
+                <div className="text-sm font-semibold">{t}</div>
+                <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{d}</p>
+              </div>
+            ))}
+          </div>
         </div>
       </main>
     )
   }
 
   return (
-    <main className="mx-auto max-w-6xl px-3 py-6">
-      <h1 className="text-2xl font-semibold">Portfolio</h1>
+    <main className="mx-auto max-w-6xl px-4 py-10">
+      <h1 className="text-3xl font-semibold tracking-tight">Portfolio</h1>
       <p className="mt-1 break-all font-mono text-xs text-muted-foreground">{w.trader}</p>
       {account.error && !a && <p className="mt-4 text-sm text-ask">{account.error.message}</p>}
 
@@ -43,7 +64,7 @@ export function Portfolio() {
         <Box k="Unrealized PnL" v={upnl === null ? '—' : fixed(upnl.toFixed(2), 2)} className={tone(upnl === null ? null : String(upnl))} />
       </div>
 
-      <section className="mt-6 h-[420px] rounded-lg border">
+      <section className="mt-6 h-[460px] overflow-hidden rounded-xl border bg-card">
         <AccountPanel
           tabs={[
             { id: 'balances', label: 'Balances', render: () => <BalancesTable account={a} /> },
@@ -85,7 +106,7 @@ function LpTable({ account }: { account: AccountResponse | null }) {
             <td className="px-3 py-1.5 text-bid">
               {fmtSize(p.fees0)} / {fmtSize(p.fees1)}
             </td>
-            <td className={p.in_range ? 'px-3 py-1.5 text-bid' : 'px-3 py-1.5 text-amber-500'}>{p.in_range ? 'In range' : 'Out of range'}</td>
+            <td className={p.in_range ? 'px-3 py-1.5 text-bid' : 'px-3 py-1.5 text-warn'}>{p.in_range ? 'In range' : 'Out of range'}</td>
           </tr>
         ))}
       </tbody>
@@ -95,9 +116,9 @@ function LpTable({ account }: { account: AccountResponse | null }) {
 
 function Box({ k, v, className }: { k: string; v: string; className?: string }) {
   return (
-    <div className="rounded-lg border p-3">
-      <div className="text-[11px] text-muted-foreground">{k}</div>
-      <div className={`mt-0.5 text-lg tabular ${className ?? ''}`}>{v}</div>
+    <div className="rounded-xl border bg-card px-4 py-3.5">
+      <div className="text-xs text-muted-foreground">{k}</div>
+      <div className={`num mt-1 text-xl font-semibold tracking-tight ${className ?? ''}`}>{v}</div>
     </div>
   )
 }

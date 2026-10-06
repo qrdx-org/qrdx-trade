@@ -123,7 +123,7 @@ export function CreatePool() {
           ))}
         </div>
         {[A, B].filter((x) => x && !x.verified).map((x) => (
-          <p key={x!.segment} className="mt-1 text-[11px] text-amber-500">
+          <p key={x!.segment} className="mt-1 text-[11px] text-warn">
             {x!.symbol} is unverified: {x!.address}
           </p>
         ))}

@@ -5,7 +5,7 @@
 
 import type { LevelWithTotal } from './pairs'
 
-export type DataSource = 'node' | 'indexer' | 'coinbase' | 'kraken' | 'coingecko'
+export type DataSource = 'node' | 'indexer' | 'history' | 'route' | 'coinbase' | 'kraken' | 'coingecko'
 
 export interface ApiAsset {
   segment: string
@@ -23,13 +23,18 @@ export interface ApiAsset {
 }
 
 export interface IndexPrice {
+  /** USD. */
   price: string
   change24h: string | null
   high24h: string | null
   low24h: string | null
   volume24h: string | null
+  /** coinbase / kraken / coingecko for index prices; route when priced through pools. */
   source: DataSource
   asOf: number
+  /** source "route": segments from the asset to the priced anchor, and the pools used. */
+  route?: string[]
+  pools?: string[]
 }
 
 export interface PoolSummary {
@@ -71,6 +76,8 @@ export interface SpotMarket {
   pools: PoolSummary[]
   /** base/quote implied by USD index prices. */
   indexPrice: string | null
+  /** The base in USD: its index price, or routed through pools (docs/API.md "Prices"). */
+  baseUsd: IndexPrice | null
   baseIndex: IndexPrice | null
   quoteIndex: IndexPrice | null
   source: DataSource
@@ -136,6 +143,8 @@ export interface TradesResponse {
   market: string
   trades: Trade[]
   source: DataSource
+  /** False when this network's node does not let the tape be built (spot only). */
+  available?: boolean
   coverage?: { fromBlock: number | null; toBlock: number | null }
   asOf: number
 }
@@ -300,6 +309,8 @@ export interface Launch {
     price: string | null
     marketCap: string | null
     marketCapUsd: string | null
+    /** The coin in USD, routed through pools (null when no route reaches a USD price). */
+    priceUsd: string | null
     liquidity: string
     change24h: string | null
     volume24h: string | null

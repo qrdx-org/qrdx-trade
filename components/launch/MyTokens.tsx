@@ -117,7 +117,7 @@ function TokenCard({ t, balance }: { t: TokenRow & { canMint: boolean }; balance
         <span className="text-muted-foreground">You hold</span>
         <span className="text-right">{balance === null ? '—' : compact(balance)}</span>
         <span className="text-muted-foreground">Minting</span>
-        <span className={cn('text-right', t.mintAuthority ? 'text-amber-500' : 'text-bid')}>
+        <span className={cn('text-right', t.mintAuthority ? 'text-warn' : 'text-bid')}>
           {t.mintAuthority ? (t.canMint ? 'you' : shortAddress(t.mintAuthority, 4)) : 'fixed supply'}
         </span>
       </div>
@@ -162,7 +162,7 @@ function TokenCard({ t, balance }: { t: TokenRow & { canMint: boolean }; balance
         </div>
       )}
       {open === 'renounce' && (
-        <div className="mt-2 space-y-1.5 rounded border border-amber-500/40 bg-amber-500/10 p-2">
+        <div className="mt-2 space-y-1.5 rounded border border-warn/40 bg-warn/10 p-2">
           <p>
             No one will ever be able to mint {t.symbol} again: its supply becomes fixed at {compact(t.totalSupply)}. This cannot be
             undone.

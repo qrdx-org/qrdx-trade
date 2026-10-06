@@ -1,14 +1,11 @@
-# Token Images
+# Token images
 
-This directory contains local images for native tokens.
+Logos for the verified assets in `lib/assets.ts`, one SVG per slug
+(`btc.svg`, `eth.svg`, …). `TokenBadge` shows them for verified tokens;
+everything else gets a coloured disc with its initials.
 
-For native tokens, place PNG images here named after the token symbol in lowercase:
-- `qrdx.png` - QRDX native token image
+- `qrdx.svg` is drawn from the QRDX mark.
+- The others are from [cryptocurrency-icons](https://github.com/spothq/cryptocurrency-icons)
+  0.18.1 (CC0 1.0).
 
-Contract tokens will automatically fetch their images from:
-`https://explorer.qrdx.org/contracts/{contract_address}/image`
-
-## Image Requirements
-- Format: PNG
-- Recommended size: 256x256 pixels
-- Transparent background recommended
+To add a verified asset, add its `<slug>.svg` here.

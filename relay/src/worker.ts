@@ -1,7 +1,13 @@
 /**
- * QRDX Connect relay — a Cloudflare Worker with one Durable Object per session
- * topic (docs/CONNECT.md). Routed under trade.qrdx.org/api/relay/*; any path
- * prefix before /v1/ is accepted, so it also works on its own hostname.
+ * The trade site's stateful services, as one Cloudflare Worker:
+ *
+ *  - QRDX Connect relay (docs/CONNECT.md): one Durable Object per session topic,
+ *    under trade.qrdx.org/api/relay/*.
+ *  - Market history (ARCHITECTURE.md §12): a cron samples every pool of each
+ *    network once a minute into a SQLite Durable Object per network, served
+ *    under trade.qrdx.org/api/history/*.
+ *
+ * Any path prefix before /v1/ is accepted, so it also works on its own hostname.
  *
  * The object keeps each side's mailbox in durable storage and delivers over
  * hibernatable WebSockets, or HTTP long-polling where sockets are not
@@ -11,9 +17,15 @@
 
 import { DurableObject } from 'cloudflare:workers'
 import { RelayError, RelayHub, SESSION_TTL_MS, Side, isSide, isTopic, other } from './hub'
+import { MarketHistory, historyFetch, sampleAll } from './history-do'
+
+export { MarketHistory }
 
 export interface Env {
   RELAY: DurableObjectNamespace<RelaySession>
+  HISTORY: DurableObjectNamespace<MarketHistory>
+  /** JSON {"mainnet": "<rpc url>", "testnet": "<rpc url>"}: the networks to record. */
+  NETWORKS: string
 }
 
 const CORS = {
@@ -23,7 +35,7 @@ const CORS = {
   'Access-Control-Max-Age': '86400',
 }
 
-const json = (body: unknown, status = 200) =>
+export const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store', ...CORS } })
 
 const ROUTE = /\/v1\/([0-9a-f]{64})(?:\/(ws|messages))?\/?$/
@@ -32,10 +44,16 @@ export default {
   async fetch(req: Request, env: Env): Promise<Response> {
     if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS })
     const url = new URL(req.url)
+    if (url.pathname.includes('/history/')) return historyFetch(req, env)
     if (/\/v1\/?$/.test(url.pathname)) return json({ name: 'QRDX Connect relay', version: 1 })
     const m = ROUTE.exec(url.pathname)
     if (!m || !isTopic(m[1])) return json({ error: 'not found' }, 404)
     return env.RELAY.get(env.RELAY.idFromName(m[1])).fetch(req)
+  },
+
+  /** Every minute: record each network's pools. */
+  async scheduled(_event: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
+    ctx.waitUntil(sampleAll(env))
   },
 }
 

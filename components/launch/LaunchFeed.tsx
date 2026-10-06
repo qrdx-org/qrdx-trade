@@ -85,6 +85,7 @@ function LaunchCard({ l, height }: { l: Launch; height: number | null }) {
           <span className="text-muted-foreground">Price</span>
           <span className="text-right">
             {fmtPrice(m.price)} {m.quote.symbol}
+            {m.priceUsd && <span className="block text-[10px] text-muted-foreground">≈ ${fmtPrice(m.priceUsd)}</span>}
           </span>
           <span className="text-muted-foreground">24h</span>
           <span className={cn('text-right', tone(m.change24h))}>
@@ -126,7 +127,7 @@ function blocksAgo(blocks: number) {
 
 function Flag({ icon, text, good }: { icon: React.ReactNode; text: string; good?: boolean }) {
   return (
-    <span className={cn('inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5', good ? 'border-bid/40 text-bid' : 'border-amber-500/40 text-amber-500')}>
+    <span className={cn('inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5', good ? 'border-bid/40 text-bid' : 'border-warn/40 text-warn')}>
       {icon}
       {text}
     </span>

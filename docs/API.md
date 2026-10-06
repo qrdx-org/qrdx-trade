@@ -143,6 +143,8 @@ A spot market:
 | `status` | `live` (has a pool), `no_market` (both tokens exist, no pool), `unlisted` (a verified asset has no token on this network), `node_unavailable` |
 | `pair` | the node's canonical `token0:token1` |
 | `inverted` | the path's base is the node's `token1`, so the API inverts the node's prices |
+| `change24h`, `volume24h` | from the trade tape, else from the reference pool's recorded history (ARCHITECTURE.md §12); `volume24h` is in the quote |
+| `baseUsd` | the base's USD price (see Prices: an index price, or a route through pools), or `null` |
 | `last` / `lastSource` | the most recent indexed trade (`trade`), else the deepest pool's price (`pool`) |
 | `change24h` | percent, against the last trade at or before 24 h ago; `null` without history |
 | `volume24h` | quote units over the last 24 h of indexed trades |
@@ -178,7 +180,9 @@ orientation.
 
 Spot trades include `SWAP` executions only: the node does not record fill
 prices for order-book matches (ARCHITECTURE.md §7). `coverage` is the block
-range the indexer has read.
+range the indexer has read. `available: false` means this deployment does not
+index blocks for this network (the public nodes cost-limit block reads), so
+there is no tape; charts and 24 h stats then come from pool history.
 
 ### `GET /api/v1/markets/{base}/{quote}/candles?interval=1h&limit=300`
 
@@ -193,7 +197,7 @@ range the indexer has read.
 
 | `kind` | candles from |
 |---|---|
-| `market` | this market's indexed trades (`v` in base units) |
+| `market` | this market's indexed trades (`source: "indexer"`, `v` in base units), or, with no trade tape, its reference pool's recorded price (`source: "history"`, `label` ends "· pool price"; one point per block, `v` in base units, both directions) |
 | `index` | public exchanges, when the market has no trades and both assets have USD prices. `label` names the series and provider. With a USD-stable quote the series is the base's USD candles; otherwise it is a base/quote ratio whose `h`/`l` are bounds (`exact: false`) |
 | `none` | nothing available |
 
@@ -349,7 +353,7 @@ first, with the market each trades on.
     "fixedSupply": true, "freezable": false,
     "market": { "quote": <asset>, "path": "/trade/0x7c1e…/qrdx", "poolId": "…",
                 "feeRate": "0.01", "price": "0.00000598", "marketCap": "5983.09",
-                "marketCapUsd": null, "liquidity": "1843.2",
+                "priceUsd": "0.00000508", "marketCapUsd": "5085.63", "liquidity": "1843.2",
                 "change24h": "19.66", "volume24h": "1000" } } ],
   "height": 830, "source": "node", "asOf": … }
 ```
@@ -358,25 +362,61 @@ first, with the market each trades on.
   `freezable`: it has a freeze authority that can lock a holder's balance.
 - `market` is the token's deepest unpaused pool against a verified asset, or
   `null`. `price` is quote per token (the last indexed trade, else the pool
-  price); `marketCap` is `price × totalSupply` in the quote; `marketCapUsd` is
-  set when the quote has a USD index price.
+  price); `marketCap` is `price × totalSupply` in the quote. `priceUsd` is the
+  token's USD price (see Prices; usually a route through its pool), and
+  `marketCapUsd` is `priceUsd × totalSupply`; both `null` with no route.
+  `change24h` and `volume24h` come from the pool's recorded history.
+
+---
+
+## Status
+
+### `GET /api/v1/status`
+
+Node health, for the site's status bar: `{ network, networkName, chainId,
+blockTimeSec, nodeOk, height, lastBlockHash, latencyMs, asOf }`. Read from the
+node's `/get_status` at most every 3 s; `nodeOk: false` with null fields when
+the node does not answer.
 
 ---
 
 ## Prices
 
-### `GET /api/v1/prices[?assets=btc,eth,sol]`
+### `GET /api/v1/prices[?assets=btc,qrdx,0x7c1e…]`
 
-USD index tickers for verified assets (all of them by default).
+USD prices for any assets: verified slugs or token addresses, up to 100 (all
+verified assets by default).
 
 ```json
-{ "prices": { "btc": { "price": "85382.3", "change24h": "0.76", "high24h": "85568.99",
-                       "low24h": "84537.72", "volume24h": "1675.17",
-                       "source": "coinbase", "asOf": 1790898905 },
-              "qrdx": null },
+{ "prices": {
+    "btc": { "price": "85382.3", "change24h": "0.76", "high24h": "85568.99",
+             "low24h": "84537.72", "volume24h": "1675.17",
+             "source": "coinbase", "asOf": 1790898905, "route": [], "pools": [] },
+    "0x7c1e…": { "price": "0.00000508", "change24h": "12.5", "high24h": null,
+                 "low24h": null, "volume24h": null, "source": "route",
+                 "asOf": 1790898905, "route": ["0x7c1e…", "qrdx", "btc"],
+                 "pools": ["a1…", "b2…"] },
+    "sol": null },
   "asOf": 1790898905 }
 ```
 
-Sources are tried in order: Coinbase Exchange, Kraken, CoinGecko. `change24h`
-is a rolling 24 h change (`null` from Kraken, whose open is the UTC day's). An
-asset no source lists is `null` (QRDX itself, until it is listed).
+- Verified assets with an outside market use their index ticker. Sources are
+  tried in order: Coinbase Exchange, Kraken, CoinGecko. `change24h` is a
+  rolling 24 h change (`null` from Kraken, whose open is the UTC day's).
+- Everything else, including launched coins and QRDX itself, is priced through
+  the network's pools (`source: "route"`): `route` lists the assets from this
+  one to the anchor whose index price was used, and `pools` the pools along the
+  way. `change24h` is the change of the routed price from pool history, `null`
+  until every hop has history.
+- An asset with neither is `null`: no public price and no pool path to one.
+
+### `GET /api/v1/prices/{asset}`
+
+One asset's USD price, the same object plus `asset`:
+
+```json
+{ "asset": <asset>, "price": "0.00000508", "change24h": "12.5", "source": "route",
+  "route": ["0x7c1e…", "qrdx", "btc"], "pools": ["a1…", "b2…"], … }
+```
+
+404 when the asset is unknown on this network, or has no USD price.

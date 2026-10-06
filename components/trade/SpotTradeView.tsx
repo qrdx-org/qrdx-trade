@@ -4,7 +4,12 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { AccountPanel, BalancesTable, SpotOrdersTable } from '@/components/trade/AccountPanel'
 import { MarketSelector } from '@/components/trade/MarketSelector'
-import { PairError, Stat, UnverifiedBanner } from '@/components/trade/MarketStatus'
+import { PairError, UnverifiedBanner } from '@/components/trade/MarketStatus'
+import { HeaderStat, MarketHeader } from '@/components/trade/MarketHeader'
+import { Panel, PanelTabs } from '@/components/trade/Panel'
+import { MarketInfo } from '@/components/trade/TokenInfo'
+import { TradeGate } from '@/components/trade/TradeGate'
+import { BadgeCheck, ExternalLink } from 'lucide-react'
 import { OrderBookPanel } from '@/components/trade/OrderBookPanel'
 import { PriceChart } from '@/components/trade/PriceChart'
 import { SpotOrderForm } from '@/components/trade/SpotOrderForm'
@@ -27,7 +32,7 @@ export function useAccount(): ReturnType<typeof useApi<AccountResponse>> {
 }
 
 export function SpotTradeView({ base, quote }: { base: string; quote: string }) {
-  const { apiBase } = useNet()
+  const { apiBase, network } = useNet()
   const router = useRouter()
   const api = `${apiBase}/markets/${base}/${quote}`
   const market = useApi<SpotMarket>(api, 5_000)
@@ -45,10 +50,12 @@ export function SpotTradeView({ base, quote }: { base: string; quote: string }) 
 
   const m = market.data
   if (market.error && !m) return <PairError error={market.error} kind="spot" />
-  if (!m) return <div className="p-10 text-center text-sm text-muted-foreground">Loading market…</div>
+  if (!m) return <TerminalSkeleton />
 
   const ref = Number(m.last ?? m.indexPrice ?? 1)
   const pairLabel = `${m.base.symbol}/${m.quote.symbol}`
+  const usdQuote = m.quote.symbol.startsWith('USD')
+  const route = m.baseUsd?.route ?? []
 
   const bookPanel = (
     <OrderBookPanel book={book.data} error={book.error} baseSymbol={m.base.symbol} quoteSymbol={m.quote.symbol} onPick={setPicked} />
@@ -59,40 +66,90 @@ export function SpotTradeView({ base, quote }: { base: string; quote: string }) 
       error={trades.error}
       baseSymbol={m.base.symbol}
       quoteSymbol={m.quote.symbol}
-      note="Swaps only: the node does not yet publish order-book fill prices."
+      note={
+        trades.data?.available === false
+          ? "This network's node does not publish individual trades. The chart and 24h change come from pool prices recorded every minute."
+          : 'Swaps only: the node does not yet publish order-book fill prices.'
+      }
     />
   )
 
+  const stats: HeaderStat[] = [
+    { label: '24h change', value: percent(m.change24h), className: tone(m.change24h) },
+    { label: `24h volume (${m.quote.symbol})`, value: compact(m.volume24h) },
+  ]
+  if (m.baseUsd && !usdQuote) {
+    stats.push({
+      label: `${m.base.symbol} in USD`,
+      value: (
+        <>
+          ${fmtPrice(m.baseUsd.price, Number(m.baseUsd.price))}
+          {m.baseUsd.change24h !== null && <span className={cn('ml-1.5 text-[11px]', tone(m.baseUsd.change24h))}>{percent(m.baseUsd.change24h)}</span>}
+        </>
+      ),
+      title:
+        m.baseUsd.source === 'route'
+          ? `Priced through pools: ${route.join(' → ')}, then ${route[route.length - 1]} in USD`
+          : `${m.baseUsd.source} index price`,
+    })
+  }
+  stats.push(
+    {
+      label: 'Index price',
+      value: m.indexPrice ? fmtPrice(m.indexPrice, ref) : '—',
+      title: m.indexPrice ? `${m.baseIndex?.source ?? ''} reference, not a QRDX price` : 'No public index price for this pair',
+    },
+    { label: 'Bid / Ask', value: m.bestBid || m.bestAsk ? `${fmtPrice(m.bestBid, ref)} / ${fmtPrice(m.bestAsk, ref)}` : '—' },
+    { label: 'Pool fees', value: m.pools.length ? m.pools.map((p) => `${+(Number(p.feeRate) * 100).toFixed(2)}%`).join(' · ') : '—' }
+  )
+
   return (
-    <div className="flex min-h-[calc(100vh-3rem)] flex-col lg:h-[calc(100vh-3rem)]">
+    <div className="flex min-h-full flex-col gap-1 bg-canvas lg:h-full lg:p-1">
       <UnverifiedBanner assets={[m.base, m.quote]} />
-      {/* market bar */}
-      <div className="flex flex-wrap items-center gap-x-6 gap-y-2 border-b px-3 py-2">
-        <MarketSelector label={pairLabel}>
-          <PairBadge base={m.base} quote={m.quote} size="sm" />
-        </MarketSelector>
-        <div className="flex flex-col leading-tight">
-          <span className={cn('text-lg font-semibold tabular', tone(m.change24h))}>{fmtPrice(m.last, ref)}</span>
-          <span className="text-[10px] text-muted-foreground">{m.lastSource === 'pool' ? 'pool price' : 'last trade'}</span>
-        </div>
-        <Stat label="24h change" value={percent(m.change24h)} className={tone(m.change24h)} />
-        <Stat label={`24h volume (${m.quote.symbol})`} value={compact(m.volume24h)} />
-        <Stat
-          label="Index price"
-          value={
-            m.indexPrice ? (
-              <span title={`${m.baseIndex?.source ?? ''} reference, not a QRDX price`}>{fmtPrice(m.indexPrice, ref)}</span>
-            ) : (
-              '—'
-            )
-          }
-        />
-        <Stat label="Best bid / ask" value={`${fmtPrice(m.bestBid, ref)} / ${fmtPrice(m.bestAsk, ref)}`} />
-        <Stat label="Pools" value={m.pools.length ? m.pools.map((p) => `${Number(p.feeRate) * 100}%`).join(' · ') : '—'} />
-      </div>
+      <MarketHeader
+        path={m.path}
+        selector={
+          <MarketSelector
+            label={pairLabel}
+            sub={
+              <span className="flex items-center gap-1">
+                {m.base.name}
+                {m.base.verified ? <BadgeCheck className="h-3 w-3 text-primary" /> : <span className="text-warn">· unverified</span>}
+              </span>
+            }
+          >
+            <PairBadge base={m.base} quote={m.quote} size="lg" />
+          </MarketSelector>
+        }
+        price={fmtPrice(m.last, ref)}
+        priceRaw={m.last}
+        priceClass={tone(m.change24h)}
+        priceSub={
+          m.baseUsd && !usdQuote
+            ? `≈ $${fmtPrice(m.baseUsd.price, Number(m.baseUsd.price))}`
+            : m.lastSource === 'pool'
+              ? 'pool price'
+              : m.lastSource === 'trade'
+                ? 'last trade'
+                : 'no price yet'
+        }
+        stats={stats}
+        right={
+          m.base.address && !m.base.verified ? (
+            <a
+              href={`${network.explorerUrl}/address/${m.base.address}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1 rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
+            >
+              Contract <ExternalLink className="h-3 w-3" />
+            </a>
+          ) : null
+        }
+      />
 
       {m.status !== 'live' && (
-        <div className="border-b bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+        <div className="border-b bg-card px-3 py-2 text-xs text-muted-foreground lg:rounded-lg lg:border">
           {m.status === 'node_unavailable'
             ? 'The QRDX node is unreachable. Showing reference prices only.'
             : m.status === 'unlisted'
@@ -101,36 +158,47 @@ export function SpotTradeView({ base, quote }: { base: string; quote: string }) 
         </div>
       )}
 
-      {/* mobile tabs */}
-      <div className="flex gap-1 border-b px-2 text-sm lg:hidden">
+      {/* phones: one panel at a time */}
+      <div className="flex border-b bg-card text-sm lg:hidden">
         {(['chart', 'book', 'trades'] as const).map((t) => (
-          <button key={t} onClick={() => setMobileTab(t)} className={cn('px-3 py-1.5 capitalize', mobileTab === t ? 'border-b-2 border-primary' : 'text-muted-foreground')}>
-            {t}
+          <button
+            key={t}
+            onClick={() => setMobileTab(t)}
+            className={cn('relative flex-1 py-2.5 font-medium capitalize', mobileTab === t ? 'text-foreground' : 'text-muted-foreground')}
+          >
+            {t === 'book' ? 'Order book' : t}
+            {mobileTab === t && <span className="absolute inset-x-6 bottom-0 h-0.5 rounded-full bg-primary" />}
           </button>
         ))}
       </div>
 
-      <div className="grid flex-1 min-h-0 grid-cols-1 lg:grid-cols-[minmax(0,1fr)_300px_300px] lg:grid-rows-[minmax(0,1fr)_260px]">
-        <div className={cn('min-h-[360px] border-b lg:border-r lg:min-h-0', mobileTab !== 'chart' && 'hidden lg:block')}>
-          <PriceChart basePath={api} />
-        </div>
-        <div className={cn('flex min-h-[420px] flex-col border-b lg:min-h-0 lg:border-r', mobileTab === 'chart' && 'hidden lg:flex')}>
-          <div className="hidden gap-1 border-b px-2 text-sm lg:flex">
-            {(['book', 'trades'] as const).map((t) => (
-              <button key={t} onClick={() => setSideTab(t)} className={cn('px-2 py-1.5', sideTab === t ? 'border-b-2 border-primary' : 'text-muted-foreground')}>
-                {t === 'book' ? 'Order book' : 'Trades'}
-              </button>
-            ))}
-          </div>
+      <div className="grid min-h-0 flex-1 grid-cols-1 gap-1 lg:grid-cols-[minmax(0,1fr)_300px_320px] lg:grid-rows-[minmax(0,1fr)_minmax(220px,32%)] xl:grid-cols-[minmax(0,1fr)_320px_340px]">
+        <Panel className={cn('min-h-[420px] lg:min-h-0', mobileTab !== 'chart' && 'hidden lg:flex')}>
+          <PriceChart basePath={api} watermark={pairLabel} />
+        </Panel>
+        <Panel className={cn('min-h-[460px] lg:min-h-0', mobileTab === 'chart' && 'hidden lg:flex')}>
+          <PanelTabs
+            className="hidden lg:flex"
+            tabs={[
+              { id: 'book', label: 'Order book' },
+              { id: 'trades', label: 'Trades' },
+            ]}
+            value={sideTab}
+            onChange={(v) => setSideTab(v as 'book' | 'trades')}
+          />
           <div className="min-h-0 flex-1">
             <div className="hidden h-full lg:block">{sideTab === 'book' ? bookPanel : tradesPanel}</div>
             <div className="h-full lg:hidden">{mobileTab === 'book' ? bookPanel : tradesPanel}</div>
           </div>
-        </div>
-        <div className="border-b lg:row-span-2 lg:border-b-0 lg:overflow-y-auto">
-          <SpotOrderForm market={m} book={book.data} account={account.data} pickedPrice={picked} />
-        </div>
-        <div className="min-h-[220px] lg:col-span-2 lg:border-r lg:border-t lg:min-h-0">
+        </Panel>
+        <Panel className="lg:row-span-2">
+          <div className="flex min-h-0 flex-1 flex-col lg:overflow-y-auto">
+            <TradeGate>
+              <SpotOrderForm market={m} book={book.data} account={account.data} pickedPrice={picked} />
+            </TradeGate>
+          </div>
+        </Panel>
+        <Panel className="min-h-[260px] lg:col-span-2 lg:min-h-0">
           <AccountPanel
             tabs={[
               { id: 'balances', label: 'Balances', render: () => <BalancesTable account={account.data} /> },
@@ -140,8 +208,23 @@ export function SpotTradeView({ base, quote }: { base: string; quote: string }) 
                 render: () => <SpotOrdersTable account={account.data} />,
               },
             ]}
+            extra={[{ id: 'info', label: 'Info', public: true, render: () => <MarketInfo base={m.base} quote={m.quote} pools={m.pools} /> }]}
           />
-        </div>
+        </Panel>
+      </div>
+    </div>
+  )
+}
+
+/** The terminal's shape while the market loads, so the page does not jump. */
+export function TerminalSkeleton() {
+  return (
+    <div className="flex h-full flex-col gap-1 bg-canvas p-1">
+      <div className="h-[58px] animate-pulse rounded-lg border bg-card" />
+      <div className="grid flex-1 gap-1 lg:grid-cols-[minmax(0,1fr)_300px_320px]">
+        <div className="animate-pulse rounded-lg border bg-card" />
+        <div className="hidden animate-pulse rounded-lg border bg-card lg:block" />
+        <div className="hidden animate-pulse rounded-lg border bg-card lg:block" />
       </div>
     </div>
   )

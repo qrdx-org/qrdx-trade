@@ -31,59 +31,75 @@
   /* Trading: bids / buys and asks / sells. */
   --color-bid: hsl(var(--bid));
   --color-ask: hsl(var(--ask));
+  --color-warn: hsl(var(--warn));
+  --color-canvas: hsl(var(--canvas));
+  --font-mono: var(--font-jetbrains), ui-monospace, SFMono-Regular, Menlo, monospace;
   --radius-lg: var(--radius);
   --radius-md: calc(var(--radius) - 2px);
   --radius-sm: calc(var(--radius) - 4px);
 }
 
 @layer base {
+  /*
+   * Light: strictly black on white. Greys are neutral (no hue), the accent is
+   * black, and colour appears only where it carries meaning (buy / sell, warnings).
+   */
   :root {
     --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    --foreground: 0 0% 4%;
+    /* the canvas behind the trading terminal's panels */
+    --canvas: 0 0% 96.5%;
     --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    --card-foreground: 0 0% 4%;
     --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
-    --primary: 262 83% 58%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96%;
-    --secondary-foreground: 222.2 84% 4.9%;
-    --muted: 210 40% 96%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 210 40% 96%;
-    --accent-foreground: 222.2 84% 4.9%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 262 83% 58%;
-    --radius: 0.5rem;
-    --bid: 158 64% 36%;
-    --ask: 354 70% 50%;
+    --popover-foreground: 0 0% 4%;
+    --primary: 0 0% 4%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 0 0% 95%;
+    --secondary-foreground: 0 0% 4%;
+    --muted: 0 0% 95.5%;
+    --muted-foreground: 0 0% 40%;
+    --accent: 0 0% 94%;
+    --accent-foreground: 0 0% 4%;
+    --destructive: 354 70% 48%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 0 0% 89%;
+    --input: 0 0% 86%;
+    --ring: 0 0% 4%;
+    --radius: 0.625rem;
+    --bid: 152 62% 33%;
+    --ask: 354 72% 48%;
+    --warn: 32 95% 42%;
   }
 
+  /*
+   * Dark: QRDX navy. Surfaces step up from a near-black navy, and QRDX blue
+   * (the token mark's #3b82f6) is the one accent.
+   */
   .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
-    --primary: 262 83% 58%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 262 83% 58%;
-    --bid: 160 60% 45%;
-    --ask: 355 78% 60%;
+    --background: 224 71% 4%;
+    --foreground: 214 32% 96%;
+    --canvas: 225 72% 3%;
+    --card: 223 58% 6.5%;
+    --card-foreground: 214 32% 96%;
+    --popover: 223 55% 8%;
+    --popover-foreground: 214 32% 96%;
+    --primary: 217 91% 60%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 222 42% 12%;
+    --secondary-foreground: 214 32% 96%;
+    --muted: 222 42% 11%;
+    --muted-foreground: 217 18% 62%;
+    --accent: 221 45% 13%;
+    --accent-foreground: 214 32% 96%;
+    --destructive: 355 78% 58%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 221 40% 14%;
+    --input: 221 38% 17%;
+    --ring: 217 91% 60%;
+    --bid: 156 66% 46%;
+    --ask: 355 80% 61%;
+    --warn: 38 92% 56%;
   }
 }
 
@@ -91,36 +107,68 @@
   * {
     border-color: hsl(var(--border));
   }
+  html,
   body {
     background-color: hsl(var(--background));
     color: hsl(var(--foreground));
-    font-feature-settings: "rlig" 1, "calt" 1;
+    font-feature-settings: "rlig" 1, "calt" 1, "cv11" 1;
+    -webkit-font-smoothing: antialiased;
+  }
+  ::selection {
+    background: hsl(var(--primary) / 0.25);
   }
 }
 
-/* Custom animations */
-@keyframes float {
-  0%, 100% { transform: translateY(0px); }
-  50% { transform: translateY(-10px); }
+/* The ticker: two copies of the list slide left by one copy's width, forever. */
+@keyframes marquee {
+  from { transform: translate3d(0, 0, 0); }
+  to { transform: translate3d(-50%, 0, 0); }
+}
+.animate-marquee {
+  animation: marquee var(--marquee-duration, 60s) linear infinite;
+}
+.marquee:hover .animate-marquee {
+  animation-play-state: paused;
+}
+.marquee-fade {
+  mask-image: linear-gradient(to right, transparent, black 48px, black calc(100% - 48px), transparent);
 }
 
-@keyframes glow {
-  0%, 100% { box-shadow: 0 0 20px rgba(138, 80, 255, 0.3); }
-  50% { box-shadow: 0 0 40px rgba(138, 80, 255, 0.6); }
+/* A price that just moved: a brief wash of its direction's colour. */
+@keyframes flash-up {
+  from { background-color: hsl(var(--bid) / 0.22); }
+  to { background-color: transparent; }
+}
+@keyframes flash-down {
+  from { background-color: hsl(var(--ask) / 0.22); }
+  to { background-color: transparent; }
+}
+.flash-up { animation: flash-up 0.9s ease-out; }
+.flash-down { animation: flash-down 0.9s ease-out; }
+
+@keyframes pulse-dot {
+  0% { box-shadow: 0 0 0 0 currentColor; }
+  70% { box-shadow: 0 0 0 5px transparent; }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+.pulse-dot { animation: pulse-dot 2s ease-out infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-marquee, .pulse-dot, .flash-up, .flash-down { animation: none; }
 }
 
-@keyframes shimmer {
-  0% { background-position: -1000px 0; }
-  100% { background-position: 1000px 0; }
+/* Frosted overlays (the wallet gate over the order form). */
+.glass {
+  background: hsl(var(--card) / 0.55);
+  backdrop-filter: blur(10px) saturate(140%);
+  -webkit-backdrop-filter: blur(10px) saturate(140%);
 }
 
-.animate-float {
-  animation: float 3s ease-in-out infinite;
+/* Dark mode: a faint QRDX-blue light from the top of a hero section. */
+.hero-glow {
+  background-image: radial-gradient(60% 120% at 50% -20%, hsl(var(--primary) / 0.14), transparent 70%);
 }
-
-.animate-glow {
-  animation: glow 2s ease-in-out infinite;
-}
+:root:not(.dark) .hero-glow { background-image: none; }
 
 /* Smooth scrolling */
 html {
@@ -159,4 +207,9 @@ input[type="number"] {
 /* Numbers in tables and books line up. */
 .tabular {
   font-variant-numeric: tabular-nums;
+}
+/* Prices and sizes: tabular figures, slightly tighter. */
+.num {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
 }

@@ -10,8 +10,8 @@ export function UnverifiedBanner({ assets }: { assets: ApiAsset[] }) {
   const unverified = assets.filter((a) => !a.verified)
   if (!unverified.length) return null
   return (
-    <div className="flex items-start gap-2 border-b border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-xs">
-      <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-500" />
+    <div className="flex items-start gap-2 border-b border-warn/30 bg-warn/10 px-3 py-1.5 text-xs">
+      <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-warn" />
       <span>
         {unverified.map((a) => (
           <span key={a.segment} className="mr-2">

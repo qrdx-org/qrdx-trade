@@ -92,22 +92,25 @@ export function SwapCard() {
   }
 
   return (
-    <div className="mx-auto mt-10 w-full max-w-md px-3">
-      <div className="rounded-xl border bg-card p-4 shadow-sm">
-        <h1 className="mb-3 text-lg font-semibold">Swap</h1>
+    <div className="hero-glow px-3 pb-6 pt-12">
+      <div className="mx-auto mb-6 max-w-md text-center">
+        <h1 className="text-3xl font-semibold tracking-tight">Swap</h1>
+        <p className="mt-2 text-sm text-muted-foreground">Any two tokens on QRDX, routed to the best of the order book and the pools.</p>
+      </div>
+      <div className="mx-auto w-full max-w-md rounded-2xl border bg-card p-2 shadow-2xl shadow-black/5">
         <Side label="You pay" asset={fromAsset} balance={w.trader ? avail : null} onPick={() => setPicking('from')}>
-          <Input value={amount} onChange={(e) => setAmount(e.target.value.trim())} inputMode="decimal" placeholder="0" className="h-10 border-0 text-right text-xl shadow-none focus-visible:ring-0 tabular" />
+          <Input value={amount} onChange={(e) => setAmount(e.target.value.trim())} inputMode="decimal" placeholder="0" className="num h-12 border-0 bg-transparent px-0 text-right text-3xl font-medium shadow-none focus-visible:ring-0 dark:bg-transparent" />
         </Side>
         <div className="relative z-10 -my-2 flex justify-center">
-          <button onClick={() => setPair(to, from)} className="rounded-full border bg-background p-1.5 hover:bg-accent" aria-label="Flip">
+          <button onClick={() => setPair(to, from)} className="rounded-xl border-4 border-card bg-muted p-2 transition-transform hover:rotate-180 hover:bg-accent" aria-label="Flip">
             <ArrowDownUp className="h-4 w-4" />
           </button>
         </div>
         <Side label="You receive (estimate)" asset={toAsset} balance={w.trader ? balance(toAsset) : null} onPick={() => setPicking('to')}>
-          <div className="h-10 px-3 text-right text-xl leading-10 tabular text-muted-foreground">{q.data ? fmtSize(q.data.amountOut) : '0'}</div>
+          <div className={cn('num h-12 text-right text-3xl font-medium leading-[3rem]', q.data ? 'text-foreground' : 'text-muted-foreground')}>{q.data ? fmtSize(q.data.amountOut) : '0'}</div>
         </Side>
 
-        <div className="mt-3 space-y-1 text-xs">
+        <div className="mx-2 mt-3 space-y-1.5 text-xs">
           <Line k="Rate" v={q.data && fromAsset && toAsset ? `1 ${toAsset.symbol} = ${fixed(q.data.executionPrice, 6)} ${fromAsset.symbol}` : '—'} />
           <Line k="Minimum received" v={minOut && toAsset ? `${fmtSize(minOut)} ${toAsset.symbol}` : '—'} />
           <Line k="Price impact" v={q.data?.priceImpact ? percent(String(Number(q.data.priceImpact) * 100), false) : q.data ? 'n/a (order book)' : '—'} />
@@ -116,25 +119,25 @@ export function SwapCard() {
           <div className="flex justify-between">
             <span className="text-muted-foreground">Max slippage</span>
             <span>
-              <input value={slippage} onChange={(e) => setSlippage(e.target.value)} className="w-12 rounded border bg-background px-1 text-right tabular" /> %
+              <input value={slippage} onChange={(e) => setSlippage(e.target.value)} className="num w-12 rounded border bg-background px-1 py-0.5 text-right" /> %
             </span>
           </div>
           {q.data && !S.isZero(q.data.unfilledIn) && (
-            <p className="text-amber-500">Only {fmtSize(q.data.amountIn)} {fromAsset?.symbol} can fill at the moment; the rest is not spent.</p>
+            <p className="text-warn">Only {fmtSize(q.data.amountIn)} {fromAsset?.symbol} can fill at the moment; the rest is not spent.</p>
           )}
         </div>
 
-        <div className="mt-4">
+        <div className="mx-2 mt-4">
           {!w.trader ? (
-            <ConnectButton className="w-full" />
+            <ConnectButton className="h-12 w-full text-base" />
           ) : (
-            <Button className="w-full" disabled={!!problem || busy || !w.rightNetwork} onClick={submit}>
+            <Button className="h-12 w-full text-base font-semibold" disabled={!!problem || busy || !w.rightNetwork} onClick={submit}>
               {busy ? 'Confirm in wallet…' : problem && problem !== 'Getting a quote…' ? problem : 'Swap'}
             </Button>
           )}
         </div>
-        {msg && <p className={cn('mt-2 text-xs', msg.ok ? 'text-bid' : 'text-ask')}>{msg.text}</p>}
-        <p className="mt-3 text-[10px] leading-snug text-muted-foreground">
+        {msg && <p className={cn('mx-2 mt-2 rounded-md px-2.5 py-2 text-xs', msg.ok ? 'bg-bid/10 text-bid' : 'bg-ask/10 text-ask')}>{msg.text}</p>}
+        <p className="mx-2 mb-2 mt-3 text-[10px] leading-snug text-muted-foreground">
           The node routes the swap to whichever of the pair&apos;s pools or order book pays the most, and refuses it if the
           output falls below your minimum. A gas fee of about 0.0001 QRDX is burned either way.
         </p>
@@ -156,20 +159,20 @@ export function SwapCard() {
 
 function Side({ label, asset, balance, onPick, children }: { label: string; asset: ApiAsset | null; balance: string | null; onPick: () => void; children: React.ReactNode }) {
   return (
-    <div className="rounded-lg bg-muted/50 p-3">
+    <div className="rounded-xl bg-muted/60 p-4">
       <div className="flex justify-between text-xs text-muted-foreground">
         <span>{label}</span>
-        {balance !== null && <span className="tabular">Balance {fmtSize(balance)}</span>}
+        {balance !== null && <span className="num">Balance {fmtSize(balance)}</span>}
       </div>
       <div className="mt-1 flex items-center gap-2">
-        <button onClick={onPick} className="flex shrink-0 items-center gap-2 rounded-full border bg-background px-2 py-1 text-sm font-medium hover:bg-accent">
-          <TokenBadge asset={asset} size="sm" />
+        <button onClick={onPick} className="flex shrink-0 items-center gap-2 rounded-full border bg-card py-1 pl-1 pr-2.5 text-sm font-semibold shadow-sm transition-colors hover:bg-accent">
+          <TokenBadge asset={asset} size="md" />
           {asset?.symbol ?? 'Select'}
           <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
         </button>
         <div className="flex-1">{children}</div>
       </div>
-      {asset && !asset.verified && <p className="mt-1 text-[11px] text-amber-500">Unverified token · {asset.address}</p>}
+      {asset && !asset.verified && <p className="mt-1 text-[11px] text-warn">Unverified token · {asset.address}</p>}
     </div>
   )
 }
@@ -192,7 +195,7 @@ export function TokenPicker({ open, assets, onClose, onPick }: { open: boolean; 
               <TokenBadge asset={a} size="md" />
               <span className="min-w-0">
                 <span className="block text-sm font-medium">{a.symbol}</span>
-                <span className={cn('block truncate text-[11px]', a.verified ? 'text-muted-foreground' : 'text-amber-500')}>
+                <span className={cn('block truncate text-[11px]', a.verified ? 'text-muted-foreground' : 'text-warn')}>
                   {a.verified ? a.name : `Unverified · ${a.address}`}
                   {!a.listed && ' · not on this network'}
                 </span>
@@ -210,7 +213,7 @@ function Line({ k, v }: { k: string; v: string }) {
   return (
     <div className="flex justify-between">
       <span className="text-muted-foreground">{k}</span>
-      <span className="tabular">{v}</span>
+      <span className="num">{v}</span>
     </div>
   )
 }

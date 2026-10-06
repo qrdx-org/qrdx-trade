@@ -57,7 +57,7 @@ export const VERIFIED_ASSETS: VerifiedAsset[] = [
     decimals: 18,
     prices: {},
     quoteRank: 60,
-    color: '#8b5cf6',
+    color: '#2563eb',
     addresses: {
       // "Wrapped QRDX" (WQRDX) on test.qrdx.org. A fixed-supply token held by its
       // creator, not yet backed 1:1 by a wrap operation (ARCHITECTURE.md §10).

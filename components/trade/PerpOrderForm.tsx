@@ -144,12 +144,12 @@ export function PerpOrderForm({
   const levChanged = !current || current.leverage !== lev || current.mode !== mode
 
   return (
-    <div className="flex flex-col gap-3 p-3">
+    <div className="flex flex-1 flex-col gap-3.5 p-3">
       <div className="flex items-center gap-2 text-xs">
         <select
           value={mode}
           onChange={(e) => setMode(e.target.value as 'cross' | 'isolated')}
-          className="h-7 rounded border bg-background px-1"
+          className="h-8 rounded-md border bg-background px-2 font-medium"
         >
           <option value="cross">Cross</option>
           <option value="isolated">Isolated</option>
@@ -158,14 +158,14 @@ export function PerpOrderForm({
           value={lev}
           onChange={(e) => setLev(e.target.value.trim())}
           placeholder="default"
-          className="h-7 w-16 rounded border bg-background px-1 text-right tabular"
+          className="num h-8 w-16 rounded-md border bg-background px-2 text-right"
           aria-label="Leverage"
         />
-        <span>× (max {market.maxLeverage ?? '—'})</span>
+        <span className="text-muted-foreground">× · max {market.maxLeverage ?? '—'}×</span>
         <Button
           size="sm"
           variant="outline"
-          className="ml-auto h-7 text-xs"
+          className="ml-auto h-8 text-xs"
           disabled={!w.trader || !levChanged || busy !== null || !isAmount(lev)}
           onClick={setLeverage}
         >
@@ -180,37 +180,38 @@ export function PerpOrderForm({
             : "Not set: the node's default applies"}
       </p>
 
-      <div className="grid grid-cols-2 rounded-md bg-muted p-0.5 text-sm">
+      <div className="grid grid-cols-2 gap-1 rounded-lg bg-muted p-1 text-sm">
         {(['buy', 'sell'] as const).map((s) => (
           <button
             key={s}
             onClick={() => setSide(s)}
-            className={cn('rounded py-1.5 font-medium', side === s ? (s === 'buy' ? 'bg-bid text-white' : 'bg-ask text-white') : 'text-muted-foreground')}
+            className={cn('rounded-md py-1.5 font-semibold transition-all', side === s ? (s === 'buy' ? 'bg-bid text-white shadow-sm shadow-bid/30' : 'bg-ask text-white shadow-sm shadow-ask/30') : 'text-muted-foreground hover:text-foreground')}
           >
             {s === 'buy' ? 'Long' : 'Short'}
           </button>
         ))}
       </div>
-      <div className="flex gap-3 text-sm">
+      <div className="flex items-center gap-4 border-b text-[13px]">
         {(['limit', 'market'] as const).map((k) => (
-          <button key={k} onClick={() => setKind(k)} className={cn('border-b-2 pb-0.5', kind === k ? 'border-primary' : 'border-transparent text-muted-foreground')}>
+          <button key={k} onClick={() => setKind(k)} className={cn('relative pb-2 font-medium transition-colors', kind === k ? 'text-foreground' : 'text-muted-foreground hover:text-foreground')}>
             {k === 'limit' ? 'Limit' : 'Market'}
+            {kind === k && <span className="absolute inset-x-0 -bottom-px h-0.5 rounded-full bg-foreground" />}
           </button>
         ))}
       </div>
 
-      <div className="flex justify-between text-xs text-muted-foreground">
-        <span>Free collateral</span>
-        <span className="tabular">{perp ? `${fixed(perp.withdrawable, 2)} ${unit}` : '—'}</span>
+      <div className="flex justify-between text-xs">
+        <span className="text-muted-foreground">Free collateral</span>
+        <span className="num font-medium">{perp ? `${fixed(perp.withdrawable, 2)} ${unit}` : '—'}</span>
       </div>
 
       {kind === 'limit' ? (
         <label className="block">
-          <span className="mb-1 flex justify-between text-xs text-muted-foreground">
+          <span className="mb-1.5 flex justify-between text-xs text-muted-foreground">
             <span>Price</span>
             <span>{market.quote}</span>
           </span>
-          <Input value={price} onChange={(e) => setPrice(e.target.value.trim())} inputMode="decimal" className="h-9 text-right tabular" />
+          <Input value={price} onChange={(e) => setPrice(e.target.value.trim())} inputMode="decimal" className="num h-10 text-right text-sm font-medium" />
         </label>
       ) : (
         <p className="text-xs text-muted-foreground">
@@ -218,35 +219,35 @@ export function PerpOrderForm({
         </p>
       )}
       <label className="block">
-        <span className="mb-1 flex justify-between text-xs text-muted-foreground">
+        <span className="mb-1.5 flex justify-between text-xs text-muted-foreground">
           <span>Size</span>
           <span>{market.base}</span>
         </span>
-        <Input value={size} onChange={(e) => setSize(e.target.value.trim())} inputMode="decimal" placeholder="0" className="h-9 text-right tabular" />
+        <Input value={size} onChange={(e) => setSize(e.target.value.trim())} inputMode="decimal" placeholder="0.00" className="num h-10 text-right text-sm font-medium" />
       </label>
       <label className="flex items-center gap-2 text-xs">
         <input type="checkbox" checked={reduceOnly} onChange={(e) => setReduceOnly(e.target.checked)} />
         Reduce only
       </label>
 
-      <div className="space-y-1 rounded-md bg-muted/40 p-2 text-xs">
+      <div className="space-y-1.5 rounded-lg border bg-muted/30 p-2.5 text-xs">
         <Line k="Order value" v={notional ? `${fixed(notional, 2)} ${market.quote}` : '—'} />
         <Line k="Margin required" v={margin ? `${fixed(margin, 2)} ${unit}` : '—'} />
         <Line k="Mark / oracle" v={`${fmtPrice(market.markPrice, ref)} / ${fmtPrice(market.oraclePrice, ref)}`} />
       </div>
 
       {!w.trader ? (
-        <ConnectButton className="w-full" />
+        <ConnectButton className="h-11 w-full" />
       ) : (
         <Button
           onClick={placeOrder}
           disabled={!!problem || busy !== null || !w.rightNetwork}
-          className={cn('w-full text-white', side === 'buy' ? 'bg-bid hover:bg-bid/90' : 'bg-ask hover:bg-ask/90')}
+          className={cn('h-11 w-full text-sm font-semibold text-white', side === 'buy' ? 'bg-bid shadow-lg shadow-bid/20 hover:bg-bid/90' : 'bg-ask shadow-lg shadow-ask/20 hover:bg-ask/90')}
         >
           {busy === 'order' ? 'Confirm in wallet…' : problem ?? `${side === 'buy' ? 'Long' : 'Short'} ${market.base}`}
         </Button>
       )}
-      {msg && <p className={cn('text-xs', msg.ok ? 'text-bid' : 'text-ask')}>{msg.text}</p>}
+      {msg && <p className={cn('rounded-md px-2.5 py-2 text-xs', msg.ok ? 'bg-bid/10 text-bid' : 'bg-ask/10 text-ask')}>{msg.text}</p>}
 
       {w.trader && <CollateralBox account={account} unit={unit} />}
     </div>
@@ -274,8 +275,8 @@ function CollateralBox({ account, unit }: { account: AccountResponse | null; uni
     }
   }
   return (
-    <div className="mt-2 space-y-2 border-t pt-3 text-xs">
-      <div className="font-medium">Perps account</div>
+    <div className="mt-auto space-y-2 rounded-lg border p-3 text-xs">
+      <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Perps account</div>
       <Line k="Equity" v={perp ? `${fixed(perp.equity, 2)} ${unit}` : '—'} />
       <Line k="Collateral" v={perp ? `${fixed(perp.collateral, 2)} ${unit}` : '—'} />
       <Line k="Maintenance margin" v={perp ? `${fixed(perp.maintenance_margin, 2)} ${unit}` : '—'} />
@@ -290,7 +291,7 @@ function CollateralBox({ account, unit }: { account: AccountResponse | null; uni
         </Button>
       </div>
       {msg && <p className="text-muted-foreground">{msg}</p>}
-      {perp && !perp.collateral_token && <p className="text-amber-500">This node has no perps collateral token configured.</p>}
+      {perp && !perp.collateral_token && <p className="text-warn">This node has no perps collateral token configured.</p>}
     </div>
   )
 }
@@ -299,7 +300,7 @@ function Line({ k, v }: { k: string; v: string }) {
   return (
     <div className="flex justify-between">
       <span className="text-muted-foreground">{k}</span>
-      <span className="tabular">{v}</span>
+      <span className="num">{v}</span>
     </div>
   )
 }

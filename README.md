@@ -72,8 +72,8 @@ account: `curl -X POST localhost:3007/faucet -d '{"address":"0xPQ…"}'`.
 | `pnpm typecheck` | TypeScript |
 | `node tests/e2e/trade-wallet.mjs` | wallet extension + site + local node, end to end (see the file header) |
 | `node tests/e2e/trade-phone.mjs` | phone wallet + relay + site + local node, end to end (see the file header) |
-| `pnpm relay:dev` / `pnpm relay:deploy` | the QRDX Connect relay on its own (Cloudflare Worker + Durable Object) |
-| `pnpm build:worker` | Pages build (next-on-pages), then deploys the QRDX Connect relay when Cloudflare credentials are present (docs/CONNECT.md) |
+| `pnpm relay:dev` / `pnpm relay:deploy` | the site's Worker on its own: QRDX Connect relay and market history recorder (Cloudflare Worker + Durable Objects + cron) |
+| `pnpm build:worker` | Pages build (next-on-pages), then deploys that Worker when Cloudflare credentials are present (docs/CONNECT.md) |
 | `pnpm deploy` | the above, then `wrangler pages deploy` |
 
 ## Configuration
@@ -86,6 +86,8 @@ account: `curl -X POST localhost:3007/faucet -d '{"address":"0xPQ…"}'`.
 | `QRDX_{MAIN,TEST}_NODE_URL` | node REST base, for block history (default per network) |
 | `QRDX_{MAIN,TEST}_VERIFIED_ISSUERS` | comma-separated creator addresses whose tokens count as the verified assets |
 | `QRDX_{MAIN,TEST}_ASSET_ADDRESSES` | JSON `{"btc": "0x…"}` pinning verified assets to token addresses |
+| `QRDX_{MAIN,TEST}_INDEX_BLOCKS` | `1` to build the spot trade tape from `/get_blocks` (default: only on `local`; public nodes cost-limit block reads) |
+| `QRDX_HISTORY_URL` | market history service, for charts and 24 h stats without a tape (default `https://trade.qrdx.org/api/history`) |
 | `NEXT_PUBLIC_QRDX_RELAY_URL` | QRDX Connect relay (default: this site's `/api/relay`) |
 | `NEXT_PUBLIC_QRDX_WALLET_URL` | where pairing links open the wallet (default `https://wallet.qrdx.org`) |
 

@@ -17,6 +17,9 @@
  *   QRDX_{SLOT}_NODE_URL            node REST base (/get_blocks, /get_status)
  *   QRDX_{SLOT}_VERIFIED_ISSUERS    comma-separated creator addresses whose tokens can be verified
  *   QRDX_{SLOT}_ASSET_ADDRESSES     JSON {"btc": "0x…"} pinning verified assets to token addresses
+ *   QRDX_{SLOT}_INDEX_BLOCKS        1 to build the spot trade tape from /get_blocks (only nodes
+ *                                   without the per-IP query-cost limit; on by default for local)
+ *   QRDX_HISTORY_URL                market history service (relay/, default trade.qrdx.org/api/history)
  *
  * Chain IDs and URLs mirror qrdx-wallet/src/core/chains.ts, so the site and the
  * wallet agree on what each network is.
@@ -94,6 +97,10 @@ export interface ServerConfig extends NetworkConfig {
   slot: Slot
   verifiedIssuers: string[]
   pinnedAssets: Record<string, string>
+  /** Read blocks to index spot swaps (the trade tape). Public nodes cost-limit block reads. */
+  indexBlocks: boolean
+  /** Market history service base URL (…/api/history). */
+  historyUrl: string
 }
 
 /** A slot's network with its server-side overrides. Call only from route handlers / lib/server. */
@@ -119,5 +126,7 @@ export function serverConfig(slot: Slot): ServerConfig {
     pinnedAssets: Object.fromEntries(
       Object.entries(pinned).map(([slug, addr]) => [slug.toLowerCase(), String(addr).toLowerCase()])
     ),
+    indexBlocks: env('INDEX_BLOCKS') ? env('INDEX_BLOCKS') === '1' : base.id === 'local',
+    historyUrl: (process.env.QRDX_HISTORY_URL || 'https://trade.qrdx.org/api/history').replace(/\/$/, ''),
   }
 }

@@ -125,10 +125,10 @@ export function PoolDetail({ poolId }: { poolId: string }) {
           {t0.symbol}/{t1.symbol}
         </h1>
         <span className="rounded border px-2 py-0.5 text-xs">{fixed(String(Number(p.fee_rate) * 100), 2)}% fee</span>
-        {p.paused && <span className="text-xs text-amber-500">paused</span>}
+        {p.paused && <span className="text-xs text-warn">paused</span>}
       </div>
       {[t0, t1].filter((a) => !a.verified).map((a) => (
-        <p key={a.segment} className="mt-2 text-xs text-amber-500">
+        <p key={a.segment} className="mt-2 text-xs text-warn">
           {a.symbol} is unverified: {a.address}
         </p>
       ))}
@@ -189,7 +189,7 @@ export function PoolDetail({ poolId }: { poolId: string }) {
             <Line k={`${t0.symbol} deposit`} v={q.data ? fmtSize(q.data.amount0) : '—'} sub={w.trader ? `bal ${fmtSize(balance(t0))}` : undefined} />
             <Line k={`${t1.symbol} deposit`} v={q.data ? fmtSize(q.data.amount1) : '—'} sub={w.trader ? `bal ${fmtSize(balance(t1))}` : undefined} />
             <Line k="Liquidity" v={q.data ? fixed(q.data.liquidity, 4) : '—'} />
-            {q.data && !q.data.in_range && <p className="text-amber-500">The price is outside this range: it earns no fees until the price moves into it.</p>}
+            {q.data && !q.data.in_range && <p className="text-warn">The price is outside this range: it earns no fees until the price moves into it.</p>}
           </div>
           <div className="mt-3">
             {!w.trader ? (
@@ -236,7 +236,7 @@ function PositionCard({
     <div className="rounded-lg border p-3 text-xs tabular">
       <div className="flex items-center justify-between">
         <span className="font-mono text-muted-foreground">{pos.position_id.slice(0, 12)}</span>
-        <span className={pos.in_range ? 'text-bid' : 'text-amber-500'}>{pos.in_range ? 'In range' : 'Out of range'}</span>
+        <span className={pos.in_range ? 'text-bid' : 'text-warn'}>{pos.in_range ? 'In range' : 'Out of range'}</span>
       </div>
       <div className="mt-1">
         Range {fmtPrice(pos.price_lower)} – {fmtPrice(pos.price_upper)} {t1.symbol}/{t0.symbol}

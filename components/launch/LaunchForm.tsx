@@ -6,7 +6,6 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { CheckCircle2, Circle, Copy, Loader2, XCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { ConnectButton } from '@/components/wallet/ConnectButton'
 import { dec, round, str } from '@/lib/decimal'
 import { compact, fixed, price as fmtPrice } from '@/lib/format'
 import { apiGet, useApi } from '@/lib/hooks/useApi'
@@ -376,15 +375,7 @@ export function LaunchForm({ existingToken, onLaunched }: { existingToken?: stri
     }
   }
 
-  if (!w.trader) {
-    return (
-      <Panel>
-        <p className="text-sm text-muted-foreground">Connect the QRDX Wallet to create a coin.</p>
-        <ConnectButton className="mt-3 w-full" />
-      </Panel>
-    )
-  }
-
+  // Without a wallet the form still renders (LaunchPage frosts it behind the wallet gate).
   if (job) {
     return (
       <LaunchProgress
@@ -415,13 +406,13 @@ export function LaunchForm({ existingToken, onLaunched }: { existingToken?: stri
             <div className="mt-3 rounded-md border p-2 text-xs">
               <div className="font-medium">
                 {ex.name} <span className="text-muted-foreground">{ex.symbol}</span>
-                {!ex.verified && <span className="ml-1 text-amber-500">unverified</span>}
+                {!ex.verified && <span className="ml-1 text-warn">unverified</span>}
               </div>
               <div className="break-all font-mono text-[11px] text-muted-foreground">{ex.address}</div>
               {ex.token && (
                 <div className="mt-1 text-muted-foreground">
-                  Supply {compact(ex.token.totalSupply)} · {ex.token.mintAuthority ? <span className="text-amber-500">mintable</span> : 'fixed'} ·{' '}
-                  {ex.token.freezeAuthority ? <span className="text-amber-500">freezable</span> : 'not freezable'} · you hold {compact(myBalance ?? '0')}
+                  Supply {compact(ex.token.totalSupply)} · {ex.token.mintAuthority ? <span className="text-warn">mintable</span> : 'fixed'} ·{' '}
+                  {ex.token.freezeAuthority ? <span className="text-warn">freezable</span> : 'not freezable'} · you hold {compact(myBalance ?? '0')}
                 </div>
               )}
             </div>
@@ -453,7 +444,7 @@ export function LaunchForm({ existingToken, onLaunched }: { existingToken?: stri
               : `Just the token, with a fixed supply, all of it in your wallet. Start its market whenever you like, here or on Pools. On ${network.name}.`}
           </p>
           {noQuotes && (
-            <p className="mt-2 text-xs text-amber-500">
+            <p className="mt-2 text-xs text-warn">
               {network.name} has no verified asset to pair a market with yet (such as wrapped QRDX), so only the token can be
               created for now.
             </p>
@@ -493,7 +484,7 @@ export function LaunchForm({ existingToken, onLaunched }: { existingToken?: stri
               {mintMode !== 'none' && (
                 <>
                   <Input value={maxSupply} onChange={(e) => setMaxSupply(e.target.value.trim())} inputMode="decimal" placeholder="Max supply (optional)" className="mt-2 tabular" />
-                  <p className="mt-1 text-[11px] text-amber-500">
+                  <p className="mt-1 text-[11px] text-warn">
                     {mintMode === 'self' ? 'You' : 'That address'} can create more {symbol || 'tokens'}
                     {maxSupply ? `, up to ${compact(maxSupply)}` : ' with no limit'}. Buyers see the coin as mintable; you can give
                     up minting later under Your tokens.
@@ -555,7 +546,7 @@ export function LaunchForm({ existingToken, onLaunched }: { existingToken?: stri
               </div>
             </details>
             {takenPool && (
-              <p className="text-xs text-amber-500">
+              <p className="text-xs text-warn">
                 That pool exists already: <Link href={`/pools/${takenPool.poolId}`} className="underline">add liquidity on its page</Link>, or pick another fee.
               </p>
             )}
@@ -724,7 +715,7 @@ function Pcts({ options, onPick }: { options: number[]; onPick: (pct: number) =>
 }
 
 function Panel({ children }: { children: React.ReactNode }) {
-  return <section className="rounded-lg border bg-card p-4">{children}</section>
+  return <section className="rounded-xl border bg-card p-4">{children}</section>
 }
 
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {

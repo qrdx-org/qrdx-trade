@@ -111,7 +111,10 @@ still applies: a locked wallet asks to be unlocked first.
 ## Deploying and developing
 
 The relay is its own small Worker (`relay/wrangler.jsonc`), routed under the
-trade site at `trade.qrdx.org/api/relay/*`. It cannot be a Pages / edge
+trade site at `trade.qrdx.org/api/relay/*`. The same Worker also runs the
+market history recorder (ARCHITECTURE.md §12): a once-a-minute cron and
+`trade.qrdx.org/api/history/*`, with the networks it records in its `NETWORKS`
+variable. It cannot be a Pages / edge
 function like the API: the phone and the laptop must meet in shared state, and
 edge functions are stateless isolates (two requests rarely share one).
 Cloudflare's shared state for this is a Durable Object, and only a Worker can

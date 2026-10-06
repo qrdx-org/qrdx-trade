@@ -1,10 +1,15 @@
-<svg width="256" height="256" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <circle cx="128" cy="128" r="128" fill="url(#gradient)"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
   <defs>
-    <linearGradient id="gradient" x1="0" y1="0" x2="256" y2="256" gradientUnits="userSpaceOnUse">
+    <linearGradient id="g" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
       <stop stop-color="#3b82f6"/>
-      <stop offset="1" stop-color="#1d4ed8"/>
+      <stop offset="1" stop-color="#1e3a8a"/>
     </linearGradient>
+    <mask id="cut">
+      <rect width="64" height="64" fill="white"/>
+      <polygon points="27,29 39,29 57,51 45,51" fill="black"/>
+    </mask>
   </defs>
-  <text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="white" font-size="120" font-weight="bold" font-family="Arial, sans-serif">Q</text>
+  <circle cx="32" cy="32" r="32" fill="url(#g)"/>
+  <rect x="17" y="18" width="27" height="25" rx="5" fill="none" stroke="#fff" stroke-width="5" mask="url(#cut)"/>
+  <polygon points="29.5,30.5 36.5,30.5 51,48.5 44,48.5" fill="#fff"/>
 </svg>
