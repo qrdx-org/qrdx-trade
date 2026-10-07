@@ -20,6 +20,7 @@ import type {
   TradesResponse,
 } from '../types'
 import { cached } from './cache'
+import { marketKey, nodeCandles, nodeTicker, nodeTickers, nodeTrades, orientNodeCandles, orientNodeTrade, tickerStats } from './market-data'
 import { ApiError, nowSec } from './http'
 import { IndexedTrade, pairTrades, tapeAvailable } from './indexer'
 import { HistoryCandle, HistoryStats, poolCandles, poolStats } from './history'
@@ -244,11 +245,14 @@ async function spotMarketFor(
   market.status = 'live'
 
   const ref = referencePool(pairPools)
+  const tickers = await nodeTickers(net)
   const [book, tape, hist] = await Promise.all([
     withBook ? cached(net.key(`book:${pair}:1`), 1_500, () => net.node.spotBook(pair, 1)).catch(() => null) : null,
-    pairTrades(net, pair).catch(() => null),
+    // The node's own market data replaces the block indexer where it exists.
+    tickers ? null : pairTrades(net, pair).catch(() => null),
     history ?? (ref ? poolStats(net, [ref.pool_id]) : Promise.resolve({} as Record<string, HistoryStats>)),
   ])
+  const fromNode = tickerStats(tickers?.get(marketKey(pair)) ?? null, inverted)
   if (book) {
     const oriented = orientBook(book.bids, book.asks, inverted)
     market.bestBid = oriented.bids[0]?.[0] ?? null
@@ -256,7 +260,13 @@ async function spotMarketFor(
     Object.assign(market, (({ mid, spread }) => ({ mid, spread }))(bookStats(market.bestBid, market.bestAsk)))
   }
   const trades = (tape?.trades ?? []).map((t) => orientTrade(t, inverted))
-  if (trades.length) {
+  if (fromNode) {
+    // Every trade of the last 24 h by block time: book fills and pool swaps (the node's market data).
+    market.change24h = fromNode.change24h
+    market.volume24h = fromNode.volume24h
+    market.last = fromNode.last
+    market.lastSource = 'trade'
+  } else if (trades.length) {
     // The swap tape, where the node allows reading it.
     const s = stats24h(trades)
     market.change24h = s.change24h
@@ -351,6 +361,17 @@ export async function spotTrades(net: Net, baseSeg: string, quoteSeg: string, li
   }
   const { pair, token0 } = canonicalPair(r.base.address, r.quote.address)
   const inverted = isInverted(r.base.address, token0)
+  const fromNode = await nodeTrades(net, pair, Math.min(1000, limit))
+  if (fromNode) {
+    return {
+      market: r.id,
+      trades: fromNode.slice(-limit).reverse().map((t) => orientNodeTrade(t, inverted)),
+      source: 'node',
+      available: true,
+      coverage: { fromBlock: fromNode[0]?.block_height ?? null, toBlock: fromNode[fromNode.length - 1]?.block_height ?? null },
+      asOf: nowSec(),
+    }
+  }
   const { trades, coverage } = await pairTrades(net, pair)
   return {
     market: r.id,
@@ -368,7 +389,21 @@ export async function spotCandles(net: Net, baseSeg: string, quoteSeg: string, i
   if (r.base.address && r.quote.address) {
     const { pair, token0 } = canonicalPair(r.base.address, r.quote.address)
     const inverted = isInverted(r.base.address, token0)
-    const { trades } = await pairTrades(net, pair).catch(() => ({ trades: [] as IndexedTrade[] }))
+    const seconds = INTERVALS[interval]
+    const nodeRows = await nodeCandles(net, pair, interval, limit)
+    if (nodeRows?.length) {
+      return {
+        market: r.id,
+        interval,
+        kind: 'market',
+        exact: true,
+        label: `${r.base.symbol}/${r.quote.symbol} · QRDX trades`,
+        candles: orientNodeCandles(nodeRows, inverted, seconds, limit, nowSec()),
+        source: 'node',
+        asOf: nowSec(),
+      }
+    }
+    const { trades } = nodeRows ? { trades: [] as IndexedTrade[] } : await pairTrades(net, pair).catch(() => ({ trades: [] as IndexedTrade[] }))
     if (trades.length) {
       return {
         market: r.id,
@@ -445,7 +480,8 @@ async function perpSummary(net: Net, m: NodePerpMarket, idx: TokenIndex): Promis
     cached(net.key(`perp-trades:${m.market_id}:500`), 3_000, () => net.node.perpTrades(m.market_id, 500)).catch(() => []),
     perpCollateral(net),
   ])
-  const s = stats24h(fills.map((f) => ({ time: Math.floor(f.block_time), price: f.price, size: f.amount })))
+  const t = tickerStats(await nodeTicker(net, m.market_id), false)
+  const s = t ?? stats24h(fills.map((f) => ({ time: Math.floor(f.block_time), price: f.price, size: f.amount })))
   return {
     type: 'perp',
     id: m.market_id,
@@ -543,7 +579,20 @@ export async function perpTrades(net: Net, baseSeg: string, quoteSeg: string, li
 
 export async function perpCandles(net: Net, baseSeg: string, quoteSeg: string, interval: Interval, limit: number): Promise<CandleSeries> {
   const m = await findPerp(net, baseSeg, quoteSeg)
-  const fills = await net.node.perpTrades(m.market_id, 1000).catch(() => [])
+  const nodeRows = await nodeCandles(net, m.market_id, interval, limit)
+  if (nodeRows?.length) {
+    return {
+      market: m.market_id,
+      interval,
+      kind: 'market',
+      exact: true,
+      label: `${m.market_id} · fills`,
+      candles: orientNodeCandles(nodeRows, false, INTERVALS[interval], limit, nowSec()),
+      source: 'node',
+      asOf: nowSec(),
+    }
+  }
+  const fills = nodeRows ? [] : await net.node.perpTrades(m.market_id, 1000).catch(() => [])
   if (fills.length) {
     return {
       market: m.market_id,

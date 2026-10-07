@@ -5,7 +5,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ConnectButton } from '@/components/wallet/ConnectButton'
 import { dec, div, isAmount, mul, round, str } from '@/lib/decimal'
-import { fixed, price as fmtPrice } from '@/lib/format'
+import { compact, fixed, price as fmtPrice } from '@/lib/format'
+import { collateralShortfall, walletCollateral } from '@/lib/perps'
 import type { AccountResponse, OrderBook, PerpMarket } from '@/lib/types'
 import { useWallet } from '@/lib/wallet/WalletContext'
 import { cn } from '@/lib/utils'
@@ -84,11 +85,16 @@ export function PerpOrderForm({
   const leverage = current?.leverage ?? (lev || effective || '')
   const margin = notional && isAmount(leverage) && dec(leverage) > 0n ? str(div(dec(notional), dec(leverage))) : null
 
+  // Margin beyond the free collateral can be deposited from the wallet with the order.
+  const inWallet = walletCollateral(account)
+  const topUp = perp && !reduceOnly ? collateralShortfall(margin, perp.withdrawable) : null
+  const canTopUp = !!topUp && inWallet !== null && dec(inWallet) >= dec(topUp)
+
   const problem = (() => {
     if (!isAmount(size) || dec(size) <= 0n) return 'Enter a size.'
     if (!execPrice) return kind === 'market' ? 'The book is empty on that side.' : 'Enter a price.'
     if (!isAmount(execPrice) || dec(execPrice) <= 0n) return 'Enter a price.'
-    if (perp && !reduceOnly && margin && dec(margin) > dec(perp.withdrawable)) return `Not enough free ${unit}.`
+    if (topUp && !canTopUp) return `Not enough ${unit} in the perps account or the wallet.`
     return null
   })()
 
@@ -110,6 +116,10 @@ export function PerpOrderForm({
     run(
       'order',
       async () => {
+        if (topUp) {
+          // Two operations in one block window: the deposit's nonce comes first, so it settles first.
+          await w.sendExchange({ op: 'PERP_DEPOSIT', params: { amount: topUp }, label: `Deposit ${topUp} ${unit} perps collateral` })
+        }
         await w.sendExchange({
           op: 'PERP_ORDER',
           params: {
@@ -200,9 +210,17 @@ export function PerpOrderForm({
         ))}
       </div>
 
-      <div className="flex justify-between text-xs">
-        <span className="text-muted-foreground">Free collateral</span>
-        <span className="num font-medium">{perp ? `${fixed(perp.withdrawable, 2)} ${unit}` : '—'}</span>
+      <div className="space-y-1 text-xs">
+        <div className="flex justify-between">
+          <span className="text-muted-foreground">Free collateral</span>
+          <span className="num font-medium">{perp ? `${fixed(perp.withdrawable, 2)} ${unit}` : '—'}</span>
+        </div>
+        {inWallet !== null && (
+          <div className="flex justify-between" title="In your wallet, not yet deposited into the perps account">
+            <span className="text-muted-foreground">In wallet</span>
+            <span className="num">{compact(inWallet)} {unit}</span>
+          </div>
+        )}
       </div>
 
       {kind === 'limit' ? (
@@ -244,7 +262,9 @@ export function PerpOrderForm({
           disabled={!!problem || busy !== null || !w.rightNetwork}
           className={cn('h-11 w-full text-sm font-semibold text-white', side === 'buy' ? 'bg-bid shadow-lg shadow-bid/20 hover:bg-bid/90' : 'bg-ask shadow-lg shadow-ask/20 hover:bg-ask/90')}
         >
-          {busy === 'order' ? 'Confirm in wallet…' : problem ?? `${side === 'buy' ? 'Long' : 'Short'} ${market.base}`}
+          {busy === 'order'
+            ? 'Confirm in wallet…'
+            : (problem ?? `${canTopUp ? `Deposit ${fixed(topUp!, 2)} ${unit} and ` : ''}${side === 'buy' ? (canTopUp ? 'long' : 'Long') : canTopUp ? 'short' : 'Short'} ${market.base}`)}
         </Button>
       )}
       {msg && <p className={cn('rounded-md px-2.5 py-2 text-xs', msg.ok ? 'bg-bid/10 text-bid' : 'bg-ask/10 text-ask')}>{msg.text}</p>}
@@ -257,6 +277,7 @@ export function PerpOrderForm({
 function CollateralBox({ account, unit }: { account: AccountResponse | null; unit: string }) {
   const w = useWallet()
   const perp = account?.perp
+  const inWallet = walletCollateral(account)
   const [amount, setAmount] = useState('')
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
@@ -281,8 +302,20 @@ function CollateralBox({ account, unit }: { account: AccountResponse | null; uni
       <Line k="Collateral" v={perp ? `${fixed(perp.collateral, 2)} ${unit}` : '—'} />
       <Line k="Maintenance margin" v={perp ? `${fixed(perp.maintenance_margin, 2)} ${unit}` : '—'} />
       <Line k="In open orders" v={perp ? `${fixed(perp.open_order_margin, 2)} ${unit}` : '—'} />
+      {inWallet !== null && <Line k="In wallet, to deposit" v={`${fixed(inWallet, 2)} ${unit}`} />}
       <div className="flex gap-1 pt-1">
-        <Input value={amount} onChange={(e) => setAmount(e.target.value.trim())} placeholder={`Amount (${unit})`} className="h-8 text-xs" />
+        <span className="relative flex-1">
+          <Input value={amount} onChange={(e) => setAmount(e.target.value.trim())} placeholder={`Amount (${unit})`} className="h-8 pr-11 text-xs" />
+          {inWallet !== null && dec(inWallet) > 0n && (
+            <button
+              type="button"
+              onClick={() => setAmount(round(inWallet, 2, 'down'))}
+              className="absolute inset-y-0 right-2 text-[10px] font-semibold uppercase text-muted-foreground hover:text-foreground"
+            >
+              Max
+            </button>
+          )}
+        </span>
         <Button size="sm" variant="outline" className="h-8 text-xs" disabled={busy} onClick={() => go('PERP_DEPOSIT')}>
           Deposit
         </Button>

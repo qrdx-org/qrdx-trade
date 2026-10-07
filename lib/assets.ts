@@ -45,22 +45,42 @@ export interface VerifiedAsset {
    * overrides these; without either, the verified-issuer rule applies.
    */
   addresses?: Partial<Record<NetworkId, string>>
+  /** Native QRDX: no token; spot names it "QRDX" and settles it in account balances. */
+  native?: boolean
 }
+
+/** Spot's name for native QRDX (qrdx-node exchange/tokens.py NATIVE_ASSET); any casing on input. */
+export const NATIVE_QRDX = 'QRDX'
+export const isNativeAsset = (a: string | null | undefined): boolean => !!a && a.toUpperCase() === NATIVE_QRDX
+/** An asset as the node names it: "QRDX" for native QRDX, a lower-case token address otherwise. */
+export const assetId = (a: string): string => (isNativeAsset(a) ? NATIVE_QRDX : a.toLowerCase())
 
 export const VERIFIED_ASSETS: VerifiedAsset[] = [
   {
     slug: 'qrdx',
     symbol: 'QRDX',
     name: 'QRDX',
-    // Spot trades QRC-20 tokens only, so native QRDX trades as its wrapped token.
-    onChainSymbol: 'wQRDX',
+    // Native QRDX: spot pools and books trade it directly, with no wrapping
+    // (qrdx-node docs/PERPS_API.md §7). It is on every QRDX network.
+    onChainSymbol: 'QRDX',
     decimals: 18,
     prices: {},
     quoteRank: 60,
     color: '#2563eb',
+    native: true,
+  },
+  {
+    slug: 'wqrdx',
+    symbol: 'wQRDX',
+    name: 'Wrapped QRDX',
+    onChainSymbol: 'wQRDX',
+    decimals: 18,
+    prices: {},
+    quoteRank: 55,
+    color: '#3b82f6',
     addresses: {
-      // "Wrapped QRDX" (WQRDX) on test.qrdx.org. A fixed-supply token held by its
-      // creator, not yet backed 1:1 by a wrap operation (ARCHITECTURE.md §10).
+      // "Wrapped QRDX" (WQRDX) on test.qrdx.org: a fixed-supply token held by its creator,
+      // from before native QRDX traded on spot. Not backed 1:1 by native QRDX.
       testnet: '0xe13ef577f2d8c6cb55e49c70e6ed48f64d0fc106',
     },
   },

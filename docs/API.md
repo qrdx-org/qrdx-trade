@@ -178,8 +178,9 @@ orientation.
   "source": "indexer", "coverage": { "fromBlock": 0, "toBlock": 309 }, "asOf": … }
 ```
 
-Spot trades include `SWAP` executions only: the node does not record fill
-prices for order-book matches (ARCHITECTURE.md §7). `coverage` is the block
+Trades come from the node's market data (`source: "node"`): book fills and
+pool swaps alike, `venue` `clob` or `amm`. On a node without it, the indexer
+serves swaps only (`source: "indexer"`). `coverage` is the block
 range the indexer has read. `available: false` means this deployment does not
 index blocks for this network (the public nodes cost-limit block reads), so
 there is no tape; charts and 24 h stats then come from pool history.

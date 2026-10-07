@@ -255,7 +255,7 @@ check('deploy approval is decoded, and says it is mintable', await approval.getB
 ap = nextApproval()
 await approval.getByRole('button', { name: /^Confirm$/ }).click().catch(closedOk)
 approval = await ap
-check('pool approval names the not-yet-created token and the burn', await approval.getByText(/^Create pool wQRDX\/0x[0-9a-f]{6}…/).first().waitFor({ timeout: 15_000 }).then(() => true, () => false) && await approval.getByText(/5,000 QRDX is burned/).first().isVisible())
+check('pool approval names the not-yet-created token and the burn', await approval.getByText(/^Create pool 0x[0-9a-f]{6}(…|\.\.\.)[0-9a-f]{4}\/QRDX:/).first().waitFor({ timeout: 15_000 }).then(() => true, () => false) && await approval.getByText(/5,000 QRDX is burned/).first().isVisible())
 await approval.screenshot({ path: `${SHOTS}/approval-create-pool.png` })
 await approval.getByRole('button', { name: /^Confirm$/ }).click().catch(closedOk)
 const deposit = page.getByRole('button', { name: /^Deposit 900\.00M QFROG on the curve$/ })
@@ -403,6 +403,17 @@ for (let i = 0; i < 20 && !sol; i++) {
 check('market exists after the block', !!sol, sol && `${sol.id} · max ${sol.maxLeverage}×`)
 check('the form follows it to created', await page.getByRole('link', { name: /^Open SOL-USD-PERP/ }).waitFor({ timeout: 30_000 }).then(() => true, () => false))
 await page.screenshot({ path: `${SHOTS}/perp-created.png` })
+
+// ── native QRDX and the node's market data ─────────────────────────────────
+console.log('Native QRDX markets')
+const native = await api('/api/v1/markets/qrdx/usdc')
+check('QRDX/USDC trades native QRDX (no wrapped token)', native.status === 'live' && native.base.address === 'QRDX', `${native.base.address} · last ${native.last}`)
+const nativeCandles = await api('/api/v1/markets/qrdx/usdc/candles?interval=1h&limit=48')
+check('its chart comes from the node’s market data', nativeCandles.source === 'node' && nativeCandles.candles.length > 0, `${nativeCandles.candles.length} candles`)
+const nativeTrades = await api('/api/v1/markets/qrdx/usdc/trades?limit=5')
+check('its trades too, book fills and swaps alike', nativeTrades.source === 'node' && nativeTrades.trades.length > 0, nativeTrades.trades.map((t) => t.venue).join(','))
+const me = await api(`/api/v1/accounts/${pq}`)
+check('the account lists native QRDX', !!me.balances.find((b) => b.asset.address === 'QRDX' && Number(b.balance) > 0))
 
 // ── transactions tab ────────────────────────────────────────────────────────
 await page.goto(`${SITE}/perps/btc/usd`, { waitUntil: 'networkidle' })

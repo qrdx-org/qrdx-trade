@@ -44,7 +44,8 @@ replace it:
 | Spot order book | `exchange_getOrderBook(pair, depth)` | Canonical pair is the address-sorted `token0:token1`; prices are token1 per token0. The API re-orients to the URL's base/quote (inverting prices and swapping sides when needed). |
 | Spot pools | `exchange_getPools`, `exchange_getPool` | Price, liquidity, ticks, positions, TWAP. |
 | Swap quote | `exchange_quoteSwap` | The exact fill the next block gives if nothing trades first. |
-| Spot trades / candles | trade API indexer over `/get_blocks` + `exchange_getTransactionReceipt` | `SWAP` receipts carry exact `amount_in`, `amount_out`, `price`. Only on nodes without the block-read cost limit (local by default); see §7. |
+| Spot and perps trades, candles, 24 h stats | the node's market data: `market_getTrades`, `market_getCandles`, `market_getMarkets` (qrdx-node docs/PERPS_API.md §8) | Every trade by block time: book fills, pool swaps, perps fills. The node lists only candle intervals with trades; the API carries the close through quiet ones. |
+| Same, on nodes without market data | trade API indexer over `/get_blocks` (local only), else the history worker (§12) | Fallbacks (`lib/server/market-data.ts` returns null and the old paths run). |
 | Pool history: candles, 24 h change and volume | market history recorder (§12): `exchange_getPools` sampled every minute | Used when there is no trade tape, which is the case on the public nodes. |
 | USD price of any token | index price of a verified anchor, routed through pools (§12) | `source: "route"`, with the route and pools it went through. |
 | Perp markets, book, trades | `perp_getMarkets`, `perp_getOrderBook`, `perp_getTrades`, `perp_getEvents` | Oracle, mark, funding, OI come from the node. |
@@ -347,13 +348,13 @@ limits, and what the node would need to lift them:
 
 | Gap | Effect here | Node change that fixes it |
 |---|---|---|
-| Spot order-book fills are not journaled (`journal.py` records `fill` events only for `PERP_ORDER`); a `PLACE_ORDER` receipt has `filled` but no fill prices. | Spot trade history and candles include `SWAP` executions only. Limit-order fills show in the user's own order status, not in the public tape. | Record spot fills in the journal and serve `exchange_getTrades(pair, limit)`. |
-| No wrapped native QRDX token. | `qrdx/*` spot pairs have no on-chain market until a `wQRDX` token is deployed. | Deploy a wQRDX token with a wrap/unwrap op, or let spot settle `QRDX` natively as perps collateral does. |
+| ~~Spot order-book fills are not journaled.~~ Resolved: the node's market data (`market_getTrades`, PERPS_API.md §8) records every trade, book fills and pool swaps alike. | The trade tape and candles include book fills where the node serves market data; on older nodes, swaps only (the indexer). | — |
+| ~~No native QRDX on spot.~~ Resolved: spot trades native QRDX directly (named `QRDX`, sorting after every token address). | `qrdx` is native QRDX on every network; the old testnet WQRDX token is the separate verified asset `wqrdx`. | — |
 | Perps collateral is a node setting (`QRDX_PERP_COLLATERAL_TOKEN`): a token address (production: the USD stablecoin), `QRDX` for native QRDX (the node marks it development-only), or empty, which refuses every deposit. Testnet runs with it empty, and its validators vote no oracle prices (`QRDX_ORACLE_FEED`). | Perps on testnet cannot take deposits or trade; the API reports `collateralToken` and the perps screen says so. | Set `QRDX_PERP_COLLATERAL_TOKEN` (the same on every node: it is a consensus parameter) and `QRDX_ORACLE_FEED=exchanges` on validators. |
 | `exchange_getNonce` ignores the mempool. | Handled in the wallet (§4). | A `pending` flag on `exchange_getNonce`. |
 | Streams (`/ws`) are opt-in per node (`QRDX_ENABLE_STREAMING`). | The site polls (book 2 s, account 5 s). | Enable streaming on public nodes; the client already has the channel names. |
 | Spot books exist only for pairs that have a pool (`CREATE_POOL` creates both). | A pair with no pool has no book. | — (by design) |
-| No spot trade history endpoint at all. | The indexer keeps trades in isolate memory, re-reads the last ~600 blocks on a cold start, and resets when the chain gets shorter than what it read; it does not detect a same-height reorg. | Same as the first row; until then, phase 4 below. |
+| ~~No spot trade history endpoint.~~ Resolved by `market_getTrades` / `market_getCandles` / `market_getMarkets`. | Used first; the in-isolate indexer and the history worker remain the fallback for nodes without them. | — |
 | `/get_blocks` is cost-limited per IP (`offset/100 + limit/50` per call, 1000 per hour), so reading recent blocks at a real height costs more than the budget. | The trade tape is off on the public nodes (`QRDX_{SLOT}_INDEX_BLOCKS`); charts, 24 h change and volume come from the history recorder (§12) instead, and the trades panel says no tape is available. | Exempt recent-block reads from the cost, or the trades endpoint in the first row. |
 | Pools keep 64 TWAP observations, and pool `volume` counts only what was paid in per token. | History is recorded by sampling (§12); the side not paid in is valued at the pool price. | Per-swap events (`exchange_getTrades`), or a longer observation buffer. |
 
@@ -471,17 +472,22 @@ holder can do this for any token, and coins in the feed without a market link
 to it. On a network with no verified asset to pair against, token-only is the
 only mode offered.
 
-**Pairing with QRDX.** Spot trades QRC-20 tokens only, so "QRDX" in a pair is
-**wrapped QRDX (wQRDX)**, the verified `qrdx` asset. Where a network has one,
-it is the default quote. On testnet it is "Wrapped QRDX" (WQRDX) at
-`0xe13ef577f2d8c6cb55e49c70e6ed48f64d0fc106`, pinned in `lib/assets.ts`
-(`addresses.testnet`). Testnet USDC is `0x4227d3846511a16656b521361c10faf6358f0708`
-(18 decimals), pinned the same way; with its USDC/wQRDX pool, every coin
-paired with wQRDX gets a USD price routed through it. The node has no wrap / unwrap operation yet (§7), so a
-wQRDX token today is only as good as whoever mints it; a 1:1 native-backed
-wQRDX needs a node change: a `WRAP` op moving native QRDX to a protocol holder
-and minting the token, and an `UNWRAP` op reversing it (the same pattern as
-perps collateral, `PERP_DEPOSIT` / `PERP_WITHDRAW`).
+**Pairing with QRDX.** Spot trades **native QRDX** directly (qrdx-node
+docs/PERPS_API.md §7): the node names it `QRDX` (any casing on input), it sorts
+after every token address so QRDX pairs are quoted in QRDX, and its side settles
+in account balances (the API reads it with `eth_getBalance`). The verified `qrdx`
+asset is native QRDX on every network (`native: true` in `lib/assets.ts`) and the
+default quote for launches. On testnet, the earlier "Wrapped QRDX" token at
+`0xe13ef577f2d8c6cb55e49c70e6ed48f64d0fc106` is the verified asset `wqrdx`, so
+its existing markets keep their names; it is not backed by native QRDX. Testnet USDC is `0x4227d3846511a16656b521361c10faf6358f0708`
+(18 decimals), pinned the same way; USD prices route through its pools.
+
+**Perps collateral** is whatever the node settles perps in (`collateral_token`:
+native QRDX, a token, or none). Margin counts only what is deposited into the
+clearinghouse; the order form shows the wallet's balance of the collateral asset
+beside it, and when an order needs more margin than is free, offers to deposit
+the difference (plus 1 % for fees) with it: a `PERP_DEPOSIT` and the order in one
+block window, the deposit's nonce first.
 
 **Your tokens** (on `/launch`) lists tokens the connected account created or
 may mint, with its balance: **Mint** (`TOKEN_MINT`, to itself or any address,

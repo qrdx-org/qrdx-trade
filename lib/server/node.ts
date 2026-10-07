@@ -309,6 +309,55 @@ async function rest<T>(cfg: ServerConfig, path: string): Promise<T> {
   return (body.result ?? body) as T
 }
 
+/** market_getTicker / market_getMarkets (qrdx-node docs/PERPS_API.md §8). Prices quote per base of the canonical pair. */
+export interface NodeTicker {
+  market: string
+  type: 'spot' | 'perp'
+  base: string
+  quote: string
+  best_bid: string | null
+  best_ask: string | null
+  last_price: string | null
+  open_24h: string | null
+  high_24h: string | null
+  low_24h: string | null
+  change_pct_24h: string | null
+  volume_24h: string
+  quote_volume_24h: string
+  trades_24h: number
+  amm_price?: string | null
+  pools?: number
+}
+
+/** market_getTrades rows: the taker's side, venue clob | amm | perp. */
+export interface NodeMarketTrade {
+  seq: number
+  market: string
+  price: string
+  amount: string
+  quote_amount: string
+  side: 'buy' | 'sell'
+  venue: string
+  block_height: number
+  block_time: number
+  tx_hash: string | null
+  maker: string | null
+  taker: string | null
+  pool_id: string | null
+}
+
+/** market_getCandles rows, by block time. Only intervals with trades appear. */
+export interface NodeMarketCandle {
+  time: number
+  open: string
+  high: string
+  low: string
+  close: string
+  volume: string
+  quote_volume: string
+  trades: number
+}
+
 // ─── Reads ─────────────────────────────────────────────────────────────────────
 
 /** A client for one network's node. */
@@ -353,6 +402,21 @@ export function createNodeClient(cfg: ServerConfig) {
     perpBook: (id: string, depth: number) => maybe<NodePerpBook>(cfg, 'perp_getOrderBook', [id, depth]),
     perpAccount: (address: string) => rpc<NodePerpAccount>(cfg, 'perp_getAccount', [address]),
     perpTrades: (id: string, limit: number) => rpc<NodeFillEvent[]>(cfg, 'perp_getTrades', [id, limit]),
+
+    /** Native QRDX of an account, in QRDX (eth_getBalance is in wei). Spot and perps spend it directly. */
+    nativeBalance: async (address: string): Promise<string> => {
+      const wei = BigInt(await rpc<string>(cfg, 'eth_getBalance', [address, 'latest']))
+      const whole = wei / 10n ** 18n
+      const frac = (wei % 10n ** 18n).toString().padStart(18, '0').replace(/0+$/, '')
+      return frac ? `${whole}.${frac}` : `${whole}`
+    },
+
+    // Market data built from the blocks (PERPS_API.md §8). Older nodes lack these: callers fall back.
+    marketTickers: (kind?: 'spot' | 'perp') => rpc<NodeTicker[]>(cfg, 'market_getMarkets', kind ? [kind] : []),
+    marketTrades: (market: string, limit: number) =>
+      rpc<{ trades: NodeMarketTrade[]; last_seq: number } | null>(cfg, 'market_getTrades', [market, limit]),
+    marketCandles: (market: string, interval: string, limit: number) =>
+      rpc<{ candles: NodeMarketCandle[] } | null>(cfg, 'market_getCandles', [market, interval, limit]),
 
     /** Height and last block hash (`/get_status`, which the node does not cost-limit). */
     status: () => rest<{ height: number; last_block_hash?: string }>(cfg, '/get_status'),

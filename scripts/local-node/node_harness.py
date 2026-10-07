@@ -11,8 +11,9 @@ trade site and the wallet use. Differences from a real node:
     the node's own verify path checks the wallet's real signatures;
   * perp oracle prices are set by the harness instead of validator votes.
 
-Seeds wQRDX, qBTC, qUSDC, qETH and an unverified PEPE with pools, resting
-orders, a day of swap history, and a BTC-USD perp market.
+Seeds wQRDX, qBTC, qUSDC, qETH and an unverified PEPE with pools (two of them
+against native QRDX), resting orders, a day of swap history, and a BTC-USD perp
+market. Serves the node's market data (market_* methods) from the same engine.
 
   python node_harness.py            # port 3007, 20 s blocks
   POST /faucet {"address": "0xPQ…"} # fund an address with every seeded token
@@ -147,7 +148,8 @@ def begin(ts, senders=()):
         for h in (hold, esc):
             holder_case.setdefault(h.lower(), h)
             for t in (p.state.token0, p.state.token1):
-                mgr.set_available_token_balance(h, t, bal(h, t))
+                # Native QRDX lives in account balances, not the token ledger.
+                mgr.set_available_token_balance(h, t, qrdx.get(acct(h), D(0)) if t == "QRDX" else bal(h, t))
     # Perp oracle, as validators would vote it.
     for m in mgr.clearinghouse.markets.values():
         px = {"BTC": BTC_USD, "ETH": ETH_USD}.get(m.base)
@@ -230,13 +232,16 @@ def seed():
         run(pepe_owner, ExchangeOpType.TOKEN_TRANSFER,
             {"token_address": TOKENS["PEPE"], "to": who, "amount": "100000000000000"}, start)
 
-    usd = {"wQRDX": QRDX_USD, "qBTC": BTC_USD, "qUSDC": D(1), "qETH": ETH_USD, "PEPE": D("0.0000071")}
+    usd = {"wQRDX": QRDX_USD, "QRDX": QRDX_USD, "qBTC": BTC_USD, "qUSDC": D(1), "qETH": ETH_USD, "PEPE": D("0.0000071")}
+    # Native QRDX trades directly (no wrapping): spot names it "QRDX", which sorts after addresses.
+    addr = lambda sym: "QRDX" if sym == "QRDX" else TOKENS[sym]  # noqa: E731
     pairs = [("qBTC", "qUSDC", 3000, "40000000"), ("wQRDX", "qUSDC", 3000, "60000000"),
              ("wQRDX", "qBTC", 3000, "200000"), ("qETH", "qUSDC", 500, "30000000"),
-             ("PEPE", "qUSDC", 10000, "20000000")]
+             ("PEPE", "qUSDC", 10000, "20000000"),
+             ("QRDX", "qUSDC", 3000, "8000000"), ("PEPE", "QRDX", 10000, "2000000")]
     pool_ids = {}
     for a, b, tier, usd_depth in pairs:
-        ta, tb = TOKENS[a], TOKENS[b]
+        ta, tb = addr(a), addr(b)
         t0, t1 = (ta, tb) if ta < tb else (tb, ta)
         s0, s1 = (a, b) if t0 == ta else (b, a)
         price = (usd[s0] / usd[s1])  # token1 per token0
@@ -266,7 +271,7 @@ def seed():
         notional = D(rng.randint(200, 20000))
         amt = (notional / usd[tin]).quantize(D("1e-6"))
         try:
-            run(who, ExchangeOpType.SWAP, {"token_in": TOKENS[tin], "token_out": TOKENS[tout],
+            run(who, ExchangeOpType.SWAP, {"token_in": addr(tin), "token_out": addr(tout),
                                            "amount_in": str(amt), "venue": "amm"}, t)
         except RuntimeError as e:
             print("seed swap skipped:", e)
@@ -277,7 +282,7 @@ def seed():
         st = mgr.pool_manager.get_pool(pid).state
         pair = f"{st.token0}:{st.token1}"
         mid = st.price
-        sym0 = a if TOKENS[a] == st.token0 else b
+        sym0 = a if addr(a) == st.token0 else b
         unit = (D(2000) / usd[sym0])
         for i, maker in enumerate(MAKERS):
             for k in range(1, 6):
@@ -380,6 +385,16 @@ def send_transaction(tx, propagated=False):
 
 
 METHODS["exchange_sendTransaction"] = send_transaction
+
+# Market data built from the blocks (qrdx-node docs/PERPS_API.md §8).
+METHODS.update({
+    "market_getMarkets": lambda kind=None: views.market_tickers(mgr, kind),
+    "market_getTicker": lambda market: views.market_ticker(mgr, market),
+    "market_getOrderBook": lambda market, depth=50, level=2: views.market_book(mgr, market, depth, level),
+    "market_getTrades": lambda market, limit=100, since=None: views.market_trades(mgr, market, limit, since),
+    "market_getCandles": lambda market, interval="1m", limit=200, end=None:
+        views.market_candles(mgr, market, interval, limit, end),
+})
 
 
 def faucet(address):

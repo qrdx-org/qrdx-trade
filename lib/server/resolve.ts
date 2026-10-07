@@ -10,7 +10,9 @@
 
 import {
   AssetRef,
+  NATIVE_QRDX,
   VERIFIED_ASSETS,
+  assetId,
   VerifiedAsset,
   addressColor,
   isTokenAddress,
@@ -25,8 +27,8 @@ import type { NodeToken } from './node'
 
 export interface TokenIndex {
   byAddress: Map<string, NodeToken>
-  /** slug → token for verified assets listed on this network. */
-  verified: Map<string, NodeToken | { token_address: string; pinnedOnly: true }>
+  /** slug → token for verified assets listed on this network (native QRDX: "QRDX"). */
+  verified: Map<string, NodeToken | { token_address: string; pinnedOnly: true } | { token_address: string; native: true }>
   /** lower-case token address → slug */
   slugByAddress: Map<string, string>
   /** false when the node could not be read; verified assets then have no address. */
@@ -42,6 +44,11 @@ function buildIndex(tokens: NodeToken[], cfg: ServerConfig): TokenIndex {
   const verified: TokenIndex['verified'] = new Map()
   const slugByAddress = new Map<string, string>()
   for (const asset of VERIFIED_ASSETS) {
+    if (asset.native) {
+      verified.set(asset.slug, { token_address: NATIVE_QRDX, native: true })
+      slugByAddress.set(NATIVE_QRDX.toLowerCase(), asset.slug)
+      continue
+    }
     const pinned = cfg.pinnedAssets[asset.slug] ?? asset.addresses?.[cfg.id]?.toLowerCase()
     if (pinned) {
       verified.set(asset.slug, byAddress.get(pinned) ?? { token_address: pinned, pinnedOnly: true })
@@ -85,7 +92,7 @@ export function verifiedRef(asset: VerifiedAsset, idx: TokenIndex): AssetRef {
     symbol: asset.symbol,
     name: asset.name,
     verified: true,
-    address: token ? token.token_address.toLowerCase() : null,
+    address: token ? assetId(token.token_address) : null,
     onChainSymbol: token && 'symbol' in token ? token.symbol : asset.onChainSymbol,
     decimals: token && 'decimals' in token ? token.decimals : asset.decimals,
     color: asset.color,

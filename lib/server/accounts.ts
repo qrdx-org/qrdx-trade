@@ -3,7 +3,7 @@
  * pools, and swap / liquidity quotes.
  */
 
-import { VERIFIED_ASSETS, isTokenAddress, marketPath, preferredOrder } from '../assets'
+import { VERIFIED_ASSETS, isNativeAsset, isTokenAddress, marketPath, preferredOrder } from '../assets'
 import { S, dec, mul, str } from '../decimal'
 import { isInverted, orientPrice } from '../pairs'
 import type { AccountResponse, ApiAsset, SwapQuote } from '../types'
@@ -56,7 +56,8 @@ export async function account(net: Net, address: string, extraTokens: string[]):
   const balances = await mapLimit([...tokens], BALANCE_CONCURRENCY, async (t) => ({
     t,
     // The node may write small balances in exponent form ("2.82E-16"); clients expect plain decimals.
-    balance: str(dec(await node.tokenBalance(t, address).catch(() => '0'))),
+    // Native QRDX is the account's own balance (eth_getBalance), not a token-ledger entry.
+    balance: str(dec(await (isNativeAsset(t) ? node.nativeBalance(address) : node.tokenBalance(t, address)).catch(() => '0'))),
   }))
 
   // Funds escrowed by resting orders: buys hold quote (token1) at their price, sells hold base.
