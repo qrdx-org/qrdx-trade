@@ -20,6 +20,7 @@ import { useApi } from '@/lib/hooks/useApi'
 import type { AccountResponse, OrderBook, SpotMarket, TradesResponse } from '@/lib/types'
 import { onPendingChange } from '@/lib/wallet/pending'
 import { useNet, useWallet } from '@/lib/wallet/WalletContext'
+import { explorerLink } from '@/lib/config'
 import { cn } from '@/lib/utils'
 
 export function useAccount(): ReturnType<typeof useApi<AccountResponse>> {
@@ -137,7 +138,7 @@ export function SpotTradeView({ base, quote }: { base: string; quote: string }) 
         right={
           m.base.address && !m.base.verified ? (
             <a
-              href={`${network.explorerUrl}/address/${m.base.address}`}
+              href={explorerLink(network, 'address', m.base.address)}
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center gap-1 rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"

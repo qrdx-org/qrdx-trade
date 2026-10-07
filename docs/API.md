@@ -352,6 +352,45 @@ transactions).
   `amount`); `pair` and `orderId` are what `CANCEL_ORDER` takes.
 - `exchangeNonce` counts committed operations only.
 
+### `GET /api/v1/accounts/{address}/pnl`
+
+Trading PnL, rebuilt from the node's market data (cached 10 s).
+
+```json
+{ "address": "0xPQ…",
+  "totals": { "realizedUsd": "182.4", "unrealizedUsd": "-12.9", "pnlUsd": "169.5",
+              "volumeUsd": "10420.0", "trades": 41, "wins": 7, "losses": 3,
+              "unpriced": [] },
+  "series": [ { "time": 1791219332, "realizedUsd": "-0.29" }, … ],
+  "markets": [ { "kind": "spot", "market": "CLAV/wQRDX", "path": "/trade/0x…/wqrdx",
+                 "unit": "wQRDX", "trades": 12, "wins": 2, "losses": 1,
+                 "volume": "183040.1", "volumeUsd": "…",
+                 "realized": "69721.97", "realizedUsd": "…",
+                 "unrealized": "68512.4", "unrealizedUsd": "…",
+                 "position": "748785125", "positionSymbol": "CLAV",
+                 "avgCost": "0.00011957" } ],
+  "perpUnit": "QRDX",
+  "window": { "from": 1791219332, "truncated": false },
+  "source": "node", "asOf": … }
+```
+
+- **Spot**: the account's fills on every spot market (`market_getTrades` rows
+  where it is the maker or the taker: book fills and pool swaps), on an
+  average-cost basis per market in the market's quote token (`unit`). A sell
+  realizes `(price − average cost) × amount`; what is still held is marked at the
+  last price. Amounts are in the node's canonical pair, so `position` is in
+  `positionSymbol` and `avgCost` in `unit` per one of it.
+- **Perps**: every fill the account was in (`perp_getEvents`) with the PnL the
+  clearinghouse realized on it, in collateral units (`perpUnit`); open
+  positions' unrealized PnL at mark.
+- `series` is cumulative realized PnL in USD at each realization's block time.
+- USD values use **today's** USD prices (`/prices`), not the price at the time;
+  markets whose quote has no USD price are listed in `unpriced` and left out of
+  the USD totals.
+- Bounded by what the node keeps: the newest 1000 trades per market and 1000
+  perps events (`window.truncated`). Selling inventory bought before the window
+  (or received by transfer) realizes nothing.
+
 ### `GET /api/v1/receipts/{txHash}`
 
 The node's exchange receipt (`success`, `error`, `block_height`, `data` with
@@ -430,6 +469,8 @@ verified assets by default).
   way. `change24h` is the change of the routed price from pool history, `null`
   until every hop has history.
 - An asset with neither is `null`: no public price and no pool path to one.
+- A verified asset's token address is priced as its slug, keyed by the address
+  as requested.
 
 ### `GET /api/v1/prices/{asset}`
 

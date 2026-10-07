@@ -318,3 +318,50 @@ export interface Launch {
     volume24h: string | null
   } | null
 }
+
+/** One market's PnL for an account (`/accounts/{address}/pnl`). Amounts in `unit`, the market's quote token (perps: collateral). */
+export interface PnlMarket {
+  kind: 'spot' | 'perp'
+  /** Display name, e.g. "WQRDX/USDC" or "BTC-USD-PERP". */
+  market: string
+  path: string
+  unit: string
+  trades: number
+  /** Fills that realized a profit / a loss. */
+  wins: number
+  losses: number
+  volume: string
+  volumeUsd: string | null
+  realized: string
+  realizedUsd: string | null
+  unrealized: string
+  unrealizedUsd: string | null
+  /** Spot: base still held from this window's buys; perps: signed position size. */
+  position: string
+  positionSymbol: string
+  /** Spot: average cost of what is held; perps: entry price. */
+  avgCost: string | null
+}
+
+export interface PnlResponse {
+  address: string
+  totals: {
+    realizedUsd: string
+    unrealizedUsd: string
+    pnlUsd: string
+    volumeUsd: string
+    trades: number
+    wins: number
+    losses: number
+    /** Markets whose quote token has no USD price: left out of the USD totals. */
+    unpriced: string[]
+  }
+  /** Cumulative realized PnL in USD, at each realization's block time. */
+  series: { time: number; realizedUsd: string }[]
+  markets: PnlMarket[]
+  perpUnit: string
+  /** The oldest realization seen, and whether the node's trade window cut history off. */
+  window: { from: number | null; truncated: boolean }
+  source: 'node'
+  asOf: number
+}

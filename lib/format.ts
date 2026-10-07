@@ -53,7 +53,8 @@ export function compact(value: string | number | null | undefined, prefix = ''):
   const n = Number(value)
   if (!Number.isFinite(n)) return '—'
   const a = Math.abs(n)
-  const [d, s] = a >= 1e12 ? [1e12, 'T'] : a >= 1e9 ? [1e9, 'B'] : a >= 1e6 ? [1e6, 'M'] : a >= 1e3 ? [1e3, 'K'] : [1, '']
+  if (a >= 1e18) return `${n < 0 ? '-' : ''}${prefix}${a.toExponential(2)}`
+  const [d, s] = a >= 1e15 ? [1e15, 'Q'] : a >= 1e12 ? [1e12, 'T'] : a >= 1e9 ? [1e9, 'B'] : a >= 1e6 ? [1e6, 'M'] : a >= 1e3 ? [1e3, 'K'] : [1, '']
   return `${n < 0 ? '-' : ''}${prefix}${(a / d).toFixed(a >= 1e3 ? 2 : a >= 1 ? 2 : 4)}${s}`
 }
 

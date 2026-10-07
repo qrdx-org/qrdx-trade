@@ -208,6 +208,8 @@ export interface NodeFillEvent {
   buyer: string
   seller: string
   maker: string
+  /** Realized PnL of each side of the fill, in collateral units (perp_getEvents fills). */
+  realized?: Record<string, string>
 }
 
 export interface NodeReceipt {
@@ -402,6 +404,9 @@ export function createNodeClient(cfg: ServerConfig) {
     perpBook: (id: string, depth: number) => maybe<NodePerpBook>(cfg, 'perp_getOrderBook', [id, depth]),
     perpAccount: (address: string) => rpc<NodePerpAccount>(cfg, 'perp_getAccount', [address]),
     perpTrades: (id: string, limit: number) => rpc<NodeFillEvent[]>(cfg, 'perp_getTrades', [id, limit]),
+    /** An account's perps fills (buyer or seller), newest last; each carries its realized PnL. */
+    perpFills: (address: string, limit: number) =>
+      rpc<{ events: NodeFillEvent[]; last_seq: number }>(cfg, 'perp_getEvents', [null, address, ['fill'], null, limit]),
 
     /** Native QRDX of an account, in QRDX (eth_getBalance is in wei). Spot and perps spend it directly. */
     nativeBalance: async (address: string): Promise<string> => {

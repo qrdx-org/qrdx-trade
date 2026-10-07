@@ -11,6 +11,7 @@ import { compact, price as fmtPrice, usd } from '@/lib/format'
 import { apiGet, useApi, useDebounced } from '@/lib/hooks/useApi'
 import type { PerpMarket } from '@/lib/types'
 import { useNet, useWallet } from '@/lib/wallet/WalletContext'
+import { ExplorerLink } from '@/components/trade/ExplorerLink'
 import { cn } from '@/lib/utils'
 
 interface Check {
@@ -335,7 +336,7 @@ function Progress({
   const order: Stage[] = ['signing', 'block', 'created', 'priced']
   const at = stage === 'failed' ? -1 : order.indexOf(stage)
   const steps = [
-    { label: 'Signed and submitted', detail: `Transaction ${created.tx.slice(0, 12)}…` },
+    { label: 'Signed and submitted', detail: <ExplorerLink kind="tx" id={created.tx} label={`Transaction ${created.tx.slice(0, 12)}…`} /> },
     { label: 'Included in a block', detail: 'Blocks are about 3 minutes apart.' },
     { label: 'Market created', detail: `${created.marketId}, up to ${lev}× leverage` },
     { label: 'First oracle price', detail: 'Validators vote it in their next blocks; then it trades.' },

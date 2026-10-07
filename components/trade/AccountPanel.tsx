@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { PanelTabs } from '@/components/trade/Panel'
 import { ConnectDialog } from '@/components/wallet/ConnectButton'
 import { TokenBadge } from '@/components/trade/TokenBadge'
+import { ExplorerLink } from '@/components/trade/ExplorerLink'
 import { fixed, price as fmtPrice, size as fmtSize, timeAgo } from '@/lib/format'
 import type { AccountResponse } from '@/lib/types'
 import { usePendingTxs } from '@/lib/wallet/pending'
@@ -84,7 +85,15 @@ export function BalancesTable({ account }: { account: AccountResponse | null }) 
             <td className="px-3 py-1.5">{fmtSize(b.balance)}</td>
             <td className="px-3 py-1.5 text-muted-foreground">{fmtSize(b.inOrders)}</td>
             <td className="px-3 py-1.5 text-left font-mono text-muted-foreground hidden md:table-cell">
-              {b.asset.address ? `${b.asset.address.slice(0, 10)}…` : 'not on this network'}
+              {b.asset.address ? (
+                b.asset.address === 'QRDX' ? (
+                  'native'
+                ) : (
+                  <ExplorerLink id={b.asset.address} label={`${b.asset.address.slice(0, 10)}…`} className="font-mono" />
+                )
+              ) : (
+                'not on this network'
+              )}
             </td>
           </tr>
         ))}
@@ -158,7 +167,6 @@ export function SpotOrdersTable({ account, onlyMarket }: { account: AccountRespo
 }
 
 function Transactions({ txs }: { txs: ReturnType<typeof usePendingTxs>['txs'] }) {
-  const explorer = useNet().network.explorerUrl
   if (!txs.length) return <p className="p-6 text-center text-xs text-muted-foreground">Nothing submitted from this browser yet.</p>
   return (
     <table className="w-full text-xs">
@@ -186,9 +194,7 @@ function Transactions({ txs }: { txs: ReturnType<typeof usePendingTxs>['txs'] })
             </td>
             <td className="px-3 py-1.5 text-right text-muted-foreground whitespace-nowrap">
               {timeAgo(t.submittedAt)}
-              <a href={`${explorer}/tx/${t.txHash}`} target="_blank" rel="noopener noreferrer" className="ml-2 inline-flex" aria-label="Explorer">
-                <ExternalLink className="h-3 w-3" />
-              </a>
+              <ExplorerLink kind="tx" id={t.txHash} className="ml-2" />
             </td>
           </tr>
         ))}

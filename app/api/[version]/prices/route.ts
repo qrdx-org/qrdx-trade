@@ -1,7 +1,7 @@
-import { VERIFIED_ASSETS } from '@/lib/assets'
+import { VERIFIED_ASSETS, isTokenAddress } from '@/lib/assets'
 import { ApiError, handler, json, nowSec, options } from '@/lib/server/http'
 import { netFromVersion } from '@/lib/server/net'
-import { resolveSegment } from '@/lib/server/resolve'
+import { refForAddress, resolveSegment, tokenIndex } from '@/lib/server/resolve'
 import { usdQuote } from '@/lib/server/usd'
 
 export const runtime = 'edge'
@@ -18,7 +18,9 @@ export const GET = handler(async (req, { params }: { params: Promise<{ version: 
   const entries = await Promise.all(
     segments.map(async (seg) => {
       try {
-        const { ref } = await resolveSegment(net, seg)
+        // A verified asset's token address prices like its slug (resolveSegment would redirect it).
+        const verified = isTokenAddress(seg) ? (await tokenIndex(net)).slugByAddress.has(seg) : false
+        const ref = verified ? refForAddress(seg, await tokenIndex(net)) : (await resolveSegment(net, seg)).ref
         return [seg, await usdQuote(net, ref.address, ref.slug)] as const
       } catch {
         return [seg, null] as const

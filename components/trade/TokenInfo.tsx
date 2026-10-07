@@ -9,6 +9,8 @@ import { compact, percent, tone, usd } from '@/lib/format'
 import { useApi } from '@/lib/hooks/useApi'
 import type { ApiAsset, IndexPrice, PoolSummary } from '@/lib/types'
 import { useNet } from '@/lib/wallet/WalletContext'
+import { explorerLink } from '@/lib/config'
+import { ExplorerLink } from '@/components/trade/ExplorerLink'
 import { cn } from '@/lib/utils'
 
 interface AssetDetail extends ApiAsset {
@@ -89,7 +91,7 @@ function AssetCard({ asset }: { asset: ApiAsset }) {
         )}
       </div>
       <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-xs">
-        <Row k="Contract">{asset.address ? <Address value={asset.address} href={`${network.explorerUrl}/address/${asset.address}`} /> : 'not on this network'}</Row>
+        <Row k="Contract">{asset.address ? <Address value={asset.address} href={explorerLink(network, 'address', asset.address)} /> : 'not on this network'}</Row>
         <Row k="Decimals">{asset.decimals}</Row>
         {t && (
           <>
@@ -102,7 +104,7 @@ function AssetCard({ asset }: { asset: ApiAsset }) {
             </Row>
             <Row k="Freezing">{t.freezeAuthority ? <span className="text-warn">possible</span> : 'none'}</Row>
             <Row k="Created">
-              block {t.createdHeight.toLocaleString()} by {shortAddress(t.creator, 4)}
+              block {t.createdHeight.toLocaleString()} by <ExplorerLink id={t.creator} label={shortAddress(t.creator, 4)} className="font-mono" />
             </Row>
           </>
         )}

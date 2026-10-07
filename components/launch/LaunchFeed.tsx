@@ -9,6 +9,7 @@ import { compact, percent, price as fmtPrice, tone } from '@/lib/format'
 import { useApi } from '@/lib/hooks/useApi'
 import type { Launch } from '@/lib/types'
 import { useNet } from '@/lib/wallet/WalletContext'
+import { ExplorerLink } from '@/components/trade/ExplorerLink'
 import { cn } from '@/lib/utils'
 
 type Sort = 'new' | 'cap' | 'volume'
@@ -112,7 +113,7 @@ function LaunchCard({ l, height }: { l: Launch; height: number | null }) {
           <Flag icon={<ShieldCheck className="h-3 w-3" />} text="Not freezable" good />
         )}
         <span className="ml-auto text-muted-foreground">
-          by {shortAddress(l.creator, 4)}
+          by <ExplorerLink id={l.creator} label={shortAddress(l.creator, 4)} className="inline-flex font-mono" />
           {height !== null ? ` · ${blocksAgo(height - l.createdHeight)}` : ''}
         </span>
       </div>

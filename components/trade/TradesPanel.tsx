@@ -3,6 +3,8 @@
 import { clock, price as fmtPrice, size as fmtSize } from '@/lib/format'
 import type { TradesResponse } from '@/lib/types'
 import { cn } from '@/lib/utils'
+import { explorerLink } from '@/lib/config'
+import { useNet } from '@/lib/wallet/WalletContext'
 
 /** Recent executions, newest first. */
 export function TradesPanel({
@@ -19,6 +21,7 @@ export function TradesPanel({
   note?: string
 }) {
   const ref = Number(data?.trades[0]?.price ?? 1)
+  const { network } = useNet()
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="grid grid-cols-3 px-3 pb-1.5 pt-3 text-right text-[11px] text-muted-foreground">
@@ -41,7 +44,19 @@ export function TradesPanel({
                 {t.liquidation ? ' ⚡' : ''}
               </span>
               <span>{fmtSize(t.size)}</span>
-              <span className="text-muted-foreground">{clock(t.time)}</span>
+              {t.txHash ? (
+                <a
+                  href={explorerLink(network, 'tx', t.txHash)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-muted-foreground hover:text-foreground hover:underline"
+                  title="Open in explorer"
+                >
+                  {clock(t.time)}
+                </a>
+              ) : (
+                <span className="text-muted-foreground">{clock(t.time)}</span>
+              )}
             </div>
           ))
         )}

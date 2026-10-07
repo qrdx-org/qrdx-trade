@@ -84,6 +84,14 @@ export function slotNetwork(slot: Slot): NetworkConfig {
 
 export const apiBase = (slot: Slot) => `/api/${API_VERSION[slot]}`
 
+/**
+ * A page of the network's block explorer: an address (accounts and tokens alike) or
+ * a transaction. The explorer serves every network; `?network=` picks this one.
+ */
+export function explorerLink(network: NetworkConfig, kind: 'address' | 'tx', id: string): string {
+  return `${network.explorerUrl}/${kind}/${id}?network=${network.id}`
+}
+
 export function slotFromVersion(version: string): Slot | null {
   return (Object.keys(API_VERSION) as Slot[]).find((s) => API_VERSION[s] === version) ?? null
 }

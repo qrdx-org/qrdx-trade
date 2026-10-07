@@ -26,7 +26,7 @@ type Kind = 'candles' | 'area'
 const KIND_KEY = 'qrdx-trade:chart-kind'
 
 /** A theme variable ("158 64% 36%") as rgba(), which the chart's colour parser accepts. */
-function cssColor(name: string, alpha = 1): string {
+export function cssColor(name: string, alpha = 1): string {
   if (typeof window === 'undefined') return 'rgba(136,136,136,1)'
   const m = /([\d.]+)\s+([\d.]+)%\s+([\d.]+)%/.exec(getComputedStyle(document.documentElement).getPropertyValue(name))
   if (!m) return `rgba(136,136,136,${alpha})`
