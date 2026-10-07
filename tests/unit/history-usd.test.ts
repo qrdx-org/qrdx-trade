@@ -72,6 +72,7 @@ describe('USD through pools', () => {
     verified: new Map([['qrdx', tok(QRDX, 'WQRDX')], ['btc', tok(BTC, 'qBTC')]]),
     slugByAddress: new Map([[QRDX, 'qrdx'], [BTC, 'btc']]),
     nodeOk: true,
+    profiles: new Map(),
   }
   const pool = (id: string, token0: string, token1: string, price: string): NodePool =>
     ({ pool_id: id, token0, token1, price, liquidity: '1000', positions: 1, paused: false, fee_tier: 3000, fee_rate: '0.003' }) as unknown as NodePool

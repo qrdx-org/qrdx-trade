@@ -7,31 +7,10 @@
 import type { HistoryCandle, HistoryStats } from '../../relay/src/history'
 import { cached } from './cache'
 import type { Net } from './net'
+import { relayGet } from './relay-service'
 
-const TIMEOUT_MS = 6_000
-
-type Fetcher = { fetch: (req: Request) => Promise<Response> }
-
-/**
- * On Cloudflare the worker is reached through the HISTORY_SERVICE binding
- * (wrangler.jsonc): a Pages function cannot fetch() a worker routed on its own
- * zone. Elsewhere (local development) there is no binding and the URL is used.
- */
-function historyService(): Fetcher | null {
-  // next-on-pages keeps the request's bindings here (what its getRequestContext reads;
-  // importing that pulls in `server-only`, which the unit tests cannot load).
-  const ctx = (globalThis as Record<symbol, { env?: Record<string, unknown> } | undefined>)[Symbol.for('__cloudflare-request-context__')]
-  const svc = ctx?.env?.HISTORY_SERVICE as Fetcher | undefined
-  return svc && typeof svc.fetch === 'function' ? svc : null
-}
-
-async function get<T>(net: Net, path: string): Promise<T> {
-  const url = `${net.cfg.historyUrl}/v1/${net.cfg.id}/${path}`
-  const svc = historyService()
-  const req = new Request(url, { signal: AbortSignal.timeout(TIMEOUT_MS), cache: 'no-store' })
-  const res = await (svc ? svc.fetch(req) : fetch(req))
-  if (!res.ok) throw new Error(`history ${svc ? '(binding) ' : ''}HTTP ${res.status} for ${path.split('?')[0]}`)
-  return (await res.json()) as T
+function get<T>(net: Net, path: string): Promise<T> {
+  return relayGet<T>(`${net.cfg.historyUrl}/v1/${net.cfg.id}/${path}`, `history ${path.split('?')[0]}`)
 }
 
 const warned = new Set<string>()

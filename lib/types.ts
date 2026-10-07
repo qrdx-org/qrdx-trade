@@ -20,6 +20,8 @@ export interface ApiAsset {
   color: string
   /** Verified asset with a token on this network. Unverified tokens are always listed. */
   listed: boolean
+  /** The image the token's creator published (docs/PROFILES.md), served by the relay; null when none. */
+  image: string | null
 }
 
 export interface IndexPrice {

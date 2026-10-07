@@ -1,3 +1,6 @@
+'use client'
+
+import { useState } from 'react'
 import { cn } from '@/lib/utils'
 import type { ApiAsset } from '@/lib/types'
 
@@ -14,24 +17,45 @@ type Size = keyof typeof SIZES
 const LOGOS = new Set(['qrdx', 'btc', 'eth', 'usdc', 'usdt', 'sol', 'bnb', 'avax', 'link', 'uni', 'ada', 'dot', 'doge'])
 
 /**
- * A token's mark: the asset's logo when it is verified and has one, otherwise a
- * coloured disc with the ticker's initials. Unverified tokens always get the disc
- * and a dashed warning ring, so a copycat can never borrow a real logo.
+ * A token's mark: the asset's logo when it is verified and has one; else the image
+ * its creator published (docs/PROFILES.md), when there is one; else a coloured disc
+ * with the ticker's initials. Unverified tokens always keep a dashed warning ring,
+ * image or not, so a copycat that borrows a real logo still looks unverified.
  */
 export function TokenBadge({
   asset,
   size = 'sm',
   className,
 }: {
-  asset: (Pick<ApiAsset, 'symbol' | 'color' | 'verified'> & { slug?: string | null }) | null | undefined
+  asset: (Pick<ApiAsset, 'symbol' | 'color' | 'verified'> & { slug?: string | null; image?: string | null }) | null | undefined
   size?: Size
   className?: string
 }) {
+  const [broken, setBroken] = useState<string | null>(null)
   const slug = asset?.verified ? asset.slug ?? logoSlug(asset.symbol) : null
   if (slug && LOGOS.has(slug)) {
     return (
       // eslint-disable-next-line @next/next/no-img-element
       <img src={`/tokens/${slug}.svg`} alt="" aria-hidden className={cn('shrink-0 rounded-full bg-background select-none', SIZES[size], className)} />
+    )
+  }
+  if (asset?.image && broken !== asset.image) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={asset.image}
+        alt=""
+        aria-hidden
+        loading="lazy"
+        referrerPolicy="no-referrer"
+        onError={() => setBroken(asset.image ?? null)}
+        className={cn(
+          'shrink-0 rounded-full bg-muted object-cover select-none',
+          SIZES[size],
+          !asset.verified && 'outline-1 outline-dashed outline-offset-1 outline-warn',
+          className
+        )}
+      />
     )
   }
   const label = (asset?.symbol ?? '?').replace(/^0x/, '').replace(/^[qw](?=[A-Z])/, '').slice(0, 3)

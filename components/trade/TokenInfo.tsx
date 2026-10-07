@@ -8,6 +8,7 @@ import { shortAddress } from '@/lib/assets'
 import { compact, percent, tone, usd } from '@/lib/format'
 import { useApi } from '@/lib/hooks/useApi'
 import type { ApiAsset, IndexPrice, PoolSummary } from '@/lib/types'
+import { socialLinks, type ProfileFields } from '@/relay/src/profile-claim'
 import { useNet } from '@/lib/wallet/WalletContext'
 import { explorerLink } from '@/lib/config'
 import { ExplorerLink } from '@/components/trade/ExplorerLink'
@@ -23,6 +24,8 @@ interface AssetDetail extends ApiAsset {
     createdHeight: number
   } | null
   index: IndexPrice | null
+  /** What the token's creator published (docs/PROFILES.md); signed by them, not checked. */
+  profile: (ProfileFields & { signer: string; updatedAt: number }) | null
 }
 
 /** The Info tab: both tokens of the market as the chain records them, and its pools. */
@@ -110,6 +113,21 @@ function AssetCard({ asset }: { asset: ApiAsset }) {
         )}
         <Row k="Status">{asset.verified ? 'Verified asset' : <span className="text-warn">Unverified: check the contract</span>}</Row>
       </dl>
+      {data?.profile && (data.profile.description || socialLinks(data.profile).length > 0) && (
+        <div className="mt-3 border-t pt-3">
+          <div className="text-[11px] text-muted-foreground">From the creator · signed by them, not checked by QRDX</div>
+          {data.profile.description && <p className="mt-1 whitespace-pre-line break-words text-xs leading-relaxed">{data.profile.description}</p>}
+          {socialLinks(data.profile).length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1">
+              {socialLinks(data.profile).map((l) => (
+                <a key={l.kind} href={l.url} target="_blank" rel="noopener noreferrer nofollow ugc" className="inline-flex items-center gap-1 text-xs text-primary hover:underline">
+                  {l.label} <ExternalLink className="h-3 w-3" />
+                </a>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }

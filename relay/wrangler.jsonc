@@ -1,18 +1,20 @@
 {
-  // The trade site's stateful services: the QRDX Connect relay (docs/CONNECT.md) and
-  // market history (docs/ARCHITECTURE.md §12). Deployed by pnpm build:worker / relay:deploy.
+  // The trade site's stateful services: the QRDX Connect relay (docs/CONNECT.md),
+  // market history (docs/ARCHITECTURE.md §12) and public profiles (docs/PROFILES.md). Deployed by pnpm build:worker / relay:deploy.
   "name": "qrdx-relay",
   "main": "src/worker.ts",
   "compatibility_date": "2025-11-01",
   "durable_objects": {
     "bindings": [
       { "name": "RELAY", "class_name": "RelaySession" },
-      { "name": "HISTORY", "class_name": "MarketHistory" }
+      { "name": "HISTORY", "class_name": "MarketHistory" },
+      { "name": "PROFILES", "class_name": "Profiles" }
     ]
   },
   "migrations": [
     { "tag": "v1", "new_sqlite_classes": ["RelaySession"] },
-    { "tag": "v2", "new_sqlite_classes": ["MarketHistory"] }
+    { "tag": "v2", "new_sqlite_classes": ["MarketHistory"] },
+    { "tag": "v3", "new_sqlite_classes": ["Profiles"] }
   ],
   // Record every network's pools once a minute.
   "triggers": { "crons": ["* * * * *"] },
@@ -23,7 +25,8 @@
   // (the qrdx.org zone must be on the account that deploys this).
   "routes": [
     { "pattern": "trade.qrdx.org/api/relay/*", "zone_name": "qrdx.org" },
-    { "pattern": "trade.qrdx.org/api/history/*", "zone_name": "qrdx.org" }
+    { "pattern": "trade.qrdx.org/api/history/*", "zone_name": "qrdx.org" },
+    { "pattern": "trade.qrdx.org/api/profiles/*", "zone_name": "qrdx.org" }
   ],
   "observability": { "enabled": true }
 }

@@ -6,6 +6,9 @@
  *  - Market history (ARCHITECTURE.md §12): a cron samples every pool of each
  *    network once a minute into a SQLite Durable Object per network, served
  *    under trade.qrdx.org/api/history/*.
+ *  - Public profiles (docs/PROFILES.md): names, images and links that owners of
+ *    accounts and creators of tokens publish with a signature, one SQLite
+ *    Durable Object per network, under trade.qrdx.org/api/profiles/*.
  *
  * Any path prefix before /v1/ is accepted, so it also works on its own hostname.
  *
@@ -18,12 +21,14 @@
 import { DurableObject } from 'cloudflare:workers'
 import { RelayError, RelayHub, SESSION_TTL_MS, Side, isSide, isTopic, other } from './hub'
 import { MarketHistory, historyFetch, sampleAll } from './history-do'
+import { Profiles, profilesFetch } from './profiles-do'
 
-export { MarketHistory }
+export { MarketHistory, Profiles }
 
 export interface Env {
   RELAY: DurableObjectNamespace<RelaySession>
   HISTORY: DurableObjectNamespace<MarketHistory>
+  PROFILES: DurableObjectNamespace<Profiles>
   /** JSON {"mainnet": "<rpc url>", "testnet": "<rpc url>"}: the networks to record. */
   NETWORKS: string
 }
@@ -35,8 +40,12 @@ const CORS = {
   'Access-Control-Max-Age': '86400',
 }
 
-export const json = (body: unknown, status = 200) =>
-  new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store', ...CORS } })
+/** `maxAge` (seconds) lets browsers and the edge cache a read; the default is no-store. */
+export const json = (body: unknown, status = 200, maxAge = 0) =>
+  new Response(JSON.stringify(body), {
+    status,
+    headers: { 'content-type': 'application/json', 'cache-control': maxAge ? `public, max-age=${maxAge}` : 'no-store', ...CORS },
+  })
 
 const ROUTE = /\/v1\/([0-9a-f]{64})(?:\/(ws|messages))?\/?$/
 
@@ -45,6 +54,7 @@ export default {
     if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS })
     const url = new URL(req.url)
     if (url.pathname.includes('/history/')) return historyFetch(req, env)
+    if (url.pathname.includes('/profiles/')) return profilesFetch(req, env)
     if (/\/v1\/?$/.test(url.pathname)) return json({ name: 'QRDX Connect relay', version: 1 })
     const m = ROUTE.exec(url.pathname)
     if (!m || !isTopic(m[1])) return json({ error: 'not found' }, 404)

@@ -243,6 +243,8 @@ export interface AssetRef {
   color: string
   quoteRank: number
   usdStable: boolean
+  /** The token creator's image (profiles), proxied; null for none and for verified assets, which have logos. */
+  image: string | null
 }
 
 export function shortAddress(a: string, chars = 4): string {

@@ -15,7 +15,7 @@ export const GET = handler(async (req, { params }: { params: Promise<{ version: 
     ? [...idx.byAddress.values()]
         .filter((t) => !idx.slugByAddress.has(t.token_address.toLowerCase()))
         .map((t) => ({
-          ...apiAsset(unverifiedRef(t.token_address, t)),
+          ...apiAsset(unverifiedRef(t.token_address, t, idx.profiles.get(t.token_address.toLowerCase()))),
           totalSupply: t.total_supply,
           maxSupply: t.max_supply,
           creator: t.creator,

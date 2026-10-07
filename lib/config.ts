@@ -109,6 +109,8 @@ export interface ServerConfig extends NetworkConfig {
   indexBlocks: boolean
   /** Market history service base URL (…/api/history). */
   historyUrl: string
+  /** Public profiles service base URL (…/api/profiles). */
+  profilesUrl: string
 }
 
 /** A slot's network with its server-side overrides. Call only from route handlers / lib/server. */
@@ -136,5 +138,6 @@ export function serverConfig(slot: Slot): ServerConfig {
     ),
     indexBlocks: env('INDEX_BLOCKS') ? env('INDEX_BLOCKS') === '1' : base.id === 'local',
     historyUrl: (process.env.QRDX_HISTORY_URL || 'https://trade.qrdx.org/api/history').replace(/\/$/, ''),
+    profilesUrl: (process.env.QRDX_PROFILES_URL || 'https://trade.qrdx.org/api/profiles').replace(/\/$/, ''),
   }
 }

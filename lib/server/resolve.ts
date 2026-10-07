@@ -24,6 +24,7 @@ import { cached } from './cache'
 import { ApiError, Redirect } from './http'
 import type { Net } from './net'
 import type { NodeToken } from './node'
+import { TokenProfile, tokenProfiles } from './profiles'
 
 export interface TokenIndex {
   byAddress: Map<string, NodeToken>
@@ -33,9 +34,11 @@ export interface TokenIndex {
   slugByAddress: Map<string, string>
   /** false when the node could not be read; verified assets then have no address. */
   nodeOk: boolean
+  /** Profiles token creators published, by lower-case address. */
+  profiles: Map<string, TokenProfile>
 }
 
-function buildIndex(tokens: NodeToken[], cfg: ServerConfig): TokenIndex {
+function buildIndex(tokens: NodeToken[], cfg: ServerConfig, profiles: Map<string, TokenProfile>): TokenIndex {
   const byAddress = new Map(tokens.map((t) => [t.token_address.toLowerCase(), t]))
   const issuers = new Set(cfg.verifiedIssuers.map((a) => a.toLowerCase()))
   // A local dev chain has no issuers to trust; match by symbol there and only there.
@@ -67,16 +70,17 @@ function buildIndex(tokens: NodeToken[], cfg: ServerConfig): TokenIndex {
       slugByAddress.set(matches[0].token_address.toLowerCase(), asset.slug)
     }
   }
-  return { byAddress, verified, slugByAddress, nodeOk: true }
+  return { byAddress, verified, slugByAddress, nodeOk: true, profiles }
 }
 
-const EMPTY: TokenIndex = { byAddress: new Map(), verified: new Map(), slugByAddress: new Map(), nodeOk: false }
+const EMPTY: TokenIndex = { byAddress: new Map(), verified: new Map(), slugByAddress: new Map(), nodeOk: false, profiles: new Map() }
 
 /** The node's tokens, indexed. Never throws: a down node yields an empty index with nodeOk=false. */
 export function tokenIndex(net: Net): Promise<TokenIndex> {
   return cached(net.key('token-index'), 5_000, async () => {
     try {
-      return buildIndex(await net.node.tokens(), net.cfg)
+      const [tokens, profiles] = await Promise.all([net.node.tokens(), tokenProfiles(net)])
+      return buildIndex(tokens, net.cfg, profiles)
     } catch (err) {
       console.warn(`[resolve] token list unavailable: ${(err as Error).message}`)
       return EMPTY
@@ -98,10 +102,11 @@ export function verifiedRef(asset: VerifiedAsset, idx: TokenIndex): AssetRef {
     color: asset.color,
     quoteRank: asset.quoteRank,
     usdStable: !!asset.usdStable,
+    image: null,
   }
 }
 
-export function unverifiedRef(address: string, token: NodeToken | undefined): AssetRef {
+export function unverifiedRef(address: string, token: NodeToken | undefined, profile?: TokenProfile): AssetRef {
   const a = address.toLowerCase()
   return {
     segment: a,
@@ -115,6 +120,7 @@ export function unverifiedRef(address: string, token: NodeToken | undefined): As
     color: addressColor(a),
     quoteRank: 0,
     usdStable: false,
+    image: profile?.image ?? null,
   }
 }
 
@@ -123,7 +129,7 @@ export function refForAddress(address: string, idx: TokenIndex): AssetRef {
   const a = address.toLowerCase()
   const slug = idx.slugByAddress.get(a)
   const asset = slug ? verifiedBySlug(slug) : undefined
-  return asset ? verifiedRef(asset, idx) : unverifiedRef(a, idx.byAddress.get(a))
+  return asset ? verifiedRef(asset, idx) : unverifiedRef(a, idx.byAddress.get(a), idx.profiles.get(a))
 }
 
 /** Resolve one URL segment. Throws Redirect for a verified token's address, ApiError otherwise. */
@@ -147,7 +153,7 @@ export async function resolveSegment(
       token = (await net.node.token(a)) ?? undefined
       if (!token) throw new ApiError('not_found', `No token at ${a} on this network`)
     }
-    return { ref: unverifiedRef(a, token), token }
+    return { ref: unverifiedRef(a, token, idx.profiles.get(a)), token }
   }
   const candidates = [...idx.byAddress.values()]
     .filter((t) => t.symbol.toLowerCase() === segment.toLowerCase())

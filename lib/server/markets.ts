@@ -44,6 +44,7 @@ export function apiAsset(ref: AssetRef): ApiAsset {
     decimals: ref.decimals,
     color: ref.color,
     listed: !!ref.address,
+    image: ref.image,
   }
 }
 

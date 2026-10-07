@@ -53,12 +53,15 @@ Used wherever an asset appears (`base`, `quote`, `from`, `to`, `asset`):
 ```json
 { "segment": "btc", "slug": "btc", "symbol": "BTC", "name": "Bitcoin",
   "verified": true, "address": "0x0e35…5658", "onChainSymbol": "qBTC",
-  "decimals": 8, "color": "#f7931a", "listed": true }
+  "decimals": 8, "color": "#f7931a", "listed": true, "image": null }
 ```
 
 `segment` is what goes in a URL. An unverified token has `slug: null`,
 `segment` equal to its address, and the node's symbol and name. `listed: false`
 means a verified asset with no token on this network yet (`address: null`).
+`image` is the image the token's creator published (docs/PROFILES.md), as the
+profile service's proxied copy; `null` when there is none and for verified assets,
+which have their own logos. It is the creator's claim, not verification.
 
 ---
 
@@ -92,8 +95,10 @@ means a verified asset with no token on this network yet (`address: null`).
 
 ### `GET /api/v1/assets/{asset}`
 
-The asset object plus `token` (supply and authorities, or `null`) and `index`
-(its USD index ticker, or `null`).
+The asset object plus `token` (supply and authorities, or `null`), `index`
+(its USD index ticker, or `null`) and `profile`: what an unverified token's
+creator published (`description`, `website`, `x`, `telegram`, `github`,
+`discord`, `signer`, `updatedAt`; docs/PROFILES.md), or `null`.
 
 ---
 
