@@ -6,6 +6,7 @@ import { ChevronDown, Plus, Search, Star } from 'lucide-react'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { PairBadge, TokenBadge } from '@/components/trade/TokenBadge'
 import { isTokenAddress } from '@/lib/assets'
+import { useNodeStream } from '@/lib/hooks/useNodeStream'
 import { useApi } from '@/lib/hooks/useApi'
 import { useFavorites } from '@/lib/hooks/useFavorites'
 import { compact, percent, price as fmtPrice, tone } from '@/lib/format'
@@ -71,9 +72,10 @@ const TABS: { id: Tab; label: string }[] = [
 ]
 
 export function MarketList({ onPick, dense = true, autoFocus }: { onPick?: () => void; dense?: boolean; autoFocus?: boolean }) {
-  const { apiBase, slot } = useNet()
+  const { apiBase, slot, network } = useNet()
   const router = useRouter()
-  const { data, error } = useApi<MarketsResponse>(`${apiBase}/markets`, 10_000)
+  const { data, error, refresh } = useApi<MarketsResponse>(`${apiBase}/markets`, 10_000)
+  useNodeStream(network.nodeUrl, ['tickers'], refresh, 5_000)
   const fav = useFavorites()
   const [q, setQ] = useState('')
   const [tab, setTab] = useState<Tab>('spot')

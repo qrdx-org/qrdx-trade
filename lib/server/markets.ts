@@ -52,8 +52,8 @@ const toIndex = (t: IndexTicker | null): IndexPrice | null => t && { ...t }
 
 // ─── Shared node reads (cached) ────────────────────────────────────────────────
 
-const allPools = (net: Net) => cached(net.key('pools'), 2_000, () => net.node.pools())
-const perpList = (net: Net) => cached(net.key('perp-markets'), 2_000, () => net.node.perpMarkets())
+const allPools = (net: Net) => cached(net.key('pools'), 1_000, () => net.node.pools())
+const perpList = (net: Net) => cached(net.key('perp-markets'), 1_000, () => net.node.perpMarkets())
 
 function poolsForPair(pools: NodePool[], a: string, b: string): NodePool[] {
   const { pair } = canonicalPair(a.toLowerCase(), b.toLowerCase())
@@ -248,7 +248,7 @@ async function spotMarketFor(
   const ref = referencePool(pairPools)
   const tickers = await nodeTickers(net)
   const [book, tape, hist] = await Promise.all([
-    withBook ? cached(net.key(`book:${pair}:1`), 1_500, () => net.node.spotBook(pair, 1)).catch(() => null) : null,
+    withBook ? cached(net.key(`book:${pair}:1`), 750, () => net.node.spotBook(pair, 1)).catch(() => null) : null,
     // The node's own market data replaces the block indexer where it exists.
     tickers ? null : pairTrades(net, pair).catch(() => null),
     history ?? (ref ? poolStats(net, [ref.pool_id]) : Promise.resolve({} as Record<string, HistoryStats>)),
@@ -340,7 +340,7 @@ export async function spotBook(net: Net, baseSeg: string, quoteSeg: string, dept
   }
   if (!r.base.address || !r.quote.address) return empty
   const { pair, token0 } = canonicalPair(r.base.address, r.quote.address)
-  const book = await cached(net.key(`book:${pair}:${depth}`), 1_500, () => net.node.spotBook(pair, depth))
+  const book = await cached(net.key(`book:${pair}:${depth}`), 750, () => net.node.spotBook(pair, depth))
   if (!book) return empty
   const oriented = orientBook(book.bids, book.asks, isInverted(r.base.address, token0))
   const bestBid = oriented.bids[0]?.[0] ?? null
@@ -478,7 +478,7 @@ async function perpSummary(net: Net, m: NodePerpMarket, idx: TokenIndex): Promis
   const asset = verifiedBySlug(m.base)
   const [ticker, fills, collateral] = await Promise.all([
     asset ? indexTicker(asset).catch(() => null) : null,
-    cached(net.key(`perp-trades:${m.market_id}:500`), 3_000, () => net.node.perpTrades(m.market_id, 500)).catch(() => []),
+    cached(net.key(`perp-trades:${m.market_id}:500`), 1_500, () => net.node.perpTrades(m.market_id, 500)).catch(() => []),
     perpCollateral(net),
   ])
   const t = tickerStats(await nodeTicker(net, m.market_id), false)
@@ -534,7 +534,7 @@ export async function perpMarket(net: Net, baseSeg: string, quoteSeg: string): P
 
 export async function perpBook(net: Net, baseSeg: string, quoteSeg: string, depth: number): Promise<OrderBook> {
   const m = await findPerp(net, baseSeg, quoteSeg)
-  const book = await cached(net.key(`perp-book:${m.market_id}:${depth}`), 1_500, () => net.node.perpBook(m.market_id, depth))
+  const book = await cached(net.key(`perp-book:${m.market_id}:${depth}`), 750, () => net.node.perpBook(m.market_id, depth))
   if (!book) throw new ApiError('not_found', `No order book for ${m.market_id}`)
   const bids = withTotals(book.bids)
   const asks = withTotals(book.asks)

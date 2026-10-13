@@ -8,6 +8,7 @@ import { PairBadge, TokenBadge } from '@/components/trade/TokenBadge'
 import { VERIFIED_ASSETS } from '@/lib/assets'
 import { dec, mul, div, str } from '@/lib/decimal'
 import { compact, percent, price as fmtPrice, tone, usd } from '@/lib/format'
+import { useNodeStream } from '@/lib/hooks/useNodeStream'
 import { useApi } from '@/lib/hooks/useApi'
 import type { IndexPrice, Launch, MarketsResponse, SpotMarket } from '@/lib/types'
 import { cn } from '@/lib/utils'
@@ -22,6 +23,8 @@ function volumeUsd(m: SpotMarket): string | null {
 export function MarketsTable() {
   const { apiBase, network, slot } = useNet()
   const markets = useApi<MarketsResponse>(`${apiBase}/markets`, 10_000)
+  // Any market's ticker moved in a block: re-read the list (at most every 2 s).
+  useNodeStream(network.nodeUrl, ['tickers'], markets.refresh, 3_000)
   const prices = useApi<{ prices: Record<string, IndexPrice | null> }>(`${apiBase}/prices`, 30_000)
   const launches = useApi<{ launches: Launch[] }>(`${apiBase}/launches?limit=12`, 30_000)
   const listed = VERIFIED_ASSETS.filter((a) => {

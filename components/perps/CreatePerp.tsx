@@ -108,7 +108,7 @@ export function CreatePerp() {
       } catch {
         /* keep polling */
       }
-    }, 4_000)
+    }, 1_000)
     return () => {
       clearInterval(t)
       ctrl.abort()

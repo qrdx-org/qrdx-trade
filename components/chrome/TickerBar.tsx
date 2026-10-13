@@ -6,6 +6,7 @@ import { Star } from 'lucide-react'
 import { PairBadge, TokenBadge } from '@/components/trade/TokenBadge'
 import { VERIFIED_ASSETS } from '@/lib/assets'
 import { percent, price as fmtPrice, tone, usd } from '@/lib/format'
+import { useNodeStream } from '@/lib/hooks/useNodeStream'
 import { useApi } from '@/lib/hooks/useApi'
 import { useFavorites } from '@/lib/hooks/useFavorites'
 import type { IndexPrice, MarketsResponse } from '@/lib/types'
@@ -22,8 +23,9 @@ type Item =
  * public exchanges, labelled as such. It scrolls; hovering pauses it.
  */
 export function TickerBar() {
-  const { apiBase } = useNet()
+  const { apiBase, network } = useNet()
   const markets = useApi<MarketsResponse>(`${apiBase}/markets`, 15_000)
+  useNodeStream(network.nodeUrl, ['tickers'], markets.refresh, 5_000)
   const prices = useApi<{ prices: Record<string, IndexPrice | null> }>(`${apiBase}/prices`, 60_000)
   const fav = useFavorites()
 

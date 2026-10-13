@@ -17,18 +17,25 @@ import { PairBadge } from '@/components/trade/TokenBadge'
 import { TradesPanel } from '@/components/trade/TradesPanel'
 import { compact, percent, price as fmtPrice, tone } from '@/lib/format'
 import { useApi } from '@/lib/hooks/useApi'
+import { useNodeStream, useStreamLive } from '@/lib/hooks/useNodeStream'
 import type { AccountResponse, OrderBook, SpotMarket, TradesResponse } from '@/lib/types'
 import { onPendingChange } from '@/lib/wallet/pending'
 import { useNet, useWallet } from '@/lib/wallet/WalletContext'
 import { explorerLink } from '@/lib/config'
 import { cn } from '@/lib/utils'
 
+/**
+ * The connected account: re-read when the node says its spot or perps state changed (a
+ * block filled an order, a swap settled), and polled slowly as a fallback.
+ */
 export function useAccount(): ReturnType<typeof useApi<AccountResponse>> {
-  const { apiBase } = useNet()
+  const { apiBase, network } = useNet()
   const w = useWallet()
-  const acct = useApi<AccountResponse>(w.trader ? `${apiBase}/accounts/${w.trader}` : null, 6_000)
+  const live = useStreamLive(network.nodeUrl)
+  const acct = useApi<AccountResponse>(w.trader ? `${apiBase}/accounts/${w.trader}` : null, live ? 20_000 : 3_000)
   const { refresh } = acct
   useEffect(() => onPendingChange(refresh), [refresh])
+  useNodeStream(network.nodeUrl, [w.trader && `spot_account:${w.trader}`, w.trader && `perp_account:${w.trader}`], refresh, 750)
   return acct
 }
 
@@ -36,9 +43,18 @@ export function SpotTradeView({ base, quote }: { base: string; quote: string }) 
   const { apiBase, network } = useNet()
   const router = useRouter()
   const api = `${apiBase}/markets/${base}/${quote}`
-  const market = useApi<SpotMarket>(api, 5_000)
-  const book = useApi<OrderBook>(market.data?.status === 'live' ? `${api}/orderbook?depth=40` : null, 2_000)
-  const trades = useApi<TradesResponse>(market.data?.status === 'live' ? `${api}/trades?limit=60` : null, 6_000)
+  // A block every 250 ms: the node's stream says when this market changed; polling is the fallback.
+  const live = useStreamLive(network.nodeUrl)
+  const market = useApi<SpotMarket>(api, live ? 15_000 : 3_000)
+  const isLive = market.data?.status === 'live'
+  const book = useApi<OrderBook>(isLive ? `${api}/orderbook?depth=40` : null, live ? 15_000 : 1_500)
+  const trades = useApi<TradesResponse>(isLive ? `${api}/trades?limit=60` : null, live ? 20_000 : 3_000)
+  const pair = isLive ? market.data?.pair : null
+  // The book is resting orders plus the pools' depth: spot_book and each pool change only when
+  // something did. (orderbook:<market> is republished every block whether or not it moved.)
+  const poolChannels = (market.data?.pools ?? []).map((p) => `spot_pools:${p.poolId}`)
+  useNodeStream(network.nodeUrl, [pair && `spot_book:${pair}`, ...(pair ? poolChannels : [])], book.refresh, 400)
+  useNodeStream(network.nodeUrl, [pair && `trades:${pair}`, pair && `tickers:${pair}`], () => (trades.refresh(), market.refresh()), 1_000)
   const account = useAccount()
   const [picked, setPicked] = useState<string | null>(null)
   const [mobileTab, setMobileTab] = useState<'chart' | 'book' | 'trades'>('chart')

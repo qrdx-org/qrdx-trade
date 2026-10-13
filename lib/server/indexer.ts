@@ -8,8 +8,9 @@
  * the filled size but not the fill prices (docs/ARCHITECTURE.md §7).
  *
  * State lives in the isolate, one per network. On first use it reads the last BACKFILL_BLOCKS
- * (about a day at 180 s blocks), then follows the tip on each request at most
- * every few seconds. A durable store (D1 / Durable Object) is phase 4.
+ * (two and a half minutes at 250 ms blocks), then follows the tip on each request at most
+ * every few seconds. Off by default (`indexBlocks`): /get_blocks is cost-limited by height,
+ * and at four blocks a second the node's market data (market_getTrades) is the trade tape.
  */
 
 import { canonicalPair } from '../pairs'

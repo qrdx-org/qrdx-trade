@@ -9,7 +9,7 @@ export const GET = handler(async (_req, { params }: { params: Promise<{ version:
   const { version } = await params
   const net = netFromVersion(version)
   const { cfg } = net
-  const body = await cached(net.key('status'), 3_000, async () => {
+  const body = await cached(net.key('status'), 1_000, async () => {
     const t0 = Date.now()
     try {
       const s = await net.node.status()

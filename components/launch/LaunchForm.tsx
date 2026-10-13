@@ -108,7 +108,7 @@ export function LaunchForm({ existingToken, onLaunched }: { existingToken?: stri
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
 
-  // Quote assets: verified assets with a token on this network. QRDX (wQRDX) first, like pump.fun's SOL.
+  // Quote assets: verified assets with a token on this network. Native QRDX first, like pump.fun's SOL.
   const quotes = useMemo(
     () =>
       (assets.data?.assets ?? [])
@@ -343,7 +343,8 @@ export function LaunchForm({ existingToken, onLaunched }: { existingToken?: stri
       }
     }
     tick()
-    const id = setInterval(tick, 4000)
+    // A block every 250 ms: a receipt is usually there within a second.
+    const id = setInterval(tick, 1000)
     return () => {
       stop = true
       clearInterval(id)

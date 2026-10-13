@@ -75,7 +75,7 @@ export function TokenBadge({
   )
 }
 
-/** qBTC / wQRDX style on-chain symbols map to their asset's logo. */
+/** q- or w-prefixed on-chain symbols (qBTC, wETH) map to their asset's logo. */
 function logoSlug(symbol: string): string | null {
   const s = symbol.toLowerCase().replace(/^[qw](?=[a-z]{3})/, '')
   return LOGOS.has(s) ? s : null

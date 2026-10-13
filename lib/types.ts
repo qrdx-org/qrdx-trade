@@ -324,7 +324,7 @@ export interface Launch {
 /** One market's PnL for an account (`/accounts/{address}/pnl`). Amounts in `unit`, the market's quote token (perps: collateral). */
 export interface PnlMarket {
   kind: 'spot' | 'perp'
-  /** Display name, e.g. "WQRDX/USDC" or "BTC-USD-PERP". */
+  /** Display name, e.g. "QRDX/USDC" or "BTC-USD-PERP". */
   market: string
   path: string
   unit: string

@@ -70,21 +70,6 @@ export const VERIFIED_ASSETS: VerifiedAsset[] = [
     native: true,
   },
   {
-    slug: 'wqrdx',
-    symbol: 'wQRDX',
-    name: 'Wrapped QRDX',
-    onChainSymbol: 'wQRDX',
-    decimals: 18,
-    prices: {},
-    quoteRank: 55,
-    color: '#3b82f6',
-    addresses: {
-      // "Wrapped QRDX" (WQRDX) on test.qrdx.org: a fixed-supply token held by its creator,
-      // from before native QRDX traded on spot. Not backed 1:1 by native QRDX.
-      testnet: '0xe13ef577f2d8c6cb55e49c70e6ed48f64d0fc106',
-    },
-  },
-  {
     slug: 'usdc',
     symbol: 'USDC',
     name: 'USD Coin',
@@ -95,8 +80,9 @@ export const VERIFIED_ASSETS: VerifiedAsset[] = [
     quoteRank: 100,
     color: '#2775ca',
     addresses: {
-      // "USDC" on test.qrdx.org (18 decimals; the node's token, not bridged USDC).
-      testnet: '0x4227d3846511a16656b521361c10faf6358f0708',
+      // "USDC" on test.qrdx.org since the reset of 2026-10-12 (18 decimals; the node's token,
+      // not bridged USDC), created at block 42,626 and paired with native QRDX.
+      testnet: '0x0886aa41d05c4be1ad6c91b728d104fee55a713a',
     },
   },
   {

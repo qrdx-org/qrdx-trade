@@ -23,7 +23,7 @@ export const marketKey = (m: string) => m.toLowerCase()
 
 /** Every market's ticker, by market key; null when the node has no market data. */
 export function nodeTickers(net: Net): Promise<Map<string, NodeTicker> | null> {
-  return cached(net.key('market-tickers'), 4_000, async () => {
+  return cached(net.key('market-tickers'), 2_000, async () => {
     const list = await net.node.marketTickers()
     return new Map(list.map((t) => [marketKey(t.market), t]))
   }).catch(() => null)
@@ -49,7 +49,7 @@ export function tickerStats(t: NodeTicker | null, inverted: boolean): { last: st
 }
 
 export async function nodeTrades(net: Net, market: string, limit: number): Promise<NodeMarketTrade[] | null> {
-  return cached(net.key(`market-trades:${marketKey(market)}:${limit}`), 2_000, async () => (await net.node.marketTrades(market, limit))?.trades ?? []).catch(
+  return cached(net.key(`market-trades:${marketKey(market)}:${limit}`), 1_000, async () => (await net.node.marketTrades(market, limit))?.trades ?? []).catch(
     () => null
   )
 }

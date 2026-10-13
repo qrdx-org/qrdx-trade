@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { BookOpen, Boxes, Github } from 'lucide-react'
 import { useApi } from '@/lib/hooks/useApi'
+import { useStreamHeight } from '@/lib/hooks/useNodeStream'
 import { useNet } from '@/lib/wallet/WalletContext'
 import { cn } from '@/lib/utils'
 
@@ -23,7 +24,10 @@ interface Status {
 export function StatusBar() {
   const { apiBase, network, slot } = useNet()
   const { data, error } = useApi<Status>(`${apiBase}/status`, 5_000)
-  const seen = useBlockSeen(data?.height ?? null)
+  // The node's stream announces each block (four a second); the API's status is the fallback.
+  const streamHeight = useStreamHeight(network.nodeUrl)
+  const height = streamHeight ?? data?.height ?? null
+  const seen = useBlockSeen(height)
   const now = useNow()
 
   const ok = !!data?.nodeOk
@@ -52,11 +56,15 @@ export function StatusBar() {
         {network.name} · chain {network.chainId}
       </span>
 
-      {data?.height != null && data.height >= 0 && (
-        <span className="flex items-center gap-1.5" title={`One block a slot, ${Math.round((data.blockTimeSec ?? 0.25) * 1000)} ms apart`}>
+      {height != null && height >= 0 && (
+        <span className="flex items-center gap-1.5" title={`One block a slot, ${Math.round((data?.blockTimeSec ?? 0.25) * 1000)} ms apart${streamHeight != null ? '; live from the node' : ''}`}>
           <Boxes className="h-3 w-3" />
-          <span className="num text-foreground/80">#{data.height.toLocaleString()}</span>
-          {ago !== null && <span className="num hidden md:inline">· {ago < 60 ? `${ago}s` : `${Math.floor(ago / 60)}m ${ago % 60}s`} ago</span>}
+          <span className="num text-foreground/80">#{height.toLocaleString()}</span>
+          {streamHeight != null ? (
+            <span className="hidden md:inline">· live</span>
+          ) : (
+            ago !== null && <span className="num hidden md:inline">· {ago < 60 ? `${ago}s` : `${Math.floor(ago / 60)}m ${ago % 60}s`} ago</span>
+          )}
         </span>
       )}
 

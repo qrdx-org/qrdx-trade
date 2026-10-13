@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { PairBadge } from '@/components/trade/TokenBadge'
 import { compact, fixed, price as fmtPrice } from '@/lib/format'
+import { useNodeStream } from '@/lib/hooks/useNodeStream'
 import { useApi } from '@/lib/hooks/useApi'
 import type { ApiAsset } from '@/lib/types'
 import { cn } from '@/lib/utils'
@@ -26,8 +27,9 @@ export interface PoolRow {
 }
 
 export function PoolsList() {
-  const { apiBase } = useNet()
-  const { data, error } = useApi<{ pools: PoolRow[] }>(`${apiBase}/pools`, 10_000)
+  const { apiBase, network } = useNet()
+  const { data, error, refresh } = useApi<{ pools: PoolRow[] }>(`${apiBase}/pools`, 10_000)
+  useNodeStream(network.nodeUrl, ['spot_pools'], refresh, 2_000)
   return (
     <main>
       <section className="hero-glow border-b">

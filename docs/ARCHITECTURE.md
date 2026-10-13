@@ -106,11 +106,10 @@ QRC-20 addresses are derived at deploy time (`blake2b(sender:nonce:symbol)`), so
 pinning is only possible once a network's tokens exist; the issuer rule covers
 fresh testnets. A token matched neither way is unverified, whatever its symbol.
 
-**Native QRDX on spot.** The spot ledger trades QRC-20 tokens only; native QRDX
-is not a token address there. The registry maps `qrdx` to the network's wrapped
-QRDX token (`wQRDX`, pinned or issuer-matched). Until one exists, `qrdx` pairs
-show the index price and "no on-chain market yet" instead of a book. Perps use
-`QRDX` natively as collateral when the node is configured that way.
+**Native QRDX on spot.** Spot trades native QRDX directly, under the name `QRDX`
+(see "Pairing with QRDX" in §10); the registry's `qrdx` is native QRDX on every
+network and needs no token. Perps use `QRDX` natively as collateral when the node
+is configured that way.
 
 ## 3. Trading page layout
 
@@ -153,9 +152,22 @@ and the account panel below.
 Behaviour that follows from the chain:
 
 - **A block every 250 ms** (one a slot; the chain spec's `SLOT_DURATION_MS`). A
-  submitted order is *pending* until a block includes it, usually within a second. The Pending tab tracks each transaction hash and polls
-  `exchange_getTransactionReceipt`, then shows fills, the order id, or the
+  submitted order is *pending* until a block includes it, usually within a second. The Pending tab tracks each transaction hash and checks
+  `exchange_getTransactionReceipt` as blocks arrive, then shows fills, the order id, or the
   error. The book does not change optimistically.
+- **The node's stream drives the screens** (`lib/hooks/useNodeStream.ts`). The
+  browser opens one WebSocket to the network's node (`/ws`) and subscribes to
+  what the page shows: `spot_book:<pair>` and the market's `spot_pools:<id>` for a
+  spot book, `trades:<market>` and `tickers:<market>` for its tape and header,
+  `perp_book:<id>`, `perp_events:<id>` and `perp_markets:<id>` for perps,
+  `spot_account:<address>` and `perp_account:<address>` for the connected account,
+  `tickers` for market lists and `blocks` for the status bar's height and pending
+  receipts. An event is a signal to re-read the API (which owns orientation, slugs
+  and USD values), throttled per view (400 ms for books, 1–2 s for tapes and headers,
+  3–5 s for lists). `orderbook:<market>` is not used: the node republishes it every
+  block whether or not it changed. While the stream is down the views poll (books
+  every 1.5 s); while it is up they poll only as a slow backstop. Server caches are
+  sized for the same rate (books 750 ms, trades 1 s, pools and perps lists 1 s).
 - **Market orders** are limit orders with `tif: "ioc"` (perps) or swaps (spot).
   Spot market buys/sells use `SWAP` with `venue: auto` and
   `min_amount_out = quote × (1 − slippage)`, so the node routes to the better of
@@ -297,7 +309,8 @@ app/
   (trading)/perps/…                     /perps → first market; perps trading (PerpTradeView)
   (trading)/swap/  pools/  pools/[poolId]/  pools/new/  launch/  portfolio/
   api/[version]/**/route.ts             public API; [version] is v1 (mainnet) or v1-test (testnet)
-  analytics/ partner/ stake/ wallets/   older pages, still sample data (banner says so)
+  (trading)/stake/                      delegate QRDX to validators (StakeView)
+  analytics/ partner/ wallets/          older pages, still sample data (banner says so)
 components/
   AppNav.tsx                            nav, network badge, wrong-network banner
   trade/                                MarketSelector, OrderBookPanel, TradesPanel, PriceChart,
@@ -316,6 +329,7 @@ lib/
   orders.ts                             order parameters in node terms
   format.ts  types.ts
   hooks/useApi.ts                       polling reads of /api/v1
+  hooks/useNodeStream.ts                the node's WebSocket stream: per-market and per-account refresh signals, live height
   wallet/provider.ts                    EIP-6963 discovery, EIP-1193 types
   wallet/WalletContext.tsx              connection (extension or phone), account, the network shown (useNet), sendExchange
   wallet/remote.ts                      QRDX Connect: the phone wallet as an EIP-1193 provider
@@ -349,7 +363,7 @@ limits, and what the node would need to lift them:
 | Gap | Effect here | Node change that fixes it |
 |---|---|---|
 | ~~Spot order-book fills are not journaled.~~ Resolved: the node's market data (`market_getTrades`, PERPS_API.md §8) records every trade, book fills and pool swaps alike. | The trade tape and candles include book fills where the node serves market data; on older nodes, swaps only (the indexer). | — |
-| ~~No native QRDX on spot.~~ Resolved: spot trades native QRDX directly (named `QRDX`, sorting after every token address). | `qrdx` is native QRDX on every network; the old testnet WQRDX token is the separate verified asset `wqrdx`. | — |
+| ~~No native QRDX on spot.~~ Resolved: spot trades native QRDX directly (named `QRDX`, sorting after every token address). | `qrdx` is native QRDX on every network. | — |
 | Perps collateral is a node setting (`QRDX_PERP_COLLATERAL_TOKEN`): a token address (production: the USD stablecoin), `QRDX` for native QRDX (the node marks it development-only), or empty, which refuses every deposit. Testnet runs with it empty, and its validators vote no oracle prices (`QRDX_ORACLE_FEED`). | Perps on testnet cannot take deposits or trade; the API reports `collateralToken` and the perps screen says so. | Set `QRDX_PERP_COLLATERAL_TOKEN` (the same on every node: it is a consensus parameter) and `QRDX_ORACLE_FEED=exchanges` on validators. |
 | `exchange_getNonce` ignores the mempool. | Handled in the wallet (§4). | A `pending` flag on `exchange_getNonce`. |
 | Streams (`/ws`) are opt-in per node (`QRDX_ENABLE_STREAMING`). | The site polls (book 2 s, account 5 s). | Enable streaming on public nodes; the client already has the channel names. |
@@ -477,10 +491,11 @@ docs/PERPS_API.md §7): the node names it `QRDX` (any casing on input), it sorts
 after every token address so QRDX pairs are quoted in QRDX, and its side settles
 in account balances (the API reads it with `eth_getBalance`). The verified `qrdx`
 asset is native QRDX on every network (`native: true` in `lib/assets.ts`) and the
-default quote for launches. On testnet, the earlier "Wrapped QRDX" token at
-`0xe13ef577f2d8c6cb55e49c70e6ed48f64d0fc106` is the verified asset `wqrdx`, so
-its existing markets keep their names; it is not backed by native QRDX. Testnet USDC is `0x4227d3846511a16656b521361c10faf6358f0708`
-(18 decimals), pinned the same way; USD prices route through its pools.
+default quote for launches. Testnet USDC is
+`0x0886aa41d05c4be1ad6c91b728d104fee55a713a` (18 decimals), pinned in
+`lib/assets.ts`; USD prices route through its pools. (The testnet reset of
+2026-10-12 removed the earlier USDC and the "Wrapped QRDX" token, and with them
+the `wqrdx` asset.)
 
 **Perps collateral** is whatever the node settles perps in (`collateral_token`:
 native QRDX, a token, or none). Margin counts only what is deposited into the

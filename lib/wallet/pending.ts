@@ -8,7 +8,8 @@
  */
 
 import { useCallback, useEffect, useState } from 'react'
-import { type Slot, apiBase } from '../config'
+import { type Slot, apiBase, slotNetwork } from '../config'
+import { useNodeStream } from '../hooks/useNodeStream'
 
 export type PendingStatus = 'pending' | 'success' | 'failed'
 
@@ -65,7 +66,7 @@ interface Receipt {
 }
 
 /** The tracked list for an address; polls receipts of the pending ones. */
-export function usePendingTxs(address: string | null, slot: Slot, intervalMs = 5_000) {
+export function usePendingTxs(address: string | null, slot: Slot, intervalMs = 2_000) {
   const [txs, setTxs] = useState<PendingTx[]>([])
 
   useEffect(() => {
@@ -105,6 +106,10 @@ export function usePendingTxs(address: string | null, slot: Slot, intervalMs = 5
     const id = setInterval(poll, intervalMs)
     return () => clearInterval(id)
   }, [address, intervalMs, poll])
+
+  // A block every 250 ms: check the open ones as blocks arrive, not only on the timer.
+  const hasOpen = txs.some((t) => t.status === 'pending')
+  useNodeStream(hasOpen ? slotNetwork(slot).nodeUrl : null, ['blocks'], () => void poll(), 750)
 
   const clearDone = useCallback(() => {
     if (address) save(address, slot, load(address, slot).filter((t) => t.status === 'pending'))

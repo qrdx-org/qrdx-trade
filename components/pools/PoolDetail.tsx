@@ -9,6 +9,7 @@ import { useAccount } from '@/components/trade/SpotTradeView'
 import { ConnectButton } from '@/components/wallet/ConnectButton'
 import { dec, isAmount } from '@/lib/decimal'
 import { fixed, price as fmtPrice, size as fmtSize } from '@/lib/format'
+import { useNodeStream } from '@/lib/hooks/useNodeStream'
 import { useApi, useDebounced } from '@/lib/hooks/useApi'
 import type { ApiAsset, LpPosition } from '@/lib/types'
 import { useNet, useWallet } from '@/lib/wallet/WalletContext'
@@ -55,9 +56,11 @@ export function rangeTicks(tick: number, spacing: number, pct: number | null): [
 const tickPrice = (t: number) => Math.pow(1.0001, t)
 
 export function PoolDetail({ poolId }: { poolId: string }) {
-  const { apiBase } = useNet()
+  const { apiBase, network } = useNet()
   const w = useWallet()
   const pool = useApi<PoolDetailData>(`${apiBase}/pools/${poolId}?twap=3600`, 10_000)
+  // The pool changed in a block (a swap, a deposit): re-read it.
+  useNodeStream(network.nodeUrl, [`spot_pools:${poolId}`], pool.refresh, 1_000)
   const account = useAccount()
   const [range, setRange] = useState<(typeof RANGES)[number]['id']>('5')
   const [side, setSide] = useState<0 | 1>(0)

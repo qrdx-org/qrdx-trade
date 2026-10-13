@@ -18,6 +18,7 @@ import { TokenBadge } from '@/components/trade/TokenBadge'
 import { TradesPanel } from '@/components/trade/TradesPanel'
 import { compact, countdown, fixed, percent, price as fmtPrice, tone } from '@/lib/format'
 import { useApi } from '@/lib/hooks/useApi'
+import { useNodeStream, useStreamLive } from '@/lib/hooks/useNodeStream'
 import type { OrderBook, PerpMarket, TradesResponse } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { useNet } from '@/lib/wallet/WalletContext'
@@ -34,9 +35,16 @@ function useNow(ms = 1000) {
 export function PerpTradeView({ base, quote }: { base: string; quote: string }) {
   const { apiBase, slot, network } = useNet()
   const api = `${apiBase}/perps/${base}/${quote}`
-  const market = useApi<PerpMarket>(api, 4_000)
-  const book = useApi<OrderBook>(market.data ? `${api}/orderbook?depth=40` : null, 2_000)
-  const trades = useApi<TradesResponse>(market.data ? `${api}/trades?limit=60` : null, 5_000)
+  // A block every 250 ms: the node's stream says when this market changed; polling is the fallback.
+  const live = useStreamLive(network.nodeUrl)
+  const market = useApi<PerpMarket>(api, live ? 15_000 : 2_000)
+  const book = useApi<OrderBook>(market.data ? `${api}/orderbook?depth=40` : null, live ? 15_000 : 1_500)
+  const trades = useApi<TradesResponse>(market.data ? `${api}/trades?limit=60` : null, live ? 20_000 : 3_000)
+  const id = market.data?.id
+  useNodeStream(network.nodeUrl, [id && `perp_book:${id}`], book.refresh, 400)
+  useNodeStream(network.nodeUrl, [id && `perp_events:${id}`, id && `trades:${id}`], trades.refresh, 1_000)
+  // Mark and oracle prices move with most blocks; the header need not follow faster than this.
+  useNodeStream(network.nodeUrl, [id && `perp_markets:${id}`], market.refresh, 2_000)
   const account = useAccount()
   const [picked, setPicked] = useState<string | null>(null)
   const [mobileTab, setMobileTab] = useState<'chart' | 'book' | 'trades'>('chart')
