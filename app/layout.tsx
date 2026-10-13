@@ -2,6 +2,7 @@ import { Inter, JetBrains_Mono } from 'next/font/google'
 import './globals.css'
 import { ThemeProvider } from '@/components/theme-provider'
 import { WalletProvider } from '@/lib/wallet/WalletContext'
+import { StaleBuildGuard } from '@/components/StaleBuildGuard'
 import type { Metadata } from 'next'
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter' })
@@ -57,6 +58,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={`${inter.className} ${inter.variable} ${mono.variable}`}>
+        <StaleBuildGuard />
         <ThemeProvider
           attribute="class"
           defaultTheme="dark"

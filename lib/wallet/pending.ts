@@ -30,10 +30,20 @@ const KEY = (address: string, slot: Slot) => `qrdx-trade:txs:${slot}:${address.t
 const MAX = 100
 const listeners = new Set<() => void>()
 
+/** Stored entries are checked, not trusted: a malformed one used to break every page that lists them. */
+const isPendingTx = (t: unknown): t is PendingTx =>
+  !!t &&
+  typeof t === 'object' &&
+  typeof (t as PendingTx).txHash === 'string' &&
+  typeof (t as PendingTx).label === 'string' &&
+  typeof (t as PendingTx).op === 'string' &&
+  ['pending', 'success', 'failed'].includes((t as PendingTx).status)
+
 function load(address: string, slot: Slot): PendingTx[] {
   try {
     const raw = localStorage.getItem(KEY(address, slot))
-    return raw ? (JSON.parse(raw) as PendingTx[]) : []
+    const parsed: unknown = raw ? JSON.parse(raw) : []
+    return Array.isArray(parsed) ? parsed.filter(isPendingTx) : []
   } catch {
     return []
   }

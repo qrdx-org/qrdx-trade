@@ -84,6 +84,47 @@ const NetCtx = createContext<NetState | null>(null)
 const REMEMBER = 'qrdx-trade:connected'
 const NETWORK_PREF = 'qrdx-trade:network'
 
+/**
+ * Accounts as the site uses them. They come from a wallet's reply or from this browser's
+ * storage (a phone session's cache), and neither is trusted to have the right shape: one bad
+ * entry threw while rendering every page, on every load, until the site's data was cleared.
+ */
+function asAccounts(value: unknown): QrdxAccount[] {
+  if (!Array.isArray(value)) return []
+  return value.filter(
+    (a): a is QrdxAccount => !!a && typeof a === 'object' && typeof (a as QrdxAccount).address === 'string' && typeof (a as QrdxAccount).pqAddress === 'string'
+  )
+}
+
+function asChain(value: unknown): QrdxChainInfo | null {
+  return value && typeof value === 'object' && typeof (value as QrdxChainInfo).chainId === 'number' ? (value as QrdxChainInfo) : null
+}
+
+/** Storage access throws in some Safari states (storage blocked, quota): never let it reach a render. */
+const linkStore = {
+  get: (): string | null => {
+    try {
+      return localStorage.getItem(REMEMBER)
+    } catch {
+      return null
+    }
+  },
+  set: (v: string) => {
+    try {
+      localStorage.setItem(REMEMBER, v)
+    } catch {
+      /* the link then lasts as long as this page */
+    }
+  },
+  clear: () => {
+    try {
+      localStorage.removeItem(REMEMBER)
+    } catch {
+      /* nothing stored */
+    }
+  },
+}
+
 function readPreference(): Slot {
   try {
     const q = new URLSearchParams(window.location.search).get('network')
@@ -126,13 +167,13 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       remote
         ? (w.provider as RemoteProvider).request<T>({ method }, long ? undefined : 10_000)
         : w.provider.request<T>({ method })
-    const accs = await ask<QrdxAccount[]>(request ? 'qrdx_requestAccounts' : 'qrdx_accounts', request)
-    const info = await ask<QrdxChainInfo>('qrdx_chainInfo').catch(() => null)
-    setAccounts(accs ?? [])
+    const accs = asAccounts(await ask<unknown>(request ? 'qrdx_requestAccounts' : 'qrdx_accounts', request))
+    const info = asChain(await ask<unknown>('qrdx_chainInfo').catch(() => null))
+    setAccounts(accs)
     if (info) setChain(info)
-    setStatus(accs?.length ? 'connected' : 'disconnected')
+    setStatus(accs.length ? 'connected' : 'disconnected')
     if (remote) RemoteProvider.remember({ accounts: accs, ...(info ? { chain: info } : {}) })
-    else if (accs?.length) localStorage.setItem(REMEMBER, 'extension')
+    else if (accs.length) linkStore.set('extension')
   }, [])
 
   // Discover the extension, then restore what this browser was connected to.
@@ -142,15 +183,17 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       if (cancelled) return
       extensionRef.current = ext
       setExtension(ext)
-      const remembered = localStorage.getItem(REMEMBER)
+      const remembered = linkStore.get()
       const remote = remembered === 'remote' ? RemoteProvider.restore((st) => setPhone(st)) : null
       if (remote) {
         const w = { info: { uuid: 'qrdx-connect', name: 'QRDX Wallet (phone)', icon: '', rdns: 'org.qrdx.connect' }, provider: remote }
         use(w, 'remote')
         const cached = RemoteProvider.cached()
-        if (Array.isArray(cached.accounts) && cached.accounts.length) {
-          setAccounts(cached.accounts as QrdxAccount[])
-          if (cached.chain) setChain(cached.chain as QrdxChainInfo)
+        const cachedAccounts = asAccounts(cached.accounts)
+        if (cachedAccounts.length) {
+          setAccounts(cachedAccounts)
+          const cachedChain = asChain(cached.chain)
+          if (cachedChain) setChain(cachedChain)
           setStatus('connected')
         } else setStatus('connecting')
         await remote.start().catch(() => undefined)
@@ -177,7 +220,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     const onDisconnect = () => {
       setAccounts([])
       if ((p as RemoteProvider).isRemote) {
-        localStorage.removeItem(REMEMBER)
+        linkStore.clear()
         setPhone(null)
         use(extensionRef.current, extensionRef.current ? 'extension' : null)
         setStatus(extensionRef.current ? 'disconnected' : 'missing')
@@ -244,7 +287,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       // Waits in the relay until the phone scans the code, joins, and approves.
       await readState(w, true)
       if (pairingRef.current !== remote) return
-      localStorage.setItem(REMEMBER, 'remote')
+      linkStore.set('remote')
       use(w, 'remote')
     } catch (e) {
       if (pairingRef.current !== remote) return
@@ -271,7 +314,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 
   const disconnect = useCallback(async () => {
     const w = walletRef.current
-    localStorage.removeItem(REMEMBER)
+    linkStore.clear()
     setAccounts([])
     if ((w?.provider as RemoteProvider | undefined)?.isRemote) {
       await (w!.provider as RemoteProvider).disconnect().catch(() => undefined)

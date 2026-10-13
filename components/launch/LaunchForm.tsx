@@ -146,7 +146,16 @@ export function LaunchForm({ existingToken, onLaunched }: { existingToken?: stri
     if (!w.trader) return setJob(null)
     try {
       const raw = localStorage.getItem(jobKey(slot, w.trader))
-      setJob(raw ? (JSON.parse(raw) as LaunchJob) : null)
+      const saved: unknown = raw ? JSON.parse(raw) : null
+      // A launch in progress, as this page saved it; anything else is ignored rather than rendered.
+      const valid =
+        !!saved &&
+        typeof saved === 'object' &&
+        typeof (saved as LaunchJob).stage === 'string' &&
+        typeof (saved as LaunchJob).kind === 'string' &&
+        typeof (saved as LaunchJob).symbol === 'string' &&
+        typeof (saved as LaunchJob).tokenAddress === 'string'
+      setJob(valid ? (saved as LaunchJob) : null)
     } catch {
       setJob(null)
     }
