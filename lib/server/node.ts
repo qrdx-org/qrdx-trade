@@ -311,6 +311,59 @@ async function rest<T>(cfg: ServerConfig, path: string): Promise<T> {
   return (body.result ?? body) as T
 }
 
+/** staking_getValidators (qrdx-node docs/STAKING.md): the validator set in force at the tip. */
+export interface NodeStakingValidator {
+  address: string
+  status: string
+  stake: string
+  effective_stake: string
+  /** QRDX in its delegation pool. */
+  delegated: string
+  /** Own effective stake plus delegated: what it is selected and votes with. */
+  weight: string
+  earned: string
+  activation_epoch: number | null
+  exit_epoch: number | null
+  slashed: boolean
+}
+
+/** staking_getPools: a validator's delegation pool. */
+export interface NodeStakingPool {
+  validator: string
+  commission_bps: number
+  next_commission_bps: number | null
+  value: string
+  total_shares: string
+  share_price: string
+  delegators: number
+  warming_up: string
+}
+
+export interface NodeStakingParams {
+  reward_rate_bps_per_year: number
+  reward_rate_per_epoch: string
+  default_commission_bps: number
+  min_delegation: string
+  min_validator_stake: string
+  warmup_epochs: number
+  unbonding_epochs: number
+  withdrawal_delay_epochs: number
+}
+
+/** staking_getDelegations: an address's stake in each pool and the payouts owed to it. */
+export interface NodeDelegations {
+  address: string
+  stakes: { validator: string; shares: string; value: string; warming_up: { amount: string; active_from_epoch: number }[] }[]
+  payouts: { id: number; kind: string; amount: string; due_epoch: number; validator: string }[]
+}
+
+/** The parts of /chain_spec (qrdx_chainSpec) the staking page needs. */
+export interface NodeChainSpec {
+  network: string
+  chain_id: number
+  params: { SLOT_DURATION_MS: number; SLOTS_PER_EPOCH: number; [key: string]: unknown }
+}
+
 /** market_getTicker / market_getMarkets (qrdx-node docs/PERPS_API.md §8). Prices quote per base of the canonical pair. */
 export interface NodeTicker {
   market: string
@@ -423,10 +476,26 @@ export function createNodeClient(cfg: ServerConfig) {
     marketCandles: (market: string, interval: string, limit: number) =>
       rpc<{ candles: NodeMarketCandle[] } | null>(cfg, 'market_getCandles', [market, interval, limit]),
 
+    // Staking and delegation pools (docs/STAKING.md). Writes are STAKE_* exchange transactions.
+    stakingValidators: () => rpc<NodeStakingValidator[]>(cfg, 'staking_getValidators'),
+    stakingPools: () => rpc<NodeStakingPool[]>(cfg, 'staking_getPools'),
+    stakingParams: () => rpc<NodeStakingParams>(cfg, 'staking_getParams'),
+    delegations: (address: string) => rpc<NodeDelegations>(cfg, 'staking_getDelegations', [address]),
+    chainSpec: () => rpc<NodeChainSpec>(cfg, 'qrdx_chainSpec'),
+
     /** Height and last block hash (`/get_status`, which the node does not cost-limit). */
     status: () => rest<{ height: number; last_block_hash?: string }>(cfg, '/get_status'),
     /** Chain height (last block). REST, because the eth_* namespace is optional on a node. */
     height: async (): Promise<number> => (await rest<{ height: number }>(cfg, '/get_status')).height,
+    /**
+     * A block's epoch, from its header (`/get_block`, not cost-limited). The header is stored
+     * as a Python dict repr; null for genesis or a header without one.
+     */
+    blockEpoch: async (height: number): Promise<number | null> => {
+      const r = await rest<{ block?: { content?: string | null } }>(cfg, `/get_block?block=${Math.max(0, height)}`)
+      const m = /['"]epoch['"]:\s*(\d+)/.exec(r.block?.content ?? '')
+      return m ? Number(m[1]) : null
+    },
     /** Blocks from `start` (inclusive), ascending, with their exchange sections. */
     blocks: (start: number, limit: number) =>
       rest<NodeBlock[]>(cfg, `/get_blocks?offset=${Math.max(0, start)}&limit=${Math.min(512, limit)}`),

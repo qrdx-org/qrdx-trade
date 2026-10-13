@@ -152,8 +152,8 @@ and the account panel below.
 
 Behaviour that follows from the chain:
 
-- **Blocks are ~180 s.** A submitted order is *pending* until a block includes
-  it. The Pending tab tracks each transaction hash and polls
+- **A block every 250 ms** (one a slot; the chain spec's `SLOT_DURATION_MS`). A
+  submitted order is *pending* until a block includes it, usually within a second. The Pending tab tracks each transaction hash and polls
   `exchange_getTransactionReceipt`, then shows fills, the order id, or the
   error. The book does not change optimistically.
 - **Market orders** are limit orders with `tif: "ioc"` (perps) or swaps (spot).
@@ -211,8 +211,8 @@ Operation parameters (from the node's `docs/PERPS_API.md`):
 ### Wallet changes made for trading
 
 1. **Pending exchange nonces.** `exchange_getNonce` returns the next nonce after
-   *committed* state only. With 180 s blocks, a second order before the next
-   block reused the same nonce and the node refused it (`nonce N already
+   *committed* state only. A second order before the next block (then 180 s
+   away; now a fraction of a second, but a fast double click still does it) reused the same nonce and the node refused it (`nonce N already
    queued`). The wallet now tracks nonces it has submitted and not yet seen
    committed, signs with the first free nonce at or above the node's (the node
    includes a sender's operations only as a gap-free run), and on an "already
@@ -556,10 +556,9 @@ variable and writes one row per pool to a SQLite Durable Object per network
 where `v0`/`v1` are the pool's cumulative amounts paid in. A row is stored only
 when something changed, plus an hourly heartbeat, and kept 90 days.
 
-A pool's state changes only at a block, and blocks are ~180 s apart, so this
-records each block's closing pool price exactly. What it cannot see is the
-price path inside one block, or blocks closer together than a minute (the
-last one in a minute wins).
+A pool's state changes only at a block, and blocks arrive four times a second,
+so this records each minute's closing pool price, not each block's: the price
+path inside a minute is not kept (the last block in a minute wins).
 
 `relay/src/history.ts` (pure, unit-tested) turns rows into candles: OHLC from
 the stored prices, the previous close carried into quiet buckets so the line is

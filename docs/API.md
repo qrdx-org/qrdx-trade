@@ -400,7 +400,8 @@ Trading PnL, rebuilt from the node's market data (cached 10 s).
 
 The node's exchange receipt (`success`, `error`, `block_height`, `data` with
 fills / order id / amounts, `fee`), or `404` while the transaction is pending
-or unknown to this node. Poll after submitting; blocks are about 180 s apart.
+or unknown to this node. Poll after submitting; a block comes every 250 ms, so
+a receipt usually exists within a second or two.
 
 ---
 
@@ -431,6 +432,63 @@ first, with the market each trades on.
   token's USD price (see Prices; usually a route through its pool), and
   `marketCapUsd` is `priceUsd × totalSupply`; both `null` with no route.
   `change24h` and `volume24h` come from the pool's recorded history.
+
+---
+
+## Staking
+
+Delegation pools (qrdx-node docs/STAKING.md). Delegating and undelegating are
+exchange transactions the wallet signs: `STAKE_DELEGATE {validator, amount}`
+(QRDX, at least `params.min_delegation`, whole wei) and `STAKE_UNDELEGATE
+{validator, shares}` (`shares` a number or `"all"`). Both spend from and pay to
+the post-quantum account.
+
+### `GET /api/v1/staking`
+
+Every validator in the set at the chain's tip, with its pool, and the staking
+parameters and epoch clock. Read from the node at most every 5 s.
+
+```json
+{ "validators": [ {
+    "address": "0xPQ…", "status": "active", "stake": "100000",
+    "effective_stake": "100085.03", "delegated": "250", "weight": "100335.03",
+    "earned": "0.41", "activation_epoch": 0, "exit_epoch": null, "slashed": false,
+    "pool": { "validator": "0xPQ…", "commission_bps": 1000, "next_commission_bps": null,
+              "value": "250", "total_shares": "250", "share_price": "1",
+              "delegators": 1, "warming_up": "0" },
+    "commissionBps": 1000 } ],
+  "params": { "reward_rate_bps_per_year": 500, "default_commission_bps": 1000,
+              "min_delegation": "1", "min_validator_stake": "100000", "warmup_epochs": 4,
+              "unbonding_epochs": 40320, "withdrawal_delay_epochs": 2048, … },
+  "clock": { "slotMs": 250, "slotsPerEpoch": 32, "epochMs": 8000 },
+  "height": 12345, "epoch": 389, "asOf": … }
+```
+
+- `weight` is the validator's own effective stake plus its pool's value: what it
+  is selected to propose with and votes with.
+- `pool` is `null` until the validator's first delegation; `commissionBps` is
+  then the default commission a new pool starts with.
+- A delegator earns `reward_rate_bps_per_year × (1 − commission)` a year, for
+  every epoch the validator's vote is carried on chain.
+- `epoch` is the head block's epoch: a delegation made now joins the pool at
+  `epoch + warmup_epochs + 1`; an undelegation is paid after `unbonding_epochs +
+  withdrawal_delay_epochs`.
+
+### `GET /api/v1/staking/{address}`
+
+One address's stake (pass the `0xPQ` address):
+
+```json
+{ "address": "0xPQ…",
+  "stakes": [ { "validator": "0xPQ…", "shares": "250", "value": "250.01",
+                "warming_up": [ { "amount": "10", "active_from_epoch": 394 } ] } ],
+  "payouts": [ { "id": 7, "kind": "undelegate", "amount": "100.2", "due_epoch": 42760,
+                 "validator": "0xPQ…" } ],
+  "balance": "1234.5", "asOf": … }
+```
+
+`balance` is the account's spendable native QRDX (what a delegation spends);
+`null` when the node does not answer for it.
 
 ---
 

@@ -36,7 +36,7 @@ export interface NetworkConfig {
   rpcUrl: string
   nodeUrl: string
   explorerUrl: string
-  /** Target block interval (qrdx/constants.py BLOCK_TIME). */
+  /** Block interval: one block a slot (the chain spec's SLOT_DURATION_MS, standard 250 ms). */
   blockTimeSec: number
 }
 
@@ -48,16 +48,17 @@ export const NETWORKS: Record<NetworkId, NetworkConfig> = {
     rpcUrl: 'https://rpc.qrdx.org',
     nodeUrl: 'https://node.qrdx.org',
     explorerUrl: 'https://explorer.qrdx.org',
-    blockTimeSec: 180,
+    blockTimeSec: 0.25,
   },
   testnet: {
     id: 'testnet',
     name: 'QRDX Testnet',
-    chainId: 31337,
+    // The testnet chain spec's id (test.qrdx.org/chain_spec), since the reset of 2026-10-12.
+    chainId: 7620,
     rpcUrl: 'https://test.qrdx.org/rpc',
     nodeUrl: 'https://test.qrdx.org',
     explorerUrl: 'https://explorer.qrdx.org',
-    blockTimeSec: 180,
+    blockTimeSec: 0.25,
   },
   local: {
     id: 'local',
@@ -66,7 +67,7 @@ export const NETWORKS: Record<NetworkId, NetworkConfig> = {
     rpcUrl: 'http://127.0.0.1:3007/rpc',
     nodeUrl: 'http://127.0.0.1:3007',
     explorerUrl: 'http://127.0.0.1:3000',
-    blockTimeSec: 180,
+    blockTimeSec: 0.25,
   },
 }
 

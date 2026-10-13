@@ -53,7 +53,7 @@ export function StatusBar() {
       </span>
 
       {data?.height != null && data.height >= 0 && (
-        <span className="flex items-center gap-1.5" title={`Blocks are about ${Math.round((data.blockTimeSec ?? 180) / 60)} min apart`}>
+        <span className="flex items-center gap-1.5" title={`One block a slot, ${Math.round((data.blockTimeSec ?? 0.25) * 1000)} ms apart`}>
           <Boxes className="h-3 w-3" />
           <span className="num text-foreground/80">#{data.height.toLocaleString()}</span>
           {ago !== null && <span className="num hidden md:inline">· {ago < 60 ? `${ago}s` : `${Math.floor(ago / 60)}m ${ago % 60}s`} ago</span>}

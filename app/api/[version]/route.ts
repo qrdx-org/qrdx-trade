@@ -38,6 +38,8 @@ export const GET = handler(async (_req, { params }: { params: Promise<{ version:
         `/api/${version}/receipts/{txHash}`,
         `/api/${version}/prices`,
         `/api/${version}/launches`,
+        `/api/${version}/staking`,
+        `/api/${version}/staking/{address}`,
         `/api/${version}/status`,
       ],
     },
