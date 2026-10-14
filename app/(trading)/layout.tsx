@@ -2,6 +2,7 @@ import { AppNav } from '@/components/AppNav'
 import { PageFooter } from '@/components/chrome/PageFooter'
 import { StatusBar } from '@/components/chrome/StatusBar'
 import { TickerBar } from '@/components/chrome/TickerBar'
+import { AlertWatcher } from '@/components/alerts/AlertWatcher'
 
 /**
  * Every app page: nav and the featured ticker on top, the status bar at the
@@ -18,6 +19,7 @@ export default function TradingLayout({ children }: { children: React.ReactNode 
         <PageFooter />
       </main>
       <StatusBar />
+      <AlertWatcher />
     </div>
   )
 }

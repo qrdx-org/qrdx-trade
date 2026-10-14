@@ -10,6 +10,7 @@ import { compact } from '@/lib/format'
 import { apiGet, useApi } from '@/lib/hooks/useApi'
 import { useNet, useWallet } from '@/lib/wallet/WalletContext'
 import { cn } from '@/lib/utils'
+import { useStakeHistory, type StakeHistory } from '@/components/stake/useStakeHistory'
 
 // ─── API shapes (app/api/[version]/staking) ──────────────────────────────────────
 
@@ -95,6 +96,8 @@ export function StakeView() {
   const w = useWallet()
   const staking = useApi<Staking>(`${apiBase}/staking`, 10_000)
   const mine = useApi<Mine>(w.trader ? `${apiBase}/staking/${w.trader}` : null, 8_000)
+  // Re-read when the stake changes (a delegation landed), not on every poll.
+  const history = useStakeHistory(w.trader, mine.data?.stakes.map((x) => `${x.validator}:${x.shares}`).join(',') ?? null)
   const [selected, setSelected] = useState<string | null>(null)
   const [amount, setAmount] = useState('')
   const [stage, setStage] = useState<Stage | null>(null)
@@ -283,7 +286,7 @@ export function StakeView() {
               ) : (
                 <div className="divide-y">
                   {mine.data.stakes.map((st) => (
-                    <Position key={st.validator} stake={st} staking={s} busy={busy} onUndelegate={(params, label) => void submit('STAKE_UNDELEGATE', params, label)} />
+                    <Position key={st.validator} stake={st} staking={s} history={history} busy={busy} onUndelegate={(params, label) => void submit('STAKE_UNDELEGATE', params, label)} />
                   ))}
                   {mine.data.payouts.map((p) => {
                     const left = s?.epoch != null ? p.due_epoch - s.epoch : null
@@ -305,6 +308,7 @@ export function StakeView() {
                   })}
                 </div>
               )}
+              <StakeHistoryList history={history} />
             </section>
           )}
 
@@ -395,14 +399,69 @@ export function StakeView() {
 }
 
 /** One pool the account holds shares in: value, warm-up, and undelegating all or part. */
+/** Delegated so far, and what that has earned: the stake's value now less what went in. */
+function Earned({ stake, warming, history }: { stake: Mine['stakes'][number]; warming: bigint; history: StakeHistory | null }) {
+  if (!history) return null
+  const entry = history.byValidator.get(stake.validator.toLowerCase())
+  if (!entry) return history.complete ? null : <p className="mt-1 text-[11px] text-muted-foreground">Delegated before the history the node keeps.</p>
+  const earned = dec(stake.value) + warming - dec(entry.delegated)
+  return (
+    <p className="num mt-1 text-[11px] text-muted-foreground">
+      Delegated {qrdx(entry.delegated, 6)} QRDX
+      {!entry.undelegated && history.complete ? (
+        <>
+          {' · '}
+          <span className={earned >= 0n ? 'text-bid' : 'text-ask'}>
+            {earned >= 0n ? '+' : ''}
+            {qrdx(str(earned), 6)} QRDX earned
+          </span>
+        </>
+      ) : (
+        ' · earnings cannot be separated after an undelegation'
+      )}
+    </p>
+  )
+}
+
+/** The account's delegations and undelegations, newest first. */
+function StakeHistoryList({ history }: { history: StakeHistory | null }) {
+  if (!history?.events.length) return null
+  return (
+    <div className="border-t">
+      <p className="px-4 pt-3 text-xs font-semibold">History</p>
+      <ul className="divide-y">
+        {history.events.slice(0, 12).map((e) => (
+          <li key={e.tx} className="flex items-center justify-between gap-3 px-4 py-2 text-xs">
+            <span>
+              <span className={cn('font-medium', !e.ok && 'text-ask')}>
+                {e.op === 'STAKE_DELEGATE' ? 'Delegated' : 'Undelegated'}
+                {!e.ok && ' (failed)'}
+              </span>
+              <span className="block text-[11px] text-muted-foreground">
+                {short(e.validator)} · {e.time ? new Date(e.time * 1000).toLocaleString() : `block ${e.block.toLocaleString()}`}
+              </span>
+            </span>
+            <span className="num flex items-center gap-1.5 text-right">
+              {qrdx(e.amount, 6)} {e.op === 'STAKE_DELEGATE' ? 'QRDX' : 'shares'}
+              <ExplorerLink kind="tx" id={e.tx} />
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
 function Position({
   stake,
   staking,
+  history,
   busy,
   onUndelegate,
 }: {
   stake: Mine['stakes'][number]
   staking: Staking | null
+  history: StakeHistory | null
   busy: boolean
   onUndelegate: (params: Record<string, string>, label: string) => void
 }) {
@@ -431,6 +490,7 @@ function Position({
           {warming > 0n && <span className="block text-[11px] text-warn">+ {qrdx(str(warming), 6)} warming up</span>}
         </span>
       </div>
+      <Earned stake={stake} warming={warming} history={history} />
       {stake.warming_up.map((x, i) => {
         const left = staking?.epoch != null ? x.active_from_epoch - staking.epoch : null
         return (

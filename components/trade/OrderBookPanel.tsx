@@ -5,13 +5,15 @@ import { ArrowDown, ArrowUp } from 'lucide-react'
 import { fixed, price as fmtPrice, size as fmtSize } from '@/lib/format'
 import type { OrderBook } from '@/lib/types'
 import { cn } from '@/lib/utils'
+import { DepthChart } from '@/components/trade/DepthChart'
 
-type View = 'both' | 'bids' | 'asks'
+type View = 'both' | 'bids' | 'asks' | 'depth'
 
 /**
  * The node's book, re-oriented to the market. Asks on top (best nearest the
  * spread), bids below; bars show cumulative size. Clicking a level fills the
- * order form's price. One side can take the whole panel.
+ * order form's price. One side can take the whole panel, or the book can be drawn as a
+ * depth chart.
  */
 export function OrderBookPanel({
   book,
@@ -81,18 +83,30 @@ export function OrderBookPanel({
               <span className={cn('h-[3px] rounded-sm', v === 'asks' ? 'bg-ask' : 'bg-bid')} />
             </button>
           ))}
+          <button
+            onClick={() => setView('depth')}
+            aria-label="Depth chart"
+            title="Depth chart"
+            className={cn('flex h-6 items-center rounded px-1.5 text-[10px] font-medium transition-colors', view === 'depth' ? 'bg-accent' : 'opacity-50 hover:opacity-100')}
+          >
+            Depth
+          </button>
         </div>
         {book?.spreadBps && <span className="num text-[11px] text-muted-foreground">Spread {fixed(String(Number(book.spreadBps) / 100), 3)}%</span>}
       </div>
-      <div className="grid grid-cols-3 px-3 py-1.5 text-right text-[11px] text-muted-foreground">
-        <span className="text-left">Price ({quoteSymbol})</span>
-        <span>Size ({baseSymbol})</span>
-        <span>Total</span>
-      </div>
+      {view !== 'depth' && (
+        <div className="grid grid-cols-3 px-3 py-1.5 text-right text-[11px] text-muted-foreground">
+          <span className="text-left">Price ({quoteSymbol})</span>
+          <span>Size ({baseSymbol})</span>
+          <span>Total</span>
+        </div>
+      )}
       {error && !book ? (
         <Empty text="Order book unavailable: the QRDX node did not answer." />
       ) : !book ? (
         <Skeleton />
+      ) : view === 'depth' ? (
+        <DepthChart book={book} baseSymbol={baseSymbol} quoteSymbol={quoteSymbol} onPick={onPick} />
       ) : (
         <>
           {view !== 'bids' && (

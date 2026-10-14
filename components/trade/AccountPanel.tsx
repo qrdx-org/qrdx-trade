@@ -13,6 +13,8 @@ import type { AccountResponse } from '@/lib/types'
 import { usePendingTxs } from '@/lib/wallet/pending'
 import { useNet, useWallet } from '@/lib/wallet/WalletContext'
 import { cn } from '@/lib/utils'
+import { orderMarket, spotLimitParams } from '@/lib/orders'
+import { AmendOrder, CancelAll, useSequence } from '@/components/trade/OrderManage'
 
 export type AccountTab = {
   id: string
@@ -103,31 +105,48 @@ export function BalancesTable({ account }: { account: AccountResponse | null }) 
 }
 
 export function SpotOrdersTable({ account, onlyMarket }: { account: AccountResponse | null; onlyMarket?: string }) {
-  const w = useWallet()
+  const seq = useSequence()
   const [busy, setBusy] = useState<string | null>(null)
-  const [err, setErr] = useState<string | null>(null)
   if (!account) return <Loading />
   const orders = onlyMarket ? account.spotOrders.filter((o) => o.market === onlyMarket) : account.spotOrders
   if (!orders.length) return <p className="p-6 text-center text-xs text-muted-foreground">No open orders{onlyMarket ? ' on this market' : ''}.</p>
-  const cancel = async (o: AccountResponse['spotOrders'][number]) => {
+  type Order = AccountResponse['spotOrders'][number]
+  const cancelReq = (o: Order) => ({
+    op: 'CANCEL_ORDER',
+    params: { order_id: o.orderId, pair: o.pair },
+    label: `Cancel ${o.side} ${o.amount} ${o.base.symbol} @ ${o.price}`,
+    market: o.market ?? undefined,
+  })
+  const cancel = async (o: Order) => {
     setBusy(o.orderId)
-    setErr(null)
-    try {
-      await w.sendExchange({
-        op: 'CANCEL_ORDER',
-        params: { order_id: o.orderId, pair: o.pair },
-        label: `Cancel ${o.side} ${o.amount} ${o.base.symbol} @ ${o.price}`,
+    await seq.run([cancelReq(o)])
+    setBusy(null)
+  }
+  const amend = async (o: Order, price: string, size: string) => {
+    setBusy(o.orderId)
+    await seq.run([
+      cancelReq(o),
+      {
+        op: 'PLACE_ORDER',
+        params: spotLimitParams(orderMarket(o), o.side, price, size),
+        label: `${o.side === 'buy' ? 'Buy' : 'Sell'} ${size} ${o.base.symbol} @ ${price} ${o.quote.symbol} (replaces ${o.orderId.slice(0, 8)})`,
         market: o.market ?? undefined,
-      })
-    } catch (e) {
-      setErr((e as Error).message)
-    } finally {
-      setBusy(null)
-    }
+      },
+    ])
+    setBusy(null)
   }
   return (
     <>
-      {err && <p className="px-3 py-1 text-xs text-ask">{err}</p>}
+      {(seq.error || orders.length > 1) && (
+        <div className="flex items-center justify-between gap-3 px-3 py-1.5">
+          <span className="text-xs text-ask">{seq.error}</span>
+          <CancelAll count={orders.length} busy={busy === '*' ? seq.progress : null} onConfirm={async () => {
+            setBusy('*')
+            await seq.run(orders.map(cancelReq))
+            setBusy(null)
+          }} />
+        </div>
+      )}
       <table className="num w-full text-xs">
         <thead className="sticky top-0 bg-card text-[11px] text-muted-foreground">
           <tr className="text-right">
@@ -149,14 +168,19 @@ export function SpotOrdersTable({ account, onlyMarket }: { account: AccountRespo
               <td className="px-3 py-1.5">{fmtPrice(o.price)}</td>
               <td className="px-3 py-1.5">{fmtSize(o.amount)}</td>
               <td className="px-3 py-1.5 text-muted-foreground">{fmtSize(o.filled)}</td>
-              <td className="px-3 py-1.5">
-                <button
-                  onClick={() => cancel(o)}
-                  disabled={busy === o.orderId}
-                  className="rounded-md border px-2.5 py-0.5 text-[11px] font-medium transition-colors hover:border-ask/50 hover:text-ask disabled:opacity-50"
-                >
-                  {busy === o.orderId ? '…' : 'Cancel'}
-                </button>
+              <td className="relative px-3 py-1.5">
+                <span className="inline-flex items-center gap-1.5">
+                  {o.base.address && o.quote.address && (
+                    <AmendOrder price={o.price} size={o.remaining} sizeLabel={`Size (${o.base.symbol})`} busy={!!busy} onSubmit={(p, sz) => void amend(o, p, sz)} />
+                  )}
+                  <button
+                    onClick={() => cancel(o)}
+                    disabled={!!busy}
+                    className="rounded-md border px-2.5 py-0.5 text-[11px] font-medium transition-colors hover:border-ask/50 hover:text-ask disabled:opacity-50"
+                  >
+                    {busy === o.orderId ? '…' : 'Cancel'}
+                  </button>
+                </span>
               </td>
             </tr>
           ))}

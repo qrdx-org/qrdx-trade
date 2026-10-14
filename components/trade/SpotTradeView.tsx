@@ -125,6 +125,8 @@ export function SpotTradeView({ base, quote }: { base: string; quote: string }) 
       <UnverifiedBanner assets={[m.base, m.quote]} />
       <MarketHeader
         path={m.path}
+        alertLabel={pairLabel}
+        alertUnit={m.quote.symbol}
         selector={
           <MarketSelector
             label={pairLabel}

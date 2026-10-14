@@ -11,7 +11,7 @@ type Side = 'buy' | 'sell'
  * URL's base is token1 (`market.inverted`), a buy of the base is a sell of
  * token0 at the inverse price, sized in token0.
  */
-export function spotLimitParams(market: SpotMarket, side: Side, priceStr: string, sizeStr: string) {
+export function spotLimitParams(market: Pick<SpotMarket, 'base' | 'quote' | 'inverted'>, side: Side, priceStr: string, sizeStr: string) {
   const base = market.base.address!
   const quote = market.quote.address!
   if (!market.inverted) {
@@ -29,4 +29,14 @@ export function spotLimitParams(market: SpotMarket, side: Side, priceStr: string
     price: str(side === 'buy' ? divUp(one, p) : div(one, p)),
     amount: str(mul(dec(sizeStr), p)),
   }
+}
+
+/**
+ * The market an open spot order rests on, as spotLimitParams needs it: the account API shows
+ * orders in the market's orientation (base/quote), and the node's pair names token0 first, so
+ * the market is inverted when token0 is not the base.
+ */
+export function orderMarket(o: { pair: string; base: SpotMarket['base']; quote: SpotMarket['quote'] }): Pick<SpotMarket, 'base' | 'quote' | 'inverted'> {
+  const token0 = o.pair.split(':')[0]?.toLowerCase() ?? ''
+  return { base: o.base, quote: o.quote, inverted: token0 !== (o.base.address ?? '').toLowerCase() }
 }

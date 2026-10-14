@@ -4,6 +4,7 @@ import { Star } from 'lucide-react'
 import { useFavorites } from '@/lib/hooks/useFavorites'
 import { usePriceFlash } from '@/lib/hooks/usePriceFlash'
 import { cn } from '@/lib/utils'
+import { AlertBell } from '@/components/alerts/AlertBell'
 
 export interface HeaderStat {
   label: string
@@ -25,8 +26,13 @@ export function MarketHeader({
   priceSub,
   stats,
   right,
+  alertLabel,
+  alertUnit,
 }: {
   path: string
+  /** The market's name and price unit for price alerts ("QRDX/USDC", "USDC"). */
+  alertLabel?: string
+  alertUnit?: string
   selector: React.ReactNode
   price: string
   priceRaw: string | null
@@ -48,6 +54,7 @@ export function MarketHeader({
       >
         <Star className={cn('h-4 w-4', starred && 'fill-warn text-warn')} />
       </button>
+      {alertLabel && <AlertBell path={path} label={alertLabel} unit={alertUnit ?? ''} priceRaw={priceRaw} />}
       <div className="shrink-0">{selector}</div>
       <div className="mx-2 hidden h-9 w-px bg-border sm:block" />
       <div className={cn('shrink-0 rounded-md px-2 py-0.5 leading-tight', flash)}>

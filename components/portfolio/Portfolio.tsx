@@ -12,6 +12,7 @@ import { useAccount } from '@/components/trade/SpotTradeView'
 import { TokenBadge } from '@/components/trade/TokenBadge'
 import { ConnectButton } from '@/components/wallet/ConnectButton'
 import { PnlChart, RANGES, RangeId, rangePoints } from '@/components/portfolio/PnlChart'
+import { ExportMenu } from '@/components/portfolio/ExportMenu'
 import { compact, fixed, size as fmtSize, timeAgo, tone } from '@/lib/format'
 import { useApi } from '@/lib/hooks/useApi'
 import type { AccountResponse, ApiAsset, IndexPrice, PnlMarket, PnlResponse } from '@/lib/types'
@@ -92,7 +93,10 @@ export function Portfolio() {
             <ExplorerLink id={address} label="View in explorer" className="whitespace-nowrap rounded-md border px-2 py-0.5 text-xs" />
           </div>
         </div>
-        {account.error && !a && <p className="text-sm text-ask">{account.error.message}</p>}
+        <div className="flex flex-col items-end gap-1">
+          <ExportMenu address={address} pnl={pnl.data} />
+          {account.error && !a && <p className="text-sm text-ask">{account.error.message}</p>}
+        </div>
       </header>
 
       <div className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-4">

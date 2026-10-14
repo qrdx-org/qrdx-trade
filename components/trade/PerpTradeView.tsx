@@ -94,6 +94,8 @@ export function PerpTradeView({ base, quote }: { base: string; quote: string }) 
     <div className="flex min-h-full flex-col gap-1 bg-canvas lg:h-full lg:p-1">
       <MarketHeader
         path={m.path}
+        alertLabel={`${m.base}-${m.quote}`}
+        alertUnit={m.quote}
         selector={
           <MarketSelector label={`${m.base}-${m.quote}`} sub={`Perpetual · up to ${m.maxLeverage ? Number(m.maxLeverage) : '—'}×`}>
             <TokenBadge asset={m.baseAsset ?? { symbol: m.base, color: '#64748b', verified: true }} size="lg" />
