@@ -31,7 +31,8 @@ export function useMetadata(uri: string | null | undefined): NftMetadata | null 
       live = false
     }
   }, [uri])
-  return state?.uri === uri ? state.meta : undefined
+  // No state yet means not loaded, even when the uri is undefined too (the NFT is still loading).
+  return state && state.uri === uri ? state.meta : undefined
 }
 
 /** An NFT's or a collection's image from its metadata; its name's initials while loading or without one. */
