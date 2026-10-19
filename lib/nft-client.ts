@@ -6,7 +6,9 @@
  * transaction's receipt. Both read the node directly; it allows any origin.
  */
 
-import { MARKET_ERRORS } from './nft-market'
+import { MARKET_ERRORS, selector } from './nft-market'
+
+const WRONG_PAYMENT = selector('WrongPayment()')
 
 async function rpc<T>(rpcUrl: string, method: string, params: unknown[]): Promise<T> {
   const res = await fetch(rpcUrl, {
@@ -20,10 +22,39 @@ async function rpc<T>(rpcUrl: string, method: string, params: unknown[]): Promis
   return body.result as T
 }
 
+/**
+ * Revert data the node put in its message as a Python bytes literal ("Call failed: b'x\x8aho'"),
+ * as hex; null when the message has none.
+ */
+export function bytesLiteralHex(message: string): string | null {
+  const m = /b(['"])((?:\\.|(?!\1).)*)\1/.exec(message)
+  if (!m) return null
+  const out: number[] = []
+  const body = m[2]
+  for (let i = 0; i < body.length; i++) {
+    const c = body[i]
+    if (c !== '\\') {
+      out.push(c.charCodeAt(0) & 0xff)
+      continue
+    }
+    const n = body[++i]
+    if (n === 'x') {
+      out.push(parseInt(body.slice(i + 1, i + 3), 16))
+      i += 2
+    } else out.push({ n: 10, r: 13, t: 9, '0': 0, '\\': 92, "'": 39, '"': 34 }[n] ?? n.charCodeAt(0))
+  }
+  return '0x' + out.map((b) => b.toString(16).padStart(2, '0')).join('')
+}
+
 /** The reason a call reverts, from its revert data: the market's errors, Error(string), or the node's message. */
 export function revertReason(e: unknown): string {
   const err = e as { message?: string; data?: unknown }
-  const data = typeof err.data === 'string' ? err.data : typeof (err.data as { data?: unknown })?.data === 'string' ? (err.data as { data: string }).data : null
+  const data =
+    typeof err.data === 'string'
+      ? err.data
+      : typeof (err.data as { data?: unknown })?.data === 'string'
+        ? (err.data as { data: string }).data
+        : bytesLiteralHex(err.message ?? '')
   if (data) {
     const known = MARKET_ERRORS[data.slice(0, 10).toLowerCase()]
     if (known) return known
@@ -43,13 +74,34 @@ export function revertReason(e: unknown): string {
   return msg.replace(/^.*execution reverted:?\s*/i, '') || 'The call would revert'
 }
 
-/** Run the call as `from` against the latest block; throws with the reason when it would revert. */
+/** What a node answers eth_estimateGas with for a call that fails at any gas: its block limit and more. */
+const ALWAYS_FAILS = 1_000_000n
+
+/**
+ * Run the call as `from` against the latest block; throws with the reason when it would revert.
+ *
+ * The node's eth_call runs every call without the QRDX it sends (qrdx-node main.py
+ * eth_call_handler passes value 0), so a call that pays is checked in two parts: without the
+ * value, where the only revert allowed is the market's WrongPayment (every check before the
+ * payment passed), and by estimating its gas with the value, which the node does carry: a call
+ * that fails at any gas comes back at the block limit or above.
+ */
 export async function dryRun(rpcUrl: string, call: { from: string; to: string; data: string; value?: bigint }): Promise<string> {
+  const value = call.value ?? 0n
+  let out = '0x'
   try {
-    return await rpc<string>(rpcUrl, 'eth_call', [{ from: call.from, to: call.to, data: call.data, value: '0x' + (call.value ?? 0n).toString(16) }, 'latest'])
+    out = await rpc<string>(rpcUrl, 'eth_call', [{ from: call.from, to: call.to, data: call.data, value: '0x' + value.toString(16) }, 'latest'])
   } catch (e) {
-    throw new Error(revertReason(e))
+    const reason = revertReason(e)
+    if (!(value > 0n && reason === MARKET_ERRORS[WRONG_PAYMENT])) throw new Error(reason)
   }
+  if (value > 0n) {
+    const balance = BigInt(await rpc<string>(rpcUrl, 'eth_getBalance', [call.from, 'latest']))
+    if (balance < value) throw new Error('Not enough QRDX in your trading account for this price and its fee.')
+    const gas = BigInt(await rpc<string>(rpcUrl, 'eth_estimateGas', [{ from: call.from, to: call.to, data: call.data, value: '0x' + value.toString(16) }]))
+    if (gas >= ALWAYS_FAILS) throw new Error('The call would fail with this payment: the listing may have just changed. Reload and try again.')
+  }
+  return out
 }
 
 /**
