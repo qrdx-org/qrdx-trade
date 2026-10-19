@@ -4,14 +4,14 @@
  * ERC-721 inside the EVM, so the contract moves the NFT and the payment in one transaction;
  * nothing is escrowed. Shared by the API (lib/server/nfts.ts) and the pages.
  *
- * The contract's address is per network: NEXT_PUBLIC_QRDX_MAIN_NFT_MARKET and
- * NEXT_PUBLIC_QRDX_TEST_NFT_MARKET. Without one the market is read-only: collections and NFTs
- * are listed, nothing can be listed or bought.
+ * The contract's address is per network: `nftMarket` in lib/config.ts (testnet's is deployed),
+ * overridden by NEXT_PUBLIC_QRDX_MAIN_NFT_MARKET / NEXT_PUBLIC_QRDX_TEST_NFT_MARKET. Without one
+ * the market is read-only: collections and NFTs are listed, nothing can be listed or bought.
  */
 
 import { keccak_256 } from '@noble/hashes/sha3.js'
 import { bytesToHex, hexToBytes, utf8ToBytes } from '@noble/hashes/utils.js'
-import type { Slot } from './config'
+import { slotNetwork, type Slot } from './config'
 import artifact from './nft-market/artifact.json'
 
 export const MARKET_ARTIFACT = artifact as { abi: unknown[]; bytecode: string; deployedBytecode: string; compiler: string }
@@ -21,7 +21,7 @@ export const QRDX_CURRENCY = '0x0000000000000000000000000000000000000000'
 
 export function marketAddress(slot: Slot): string | null {
   // Literal process.env reads, so Next inlines them in the browser bundle.
-  const raw = slot === 'main' ? process.env.NEXT_PUBLIC_QRDX_MAIN_NFT_MARKET : process.env.NEXT_PUBLIC_QRDX_TEST_NFT_MARKET
+  const raw = (slot === 'main' ? process.env.NEXT_PUBLIC_QRDX_MAIN_NFT_MARKET : process.env.NEXT_PUBLIC_QRDX_TEST_NFT_MARKET) || slotNetwork(slot).nftMarket
   return raw && /^0x[0-9a-fA-F]{40}$/.test(raw.trim()) ? raw.trim().toLowerCase() : null
 }
 

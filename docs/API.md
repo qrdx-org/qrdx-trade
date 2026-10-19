@@ -496,9 +496,10 @@ One address's stake (pass the `0xPQ` address):
 
 QRDX's native NFTs (qrdx-node docs/NATIVE_TOKENS.md §8) and the fixed-price market on top of them,
 `contracts/QRDXNFTMarket.sol`: a sale moves the NFT, the payment (QRDX or a native token) and the
-collection's royalty in one EVM transaction, and nothing is escrowed. The market contract's address is
-`NEXT_PUBLIC_QRDX_MAIN_NFT_MARKET` / `NEXT_PUBLIC_QRDX_TEST_NFT_MARKET`; `market` is `null` where none is
-configured, and the reads below still list collections and NFTs.
+collection's royalty in one EVM transaction, and nothing is escrowed. On testnet the market contract is
+`0x7ee08544a2fb4ee0bd311c836addeeab3a244bab` (`nftMarket` in lib/config.ts;
+`NEXT_PUBLIC_QRDX_MAIN_NFT_MARKET` / `NEXT_PUBLIC_QRDX_TEST_NFT_MARKET` override it). `market` is `null`
+where none is configured (mainnet, for now), and the reads below still list collections and NFTs.
 
 A listing comes from the contract's logs. It is **live** while its seller still owns the NFT and the market
 may move it (an operator approval for the collection, or the NFT's own approval); otherwise it is **stale**:

@@ -38,6 +38,8 @@ export interface NetworkConfig {
   explorerUrl: string
   /** Block interval: one block a slot (the chain spec's SLOT_DURATION_MS, standard 250 ms). */
   blockTimeSec: number
+  /** The NFT market contract (contracts/QRDXNFTMarket.sol) on this network, if deployed. */
+  nftMarket: string | null
 }
 
 export const NETWORKS: Record<NetworkId, NetworkConfig> = {
@@ -49,6 +51,7 @@ export const NETWORKS: Record<NetworkId, NetworkConfig> = {
     nodeUrl: 'https://node.qrdx.org',
     explorerUrl: 'https://explorer.qrdx.org',
     blockTimeSec: 0.25,
+    nftMarket: null,
   },
   testnet: {
     id: 'testnet',
@@ -59,6 +62,8 @@ export const NETWORKS: Record<NetworkId, NetworkConfig> = {
     nodeUrl: 'https://test.qrdx.org',
     explorerUrl: 'https://explorer.qrdx.org',
     blockTimeSec: 0.25,
+    // Deployed 2026-10-19; its runtime code matches lib/nft-market/artifact.json byte for byte.
+    nftMarket: '0x7ee08544a2fb4ee0bd311c836addeeab3a244bab',
   },
   local: {
     id: 'local',
@@ -68,6 +73,7 @@ export const NETWORKS: Record<NetworkId, NetworkConfig> = {
     nodeUrl: 'http://127.0.0.1:3007',
     explorerUrl: 'http://127.0.0.1:3000',
     blockTimeSec: 0.25,
+    nftMarket: null,
   },
 }
 
