@@ -18,6 +18,10 @@ import {
   launchCurve,
   tickSpacing,
   deployParams,
+  extensionSummary,
+  PLAIN_TOKEN,
+  untradableReason,
+  type TokenExtensions,
   isAuthorityAddress,
   validateLaunch,
 } from '@/lib/launch'
@@ -25,6 +29,7 @@ import type { AccountResponse, ApiAsset, IndexPrice } from '@/lib/types'
 import type { PoolRow } from '@/components/pools/PoolsList'
 import { useNet, useWallet } from '@/lib/wallet/WalletContext'
 import { cn } from '@/lib/utils'
+import { TokenStandard } from '@/components/launch/TokenStandard'
 
 /**
  * Three ways in:
@@ -101,6 +106,8 @@ export function LaunchForm({ existingToken, onLaunched }: { existingToken?: stri
   const [mintMode, setMintMode] = useState<'none' | 'self' | 'other'>('none')
   const [mintOther, setMintOther] = useState('')
   const [maxSupply, setMaxSupply] = useState('')
+  // Token standard extensions, fixed at creation (lib/launch.ts TokenExtensions).
+  const [extensions, setExtensions] = useState<TokenExtensions>(PLAIN_TOKEN)
   const [feeTier, setFeeTier] = useState<number>(10000)
   const [poolType, setPoolType] = useState<PoolType>('SUBSIDIZED')
   const [qrdxBalance, setQrdxBalance] = useState<string | null>(null)
@@ -117,7 +124,9 @@ export function LaunchForm({ existingToken, onLaunched }: { existingToken?: stri
     [assets.data, existingToken]
   )
   const noQuotes = !!assets.data && quotes.length === 0
-  const kind: Kind = existingToken ? 'market' : noQuotes ? 'token' : choice
+  // Transfer-fee, soulbound and default-frozen tokens cannot be pooled: those are created alone.
+  const untradable = existingToken ? null : untradableReason(extensions)
+  const kind: Kind = existingToken ? 'market' : noQuotes || untradable ? 'token' : choice
   const withMarket = kind !== 'token'
 
   useEffect(() => {
@@ -216,7 +225,10 @@ export function LaunchForm({ existingToken, onLaunched }: { existingToken?: stri
     tokenOnly: kind === 'token',
     mintAuthority,
     maxSupply: maxSupply.trim(),
+    extensions,
+    creator: w.trader,
   }
+  const powers = extensionSummary(extensions, w.trader)
   /** A share of `of`, rounded down to 18 places. */
   const share = (of: string, pct: number) => (isDec(of) ? round(str((dec(of) * BigInt(pct)) / 100n), 18, 'down') : '0')
 
@@ -441,8 +453,8 @@ export function LaunchForm({ existingToken, onLaunched }: { existingToken?: stri
               <button
                 key={k}
                 onClick={() => setChoice(k)}
-                disabled={k === 'launch' && noQuotes}
-                className={cn('rounded py-1.5', kind === k ? 'bg-background font-medium shadow-sm' : 'text-muted-foreground', k === 'launch' && noQuotes && 'opacity-40')}
+                disabled={k === 'launch' && (noQuotes || !!untradable)}
+                className={cn('rounded py-1.5', kind === k ? 'bg-background font-medium shadow-sm' : 'text-muted-foreground', k === 'launch' && (noQuotes || untradable) && 'opacity-40')}
               >
                 {label}
               </button>
@@ -450,8 +462,10 @@ export function LaunchForm({ existingToken, onLaunched }: { existingToken?: stri
           </div>
           <p className="mt-2 text-xs text-muted-foreground">
             {kind === 'launch'
-              ? `A token with a fixed supply, its pool, and a launch curve holding the supply, so it can be bought from the first block. On ${network.name}.`
-              : `Just the token, with a fixed supply, all of it in your wallet. Start its market whenever you like, here or on Pools. On ${network.name}.`}
+              ? `A token, its pool, and a launch curve holding the supply, so it can be bought from the first block. On ${network.name}.`
+              : untradable
+                ? `Just the token, all of it in your wallet. ${untradable} On ${network.name}.`
+                : `Just the token, all of it in your wallet. Start its market whenever you like, here or on Pools. On ${network.name}.`}
           </p>
           {noQuotes && (
             <p className="mt-2 text-xs text-warn">
@@ -502,6 +516,7 @@ export function LaunchForm({ existingToken, onLaunched }: { existingToken?: stri
                 </>
               )}
             </Field>
+            <TokenStandard value={extensions} onChange={setExtensions} creator={w.trader} />
           </>
         )}
 
@@ -594,9 +609,11 @@ export function LaunchForm({ existingToken, onLaunched }: { existingToken?: stri
       <p className="mt-2 text-[10px] leading-snug text-muted-foreground">
         {kind === 'market'
           ? 'The curve is ordinary pool liquidity in your name; you can withdraw it from the pool page, and buyers can see that you can.'
-          : (mintAuthority
-              ? 'The token can be minted by its mint authority; it has no freeze authority, so no one can lock a holder’s coins.'
-              : 'The token has no mint or freeze authority: its supply is fixed and no one can lock a holder’s coins.') +
+          : (powers.length
+              ? `${mintAuthority ? 'The token can be minted by its mint authority. ' : 'Its supply is fixed. '}Besides that, ${powers.join('; ')}.`
+              : mintAuthority
+                ? 'The token can be minted by its mint authority; it has no freeze authority, so no one can lock a holder’s coins.'
+                : 'The token has no mint or freeze authority: its supply is fixed and no one can lock a holder’s coins.') +
             (kind === 'launch' ? ' The curve is ordinary pool liquidity in your name; you can withdraw it from the pool page, and buyers can see that you can.' : '')}
       </p>
     </Panel>

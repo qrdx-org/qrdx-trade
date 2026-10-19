@@ -67,6 +67,24 @@ interface WalletState {
   switchNetwork: () => Promise<void>
   /** Returns the nonce the wallet signed with, so dependent operations can follow in the same block. */
   sendExchange: (req: ExchangeRequest) => Promise<{ txHash: string; nonce?: number }>
+  /**
+   * An EVM transaction from the trading (0xPQ) account: a contract call or a deployment
+   * (`to` null), signed as a type-0x51 post-quantum transaction (qrdx_sendPQTransaction).
+   * Resolves with its hash once the wallet broadcast it.
+   */
+  sendEvm: (req: EvmRequest) => Promise<string>
+}
+
+export interface EvmRequest {
+  /** The contract; null deploys `data`. */
+  to: string | null
+  data: string
+  /** Wei of QRDX sent with the call. */
+  value?: bigint
+  /** Gas limit; the wallet estimates one when omitted. */
+  gas?: bigint
+  /** For the wallet's activity and the page. */
+  label: string
 }
 
 interface NetState {
@@ -385,6 +403,31 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     [trader, account, rightNetwork, network.name, slot]
   )
 
+  const sendEvm = useCallback(
+    async (req: EvmRequest) => {
+      const w = walletRef.current
+      if (!w || !trader) throw new Error('Connect the QRDX Wallet first.')
+      if (!rightNetwork) throw new Error(`Switch the wallet to ${network.name}.`)
+      try {
+        return await w.provider.request<string>({
+          method: 'qrdx_sendPQTransaction',
+          params: [
+            {
+              from: account?.address,
+              ...(req.to ? { to: req.to } : {}),
+              data: req.data,
+              value: '0x' + (req.value ?? 0n).toString(16),
+              ...(req.gas ? { gas: '0x' + req.gas.toString(16) } : {}),
+            },
+          ],
+        })
+      } catch (e) {
+        throw new Error(providerErrorMessage(e))
+      }
+    },
+    [trader, account, rightNetwork, network.name]
+  )
+
   const walletValue = useMemo<WalletState>(
     () => ({
       status,
@@ -405,8 +448,9 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       disconnect,
       switchNetwork,
       sendExchange,
+      sendEvm,
     }),
-    [status, wallet, extension, connection, pairing, phone, accounts, account, trader, chain, rightNetwork, error, connect, connectPhone, cancelPairing, disconnect, switchNetwork, sendExchange]
+    [status, wallet, extension, connection, pairing, phone, accounts, account, trader, chain, rightNetwork, error, connect, connectPhone, cancelPairing, disconnect, switchNetwork, sendExchange, sendEvm]
   )
   const netValue = useMemo<NetState>(
     () => ({ slot, network, apiBase: apiBaseFor(slot), setSlot }),

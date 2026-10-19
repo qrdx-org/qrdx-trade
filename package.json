@@ -17,7 +17,8 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "relay:dev": "wrangler dev --config relay/wrangler.jsonc --port 8787",
     "relay:deploy": "wrangler deploy --config relay/wrangler.jsonc",
-    "relay:typecheck": "tsc --noEmit -p relay/tsconfig.json"
+    "relay:typecheck": "tsc --noEmit -p relay/tsconfig.json",
+    "nft-market:compile": "node scripts/nft-market/compile.mjs"
   },
   "keywords": [
     "nextjs",
@@ -80,6 +81,7 @@
     "autoprefixer": "^10.4.21",
     "eslint": "^9.0.0",
     "eslint-config-next": "^15.1.3",
+    "solc": "0.8.28",
     "typescript": "^5.7.2",
     "vitest": "^3",
     "wrangler": "^4.51.0"

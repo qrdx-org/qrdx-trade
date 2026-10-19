@@ -4,7 +4,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { blake2b } from '@noble/hashes/blake2.js'
-import { canonicalInitialPrice, decimalString, deployParams, deriveTokenAddress, launchCurve, validateLaunch } from '@/lib/launch'
+import { canonicalInitialPrice, decimalString, deployParams, deriveTokenAddress, extensionParams, launchCurve, PLAIN_TOKEN, untradableReason, validateExtensions, validateLaunch, type TokenExtensions } from '@/lib/launch'
 
 const LOW = '0x0000000000000000000000000000000000000001'
 const HIGH = '0xffffffffffffffffffffffffffffffffffffffff'
@@ -91,5 +91,49 @@ describe('helpers', () => {
       name: 'Pepe', symbol: 'PEPE', decimals: 18, initial_supply: '1000', mint_authority: me, max_supply: '5000',
     })
     expect(deployParams({ ...base, mintAuthority: null })).not.toHaveProperty('mint_authority')
+  })
+})
+
+describe('token standard extensions', () => {
+  const ME = '0xPQ' + 'a'.repeat(64)
+  const spec = (extensions: Partial<TokenExtensions>, tokenOnly = true) => ({
+    name: 'Badge', symbol: 'BDG', supply: '100', keep: '100', tokenOnly, mintAuthority: null, maxSupply: '',
+    extensions: { ...PLAIN_TOKEN, ...extensions }, creator: ME,
+  })
+
+  it('adds nothing for a plain token', () => {
+    expect(extensionParams(PLAIN_TOKEN, ME)).toEqual({})
+    expect(deployParams(spec({}))).toEqual({ name: 'Badge', symbol: 'BDG', decimals: 18, initial_supply: '100' })
+  })
+
+  it('sends each extension as the node reads it', () => {
+    const p = deployParams(spec({
+      decimals: 6, uri: 'ipfs://meta', fields: [{ key: 'website', value: 'https://x' }], metadataEditable: false,
+      freeze: 'self', defaultFrozen: true, pausable: true, permanentDelegate: ME, defaultOperators: `${ME}, ${ME.replace('a', 'b')}`,
+      postDoomsdayTrade: true,
+    }))
+    expect(p).toMatchObject({
+      decimals: 6, uri: 'ipfs://meta', metadata: { website: 'https://x' }, metadata_authority: '',
+      freeze_authority: ME, default_frozen: true, pausable: true, permanent_delegate: ME, post_doomsday_trade: true,
+    })
+    expect((p.default_operators as string[]).length).toBe(2)
+    expect(deployParams(spec({ transferFeeBps: '50', maxTransferFee: '1' }))).toMatchObject({ transfer_fee_bps: 50, max_transfer_fee: '1' })
+  })
+
+  it('refuses what the node refuses', () => {
+    expect(validateExtensions({ ...PLAIN_TOKEN, defaultFrozen: true })).toMatch(/freeze authority/)
+    expect(validateExtensions({ ...PLAIN_TOKEN, transferFeeBps: '10001' })).toMatch(/0–10,000/)
+    expect(validateExtensions({ ...PLAIN_TOKEN, transferFeeBps: '5', nonTransferable: true })).toMatch(/non-transferable/)
+    expect(validateExtensions({ ...PLAIN_TOKEN, uri: 'x'.repeat(257) })).toMatch(/256/)
+    expect(validateExtensions({ ...PLAIN_TOKEN, fields: [{ key: 'a', value: '1' }, { key: 'a', value: '2' }] })).toMatch(/different/)
+    expect(validateExtensions({ ...PLAIN_TOKEN, defaultOperators: Array(9).fill(ME).join(',') })).toMatch(/8/)
+    expect(validateExtensions({ ...PLAIN_TOKEN, decimals: 19 })).toMatch(/0–18/)
+  })
+
+  it('keeps unpoolable tokens out of a launch', () => {
+    expect(untradableReason({ ...PLAIN_TOKEN, transferFeeBps: '25' })).toMatch(/transfer fee/)
+    expect(untradableReason({ ...PLAIN_TOKEN, nonTransferable: true })).toMatch(/soulbound/i)
+    expect(untradableReason({ ...PLAIN_TOKEN, pausable: true })).toBeNull()
+    expect(validateLaunch({ ...spec({ nonTransferable: true }, false), keep: '0' })).toMatch(/soulbound/i)
   })
 })

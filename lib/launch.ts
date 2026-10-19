@@ -155,6 +155,10 @@ export interface LaunchSpec {
   mintAuthority: string | null
   /** Cap on total supply when mintable; "" for none. */
   maxSupply: string
+  /** Token standard extensions (none: a plain token). */
+  extensions?: TokenExtensions
+  /** The creator's address, for extension authorities that default to it. */
+  creator?: string | null
 }
 
 const DECIMAL = /^\d+(\.\d+)?$/
@@ -175,6 +179,11 @@ export function validateLaunch(s: LaunchSpec): string | null {
     if (!DECIMAL.test(s.maxSupply) || dec(s.maxSupply) <= 0n) return 'Enter a valid max supply, or leave it empty.'
     if (dec(s.maxSupply) < dec(s.supply)) return 'The max supply cannot be below the initial supply.'
   }
+  if (s.extensions) {
+    const bad = validateExtensions(s.extensions)
+    if (bad) return bad
+    if (!s.tokenOnly && untradableReason(s.extensions)) return untradableReason(s.extensions)
+  }
   if (!s.tokenOnly) {
     if (dec(s.supply) <= 0n) return 'A market needs an initial supply to put on the curve.'
     if (!DECIMAL.test(s.keep || '0')) return 'Enter how much to keep (0 for none).'
@@ -184,13 +193,147 @@ export function validateLaunch(s: LaunchSpec): string | null {
 }
 
 /** TOKEN_DEPLOY params for a spec. */
-export function deployParams(s: LaunchSpec): Record<string, string | number> {
+export function deployParams(s: LaunchSpec): Record<string, unknown> {
   return {
     name: s.name.trim(),
     symbol: s.symbol.trim(),
-    decimals: 18,
+    decimals: s.extensions?.decimals ?? 18,
     initial_supply: s.supply,
     ...(s.mintAuthority ? { mint_authority: s.mintAuthority } : {}),
     ...(s.mintAuthority && s.maxSupply ? { max_supply: s.maxSupply } : {}),
+    ...(s.extensions ? extensionParams(s.extensions, s.creator ?? null) : {}),
   }
+}
+
+// ── Token standard extensions (qrdx-node docs/NATIVE_TOKENS.md §7, exchange/tokens.py) ──
+
+/**
+ * What a token opts into when it is created; nothing can be added later. Each authority is
+ * the creator unless handed to another address, and can be renounced later.
+ */
+export interface TokenExtensions {
+  /** How wallets display it (0–18); the ledger counts 1e-18 for every token. */
+  decimals: number
+  /** Metadata: a uri (≤ 256) and up to 16 key/value fields, editable by the metadata authority. */
+  uri: string
+  fields: { key: string; value: string }[]
+  /** Who may edit the metadata later: the creator, or nobody (immutable). */
+  metadataEditable: boolean
+  /** Who may freeze and thaw holders' balances. */
+  freeze: 'none' | 'self' | 'other'
+  freezeOther: string
+  /** Every account starts frozen until the freeze authority thaws it (KYC'd assets). */
+  defaultFrozen: boolean
+  /** Basis points withheld from every holder-to-holder transfer ("" = no fee). */
+  transferFeeBps: string
+  /** Cap on the fee per transfer, in tokens ("" = no cap). */
+  maxTransferFee: string
+  /** Soulbound: minted and burned, never moved between holders. */
+  nonTransferable: boolean
+  /** May move and burn anyone's balance without an allowance (a regulated issuer's clawback). */
+  permanentDelegate: string
+  /** The creator can stop every transfer, mint and burn, and resume them. */
+  pausable: boolean
+  /** ERC-777 default operators (≤ 8): operators for every holder until that holder revokes one. */
+  defaultOperators: string
+  /** Advisory (whitepaper §9.2): backed by locked classical assets, tradable after Doomsday. */
+  postDoomsdayTrade: boolean
+}
+
+export const PLAIN_TOKEN: TokenExtensions = {
+  decimals: 18,
+  uri: '',
+  fields: [],
+  metadataEditable: true,
+  freeze: 'none',
+  freezeOther: '',
+  defaultFrozen: false,
+  transferFeeBps: '',
+  maxTransferFee: '',
+  nonTransferable: false,
+  permanentDelegate: '',
+  pausable: false,
+  defaultOperators: '',
+  postDoomsdayTrade: false,
+}
+
+const printable = (s: string) => /^[\x20-\x7e -￿]*$/.test(s)
+const operatorsOf = (s: string) => s.split(/[\s,]+/).map((a) => a.trim()).filter(Boolean)
+
+export function freezeAuthorityOf(e: TokenExtensions, creator: string | null): string | null {
+  return e.freeze === 'self' ? creator : e.freeze === 'other' ? e.freezeOther.trim() : null
+}
+
+/** Why a token with these extensions cannot have a pool or a book, or null when it can. */
+export function untradableReason(e: TokenExtensions): string | null {
+  if (e.nonTransferable) return 'A soulbound token cannot move, so it cannot be pooled or traded.'
+  if (e.transferFeeBps.trim() !== '') return 'A token with a transfer fee cannot be pooled or traded: a fee withheld on the way into a pool would break its accounting.'
+  if (e.defaultFrozen) return 'In a default-frozen token every account, a pool included, starts frozen until the freeze authority thaws it.'
+  return null
+}
+
+/** The first problem with the extensions, or null. Mirrors qrdx-node tokens.py _apply_extensions. */
+export function validateExtensions(e: TokenExtensions): string | null {
+  if (!Number.isInteger(e.decimals) || e.decimals < 0 || e.decimals > 18) return 'Decimals must be 0–18.'
+  if (e.uri.length > 256 || !printable(e.uri)) return 'The metadata URI must be at most 256 printable characters.'
+  const named = e.fields.filter((f) => f.key.trim() || f.value)
+  if (named.length > 16) return 'At most 16 metadata fields.'
+  for (const f of named) {
+    const k = f.key.trim()
+    if (k.length < 1 || k.length > 32 || !printable(k)) return 'Metadata field names must be 1–32 printable characters.'
+    if (f.value.length > 256 || !printable(f.value)) return `The "${k}" field must be at most 256 printable characters.`
+  }
+  if (new Set(named.map((f) => f.key.trim())).size !== named.length) return 'Metadata field names must be different.'
+  if (e.freeze === 'other' && !isAuthorityAddress(e.freezeOther.trim())) return 'The freeze authority must be a 0x… or 0xPQ… address.'
+  if (e.defaultFrozen && e.freeze === 'none') return 'A default-frozen token needs a freeze authority to thaw accounts.'
+  if (e.transferFeeBps.trim() !== '') {
+    if (!/^\d+$/.test(e.transferFeeBps.trim()) || Number(e.transferFeeBps) > 10_000) return 'The transfer fee is 0–10,000 basis points (100 = 1 %).'
+    if (e.maxTransferFee && !DECIMAL.test(e.maxTransferFee)) return 'Enter a valid maximum fee, or leave it empty.'
+    if (e.nonTransferable) return 'A non-transferable token cannot charge a transfer fee.'
+  }
+  if (e.permanentDelegate.trim() && !isAuthorityAddress(e.permanentDelegate.trim())) return 'The permanent delegate must be a 0x… or 0xPQ… address.'
+  const ops = operatorsOf(e.defaultOperators)
+  if (ops.length > 8) return 'At most 8 default operators.'
+  if (ops.some((o) => !isAuthorityAddress(o))) return 'Default operators must be 0x… or 0xPQ… addresses.'
+  return null
+}
+
+/** The TOKEN_DEPLOY parameters the extensions add. A plain token adds none, so it is committed as before. */
+export function extensionParams(e: TokenExtensions, creator: string | null): Record<string, string | number | boolean | string[] | Record<string, string>> {
+  const out: Record<string, string | number | boolean | string[] | Record<string, string>> = {}
+  const freeze = freezeAuthorityOf(e, creator)
+  if (freeze) out.freeze_authority = freeze
+  const fields = Object.fromEntries(e.fields.filter((f) => f.key.trim()).map((f) => [f.key.trim(), f.value]))
+  if (e.uri.trim() || Object.keys(fields).length || !e.metadataEditable) {
+    out.uri = e.uri.trim()
+    if (Object.keys(fields).length) out.metadata = fields
+    if (!e.metadataEditable) out.metadata_authority = ''
+  }
+  if (e.transferFeeBps.trim() !== '') {
+    out.transfer_fee_bps = Number(e.transferFeeBps)
+    if (e.maxTransferFee.trim()) out.max_transfer_fee = e.maxTransferFee.trim()
+  }
+  if (e.nonTransferable) out.non_transferable = true
+  if (e.defaultFrozen) out.default_frozen = true
+  if (e.permanentDelegate.trim()) out.permanent_delegate = e.permanentDelegate.trim()
+  if (e.pausable) out.pausable = true
+  const ops = operatorsOf(e.defaultOperators)
+  if (ops.length) out.default_operators = ops
+  if (e.postDoomsdayTrade) out.post_doomsday_trade = true
+  return out
+}
+
+/** Plain-language lines on what the extensions let someone do, for the form and the review. */
+export function extensionSummary(e: TokenExtensions, creator: string | null): string[] {
+  const lines: string[] = []
+  const who = (a: string | null) => (a && creator && a.toLowerCase() === creator.toLowerCase() ? 'you' : a ? `${a.slice(0, 10)}…` : 'nobody')
+  const freeze = freezeAuthorityOf(e, creator)
+  if (freeze) lines.push(`${who(freeze)} can freeze any holder's balance${e.defaultFrozen ? ', and every account starts frozen until thawed' : ''}`)
+  if (e.transferFeeBps.trim() !== '') lines.push(`${(Number(e.transferFeeBps) / 100).toFixed(2)} % of every transfer is withheld for the fee authority (you)${e.maxTransferFee ? `, at most ${e.maxTransferFee} a transfer` : ''}`)
+  if (e.nonTransferable) lines.push('holders can never move it (soulbound)')
+  if (e.permanentDelegate.trim()) lines.push(`${who(e.permanentDelegate.trim())} can move or burn anyone's balance without permission`)
+  if (e.pausable) lines.push('you can pause every transfer, mint and burn')
+  if (operatorsOf(e.defaultOperators).length) lines.push(`${operatorsOf(e.defaultOperators).length} default operator(s) can move every holder's balance until that holder revokes them`)
+  if (e.uri.trim() || e.fields.some((f) => f.key.trim())) lines.push(e.metadataEditable ? 'you can edit its metadata later' : 'its metadata is fixed forever')
+  return lines
 }

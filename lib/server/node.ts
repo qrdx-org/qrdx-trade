@@ -284,6 +284,36 @@ async function rpc<T>(cfg: ServerConfig, method: string, params: unknown[] = [])
   return body.result as T
 }
 
+/**
+ * Several reads in one JSON-RPC batch (the node answers them concurrently). Each answer is its
+ * result, or null when the node reported an error for it: one missing NFT is not a failure.
+ */
+async function rpcBatch<T>(cfg: ServerConfig, calls: { method: string; params: unknown[] }[]): Promise<(T | null)[]> {
+  if (!calls.length) return []
+  const first = ++rpcId
+  let res: Response
+  try {
+    res = await fetch(cfg.rpcUrl, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(calls.map((c, i) => ({ jsonrpc: '2.0', id: first + i, method: c.method, params: c.params }))),
+      signal: AbortSignal.timeout(RPC_TIMEOUT_MS * 2),
+      cache: 'no-store',
+    })
+  } catch (err) {
+    throw new ApiError('node_unavailable', `QRDX node unreachable (batch of ${calls.length}): ${(err as Error).message}`)
+  }
+  if (!res.ok) throw new ApiError('node_unavailable', `QRDX node returned HTTP ${res.status} for a batch`)
+  rpcId += calls.length
+  const body = (await res.json().catch(() => null)) as { id: number; result?: T; error?: unknown }[] | null
+  if (!Array.isArray(body)) throw new ApiError('node_unavailable', 'QRDX node sent an invalid batch response')
+  const byId = new Map(body.map((r) => [r.id, r]))
+  return calls.map((_, i) => {
+    const r = byId.get(first + i)
+    return r && !r.error && r.result !== undefined ? (r.result as T) : null
+  })
+}
+
 /** A read whose "not found" is an answer, not a failure. */
 async function maybe<T>(cfg: ServerConfig, method: string, params: unknown[]): Promise<T | null> {
   try {
@@ -309,6 +339,53 @@ async function rest<T>(cfg: ServerConfig, path: string): Promise<T> {
   const body = (await res.json()) as { ok: boolean; result?: T; error?: string } & Record<string, unknown>
   if (body.ok === false) throw new ApiError('node_unavailable', `${path}: ${body.error ?? 'error'}`)
   return (body.result ?? body) as T
+}
+
+/** exchange_getNftCollection (qrdx-node exchange/nfts.py Collection.summary). */
+export interface NodeNftCollection {
+  collection: string
+  name: string
+  symbol: string
+  uri: string
+  creator: string
+  max_supply: number | null
+  supply: number
+  minted: number
+  burned: number
+  royalty_bps: number
+  royalty_recipient: string | null
+  update_authority: string | null
+  mint_authority: string | null
+  non_transferable: boolean
+  created_height: number
+}
+
+/** exchange_getNft / exchange_getNftsOf (Nft.summary, with the collection's name and royalties). */
+export interface NodeNft {
+  collection: string
+  token_id: string
+  owner: string
+  uri: string
+  name: string
+  approved: string | null
+  minted_height: number
+  symbol?: string
+  collection_name?: string
+  royalty_bps?: number
+  royalty_recipient?: string | null
+  non_transferable?: boolean
+}
+
+/** A row of /get_address_history (qrdx-node tx_index.py). */
+export interface NodeIndexedTx {
+  block_height: number
+  tx_hash: string
+  timestamp: number | null
+  kind: string
+  op: string | null
+  sender: string | null
+  status: string | null
+  detail: { params?: Record<string, unknown>; collection?: string; token_id?: string | number } | null
 }
 
 /** staking_getValidators (qrdx-node docs/STAKING.md): the validator set in force at the tip. */
@@ -482,6 +559,29 @@ export function createNodeClient(cfg: ServerConfig) {
     stakingParams: () => rpc<NodeStakingParams>(cfg, 'staking_getParams'),
     delegations: (address: string) => rpc<NodeDelegations>(cfg, 'staking_getDelegations', [address]),
     chainSpec: () => rpc<NodeChainSpec>(cfg, 'qrdx_chainSpec'),
+
+    // Native NFTs (docs/NATIVE_TOKENS.md §8) and the EVM reads the NFT market needs.
+    nftCollections: () => rpc<NodeNftCollection[]>(cfg, 'exchange_getNftCollections'),
+    nftCollection: (collection: string) => maybe<NodeNftCollection>(cfg, 'exchange_getNftCollection', [collection]),
+    nft: (collection: string, tokenId: string) => maybe<NodeNft>(cfg, 'exchange_getNft', [collection, tokenId]),
+    nftsOf: (owner: string, collection: string | null, limit: number) => rpc<NodeNft[]>(cfg, 'exchange_getNftsOf', [owner, collection, limit]),
+    /** Many reads in batches of 100; null where a read failed (a burned NFT, an unknown id). */
+    batch: async <T>(calls: { method: string; params: unknown[] }[]): Promise<(T | null)[]> => {
+      const out: (T | null)[] = []
+      for (let i = 0; i < calls.length; i += 100) out.push(...(await rpcBatch<T>(cfg, calls.slice(i, i + 100))))
+      return out
+    },
+    logs: (filter: { address: string; fromBlock: number; toBlock?: number }) =>
+      rpc<{ address: string; topics: string[]; data: string; blockNumber: string; transactionHash: string; logIndex: string }[]>(cfg, 'eth_getLogs', [
+        { address: filter.address, fromBlock: '0x' + Math.max(0, filter.fromBlock).toString(16), toBlock: filter.toBlock != null ? '0x' + filter.toBlock.toString(16) : 'latest' },
+      ]),
+    code: (address: string) => rpc<string>(cfg, 'eth_getCode', [address, 'latest']),
+    /** An account's history from the node's transaction index (tx_index.py), newest first. */
+    history: (address: string, opts: { kinds?: string; limit?: number; cursor?: string | null } = {}) =>
+      rest<{ transactions: NodeIndexedTx[]; next_cursor: string | null }>(
+        cfg,
+        `/get_address_history?address=${encodeURIComponent(address)}&limit=${opts.limit ?? 500}${opts.kinds ? `&kinds=${opts.kinds}` : ''}${opts.cursor ? `&cursor=${encodeURIComponent(opts.cursor)}` : ''}`
+      ),
 
     /** Height and last block hash (`/get_status`, which the node does not cost-limit). */
     status: () => rest<{ height: number; last_block_hash?: string }>(cfg, '/get_status'),

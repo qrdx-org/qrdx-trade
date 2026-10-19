@@ -492,6 +492,55 @@ One address's stake (pass the `0xPQ` address):
 
 ---
 
+## NFTs
+
+QRDX's native NFTs (qrdx-node docs/NATIVE_TOKENS.md §8) and the fixed-price market on top of them,
+`contracts/QRDXNFTMarket.sol`: a sale moves the NFT, the payment (QRDX or a native token) and the
+collection's royalty in one EVM transaction, and nothing is escrowed. The market contract's address is
+`NEXT_PUBLIC_QRDX_MAIN_NFT_MARKET` / `NEXT_PUBLIC_QRDX_TEST_NFT_MARKET`; `market` is `null` where none is
+configured, and the reads below still list collections and NFTs.
+
+A listing comes from the contract's logs. It is **live** while its seller still owns the NFT and the market
+may move it (an operator approval for the collection, or the NFT's own approval); otherwise it is **stale**:
+buying it would revert, and anyone may clear it with `delist`. Prices are in the currency's base units
+(`price`) and in its display units (`priceDisplay`).
+
+### `GET /api/v1/nfts`
+
+Every collection (`exchange_getNftCollections`) with `stats` (`listed`, `floor` and `volume` in QRDX,
+`sales`), and the 100 most recent sales.
+
+### `GET /api/v1/nfts/{collection}`
+
+A collection, its NFTs (up to 2,000; `truncated` when there are more), each with `owner`, `ownerId` (the
+20-byte account the EVM sees) and `listing`, the collection's `stats` (with `owners`) and its sales. The
+node keeps no list of a collection's members, so they are read by id: 1 up to the number minted, plus ids
+its mint authority and creator chose at mint.
+
+### `GET /api/v1/nfts/{collection}/{tokenId}`
+
+One NFT with its listing and its market history (listed, delisted, sold).
+
+### `GET /api/v1/nfts/accounts/{address}`
+
+The NFTs an account owns (0x or 0xPQ form), each with its listing and `marketApproved` (whether the
+market may move it), and `staleListings`: listings the account left on NFTs it no longer owns.
+
+### Writing
+
+| What | How |
+| --- | --- |
+| Create a collection, mint | `NFT_CREATE_COLLECTION`, `NFT_MINT` exchange operations |
+| Let the market sell your NFTs | `NFT_SET_APPROVAL_FOR_ALL {collection, operator: <market>}` (or `NFT_APPROVE` for one) |
+| List, re-price | `list(collection, tokenId, currency, price)` on the market; `currency` 0x0 is QRDX |
+| Cancel | `delist(collection, tokenId)`: the seller, or anyone once the listing is stale |
+| Buy | `buy(collection, tokenId, currency, price)`, with `price` as the call's value in QRDX, or after `approve(market, price)` on the token |
+
+The site sends the EVM calls from the trading account as type-0x51 transactions
+(`qrdx_sendPQTransaction`) and runs each against the latest block first. `contracts/test` runs the
+contract on the node's own EVM and NFT registry; `pnpm nft-market:compile` rebuilds
+`lib/nft-market/artifact.json`.
+
 ## Status
 
 ### `GET /api/v1/status`
