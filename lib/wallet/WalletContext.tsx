@@ -73,6 +73,12 @@ interface WalletState {
    * Resolves with its hash once the wallet broadcast it.
    */
   sendEvm: (req: EvmRequest) => Promise<string>
+  /**
+   * Several exchange operations with one approval (qrdx_sendExchangeBatch): signed with
+   * consecutive nonces, so a block applies them in order; each succeeds or fails on its own. A
+   * wallet without the method is asked for each in turn.
+   */
+  sendExchangeBatch: (req: { ops: { op: string; params: Record<string, unknown>; gasLimit?: number }[]; label: string; market?: string }) => Promise<{ txHashes: string[] }>
 }
 
 export interface EvmRequest {
@@ -428,6 +434,37 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     [trader, account, rightNetwork, network.name]
   )
 
+  const sendExchangeBatch = useCallback(
+    async (req: { ops: { op: string; params: Record<string, unknown>; gasLimit?: number }[]; label: string; market?: string }) => {
+      const w = walletRef.current
+      if (!w || !trader) throw new Error('Connect the QRDX Wallet first.')
+      if (!rightNetwork) throw new Error(`Switch the wallet to ${network.name}.`)
+      let res: { txHashes: string[] }
+      try {
+        res = await w.provider.request<{ txHashes: string[] }>({
+          method: 'qrdx_sendExchangeBatch',
+          params: [{ ops: req.ops, label: req.label, from: account?.address }],
+        })
+      } catch (e) {
+        // Older wallets: one approval per operation, in order.
+        if ((e as { code?: number }).code !== 4200 && !/does not support|not supported|unknown method/i.test(String((e as Error)?.message))) throw new Error(providerErrorMessage(e))
+        const txHashes: string[] = []
+        for (const [i, o] of req.ops.entries()) {
+          const r = await w.provider
+            .request<{ txHash: string; nonce?: number }>({ method: 'qrdx_sendExchangeTransaction', params: [{ op: o.op, params: o.params, gasLimit: o.gasLimit, from: account?.address }] })
+            .catch((err) => {
+              throw new Error(i ? `Steps 1–${i} were sent; step ${i + 1} failed: ${providerErrorMessage(err)}` : providerErrorMessage(err))
+            })
+          txHashes.push(r.txHash)
+        }
+        res = { txHashes }
+      }
+      res.txHashes.forEach((txHash, i) => addPending(trader, slot, { txHash, op: req.ops[i]?.op ?? 'SWAP', label: `${req.label} (${i + 1} of ${req.ops.length})`, market: req.market }))
+      return res
+    },
+    [trader, account, rightNetwork, network.name, slot]
+  )
+
   const walletValue = useMemo<WalletState>(
     () => ({
       status,
@@ -449,8 +486,9 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       switchNetwork,
       sendExchange,
       sendEvm,
+      sendExchangeBatch,
     }),
-    [status, wallet, extension, connection, pairing, phone, accounts, account, trader, chain, rightNetwork, error, connect, connectPhone, cancelPairing, disconnect, switchNetwork, sendExchange, sendEvm]
+    [status, wallet, extension, connection, pairing, phone, accounts, account, trader, chain, rightNetwork, error, connect, connectPhone, cancelPairing, disconnect, switchNetwork, sendExchange, sendEvm, sendExchangeBatch]
   )
   const netValue = useMemo<NetState>(
     () => ({ slot, network, apiBase: apiBaseFor(slot), setSlot }),

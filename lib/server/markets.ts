@@ -27,7 +27,7 @@ import { HistoryCandle, HistoryStats, poolCandles, poolStats } from './history'
 import { usdQuote } from './usd'
 import type { Net } from './net'
 import type { NodePerpMarket, NodePool } from './node'
-import { IndexTicker, Interval, INTERVALS, impliedPrice, indexTicker, pairIndexCandles } from './reference'
+import { IndexTicker, Interval, INTERVALS, impliedPrice, indexCandles, indexTicker, pairIndexCandles } from './reference'
 import { TokenIndex, refForAddress, resolveSegment, tokenIndex, verifiedRef } from './resolve'
 
 const DAY = 86_400
@@ -626,3 +626,68 @@ export async function defaultQuote(net: Net, baseSeg: string): Promise<string> {
   return seg === 'usdc' ? 'usdt' : 'usdc'
 }
 
+
+// ─── In dollars ──────────────────────────────────────────────────────────────
+
+/**
+ * A spot market's candles in USD: each candle times its quote's USD price at that candle.
+ *
+ *  - the quote is a USD stablecoin → as they are (the coin taken at $1, said so);
+ *  - the quote has a public USD index → that index's candles, aligned by time;
+ *  - the quote is priced through a pool (QRDX, a launched token) → the candles of its market
+ *    against the asset its USD route reaches (USDC: QRDX/USDC), times that asset's USD price;
+ *  - none of these → converted at today's USD price, and labelled so.
+ *
+ * Each candle is converted at its quote candle's close (held forward where one is missing), so
+ * open, high and low are approximate: `exact` is false unless the quote is a stablecoin.
+ */
+export async function spotCandlesUsd(net: Net, baseSeg: string, quoteSeg: string, interval: Interval, limit: number): Promise<CandleSeries> {
+  const [pair, r] = await Promise.all([spotCandles(net, baseSeg, quoteSeg, interval, limit), resolvePair(net, baseSeg, quoteSeg)])
+  const asUsd = (label: string, exact: boolean, rate: (t: number) => string | null): CandleSeries => {
+    const candles = pair.candles
+      .map((c) => {
+        const k = rate(c.t)
+        if (!k) return null
+        const x = (v: string) => str(mul(dec(v), dec(k)))
+        return { t: c.t, o: x(c.o), h: x(c.h), l: x(c.l), c: x(c.c), v: c.v }
+      })
+      .filter((c): c is Candle => !!c)
+    return { ...pair, kind: pair.kind, exact: exact && pair.exact, label: `${r.base.symbol}/USD · ${label}`, candles }
+  }
+  if (pair.kind === 'none' || !pair.candles.length) return pair
+  if (r.quoteAsset?.usdStable) return asUsd(`${pair.label.replace(/^.*?·\s*/, '')}, ${r.quote.symbol} at $1`, true, () => '1')
+
+  // A series of the quote in USD, by candle time; each candle takes the latest at or before it.
+  const series = async (): Promise<{ rows: Candle[]; label: string } | null> => {
+    if (r.quoteAsset) {
+      const idx = await indexCandles(r.quoteAsset, interval, limit).catch(() => null)
+      if (idx?.candles.length) return { rows: idx.candles, label: `${r.quote.symbol} at its ${idx.source} USD price` }
+    }
+    const q = await usdQuote(net, r.quote.address, r.quote.slug).catch(() => null)
+    const anchor = q?.route.length ? q.route[q.route.length - 1] : null
+    if (q && anchor && q.route.length === 2) {
+      const viaPair = await spotCandles(net, quoteSeg, anchor, interval, limit).catch(() => null)
+      const anchorUsd = await usdQuote(net, null, anchor).catch(() => null)
+      if (viaPair?.candles.length && anchorUsd) {
+        const k = dec(anchorUsd.price)
+        return { rows: viaPair.candles.map((c) => ({ ...c, c: str(mul(dec(c.c), k)) })), label: `${r.quote.symbol} at its ${anchor.toUpperCase()} market price` }
+      }
+    }
+    return null
+  }
+  const s = await series()
+  if (s) {
+    const rows = [...s.rows].sort((a, b) => a.t - b.t)
+    let i = 0
+    let last: string | null = null
+    const at = new Map<number, string | null>()
+    for (const c of [...pair.candles].sort((a, b) => a.t - b.t)) {
+      while (i < rows.length && rows[i].t <= c.t) last = rows[i++].c
+      at.set(c.t, last ?? rows[0]?.c ?? null)
+    }
+    return asUsd(s.label, false, (t) => at.get(t) ?? null)
+  }
+  const now = await usdQuote(net, r.quote.address, r.quote.slug).catch(() => null)
+  if (!now) return { ...pair, kind: 'none', candles: [], label: `No USD price for ${r.quote.symbol}` }
+  return asUsd(`at today's ${r.quote.symbol} price ($${Number(now.price).toPrecision(6)})`, false, () => now.price)
+}

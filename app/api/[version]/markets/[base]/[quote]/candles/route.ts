@@ -1,5 +1,5 @@
 import { ApiError, handler, intParam, json, options } from '@/lib/server/http'
-import { spotCandles } from '@/lib/server/markets'
+import { spotCandles, spotCandlesUsd } from '@/lib/server/markets'
 import { isInterval } from '@/lib/server/reference'
 import { netFromVersion } from '@/lib/server/net'
 
@@ -12,6 +12,8 @@ export const GET = handler(async (req, { params }: { params: Promise<{ version: 
   const interval = url.searchParams.get('interval') ?? '1h'
   if (!isInterval(interval)) throw new ApiError('bad_request', 'interval must be one of 1m 5m 15m 1h 4h 1d')
   const limit = intParam(url, 'limit', 300, 1, 500)
-  return json(await spotCandles(net, base, quote, interval, limit), 10)
+  // ?unit=usd: the same candles in dollars (spotCandlesUsd says how each was converted).
+  const usd = url.searchParams.get('unit') === 'usd'
+  return json(await (usd ? spotCandlesUsd : spotCandles)(net, base, quote, interval, limit), 10)
 })
 export const OPTIONS = options

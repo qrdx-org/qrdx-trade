@@ -2,18 +2,20 @@
 
 import { useMemo, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { ArrowDownUp, ChevronDown, Search } from 'lucide-react'
+import { ArrowDownUp, ChevronDown, ChevronRight, Search } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { TokenBadge } from '@/components/trade/TokenBadge'
 import { ConnectButton } from '@/components/wallet/ConnectButton'
 import { isTokenAddress } from '@/lib/assets'
-import { S, dec, isAmount, lessSlippage, round } from '@/lib/decimal'
+import { dec, isAmount, lessSlippage, round } from '@/lib/decimal'
 import { fixed, percent, size as fmtSize } from '@/lib/format'
 import { useApi, useDebounced } from '@/lib/hooks/useApi'
 import { useAccount } from '@/components/trade/SpotTradeView'
-import type { ApiAsset, SwapQuote } from '@/lib/types'
+import type { ApiAsset } from '@/lib/types'
+import type { RoutedQuote } from '@/lib/server/routing'
+import { routeOps } from '@/lib/routing'
 import { useNet, useWallet } from '@/lib/wallet/WalletContext'
 import { cn } from '@/lib/utils'
 
@@ -44,9 +46,12 @@ export function SwapCard() {
   const debounced = useDebounced(amount, 350)
   const quotePath =
     isAmount(debounced) && dec(debounced) > 0n && from !== to
-      ? `${apiBase}/quote?from=${from}&to=${to}&amount=${debounced}${w.trader ? `&sender=${w.trader}` : ''}`
+      ? `${apiBase}/quote/route?from=${from}&to=${to}&amount=${debounced}${w.trader ? `&sender=${w.trader}` : ''}`
       : null
-  const q = useApi<SwapQuote>(quotePath, 10_000)
+  // The best route through up to three markets (lib/server/routing.ts); usually the pair itself.
+  const q = useApi<RoutedQuote>(quotePath, 10_000)
+  const hops = q.data?.hops ?? []
+  const multi = hops.length > 1
 
   const balance = (a: ApiAsset | null) => (a?.address && account.data?.balances.find((b) => b.asset.address === a.address)?.balance) || '0'
   const avail = balance(fromAsset)
@@ -62,13 +67,24 @@ export function SwapCard() {
     return null
   })()
 
-  const minOut = q.data ? lessSlippage(q.data.amountOut, Number(slippage)) : null
+  const deadline = () => Math.floor(Date.now() / 1000) + 10 * 60
+  // For the minimum shown; the operations signed get their deadline when they are built.
+  const plan = q.data && multi && Number(slippage) > 0 ? routeOps(q.data.hops, amount, Number(slippage), 0) : null
+  const minOut = plan ? plan.minOut : q.data ? lessSlippage(q.data.amountOut, Number(slippage)) : null
 
   const submit = async () => {
     if (problem || !q.data || !fromAsset || !toAsset) return
     setBusy(true)
     setMsg(null)
     try {
+      if (multi) {
+        const { ops, minOut: least } = routeOps(q.data.hops, amount, Number(slippage), deadline())
+        const via = q.data.hops.slice(0, -1).map((h) => h.to.symbol).join(', ')
+        await w.sendExchangeBatch({ ops, label: `Swap ${amount} ${fromAsset.symbol} → ≥ ${round(least, 8)} ${toAsset.symbol} through ${via}` })
+        setAmount('')
+        setMsg({ ok: true, text: `Submitted as ${ops.length} swaps in one approval; a block applies them in order. Track them in Portfolio.` })
+        return
+      }
       await w.sendExchange({
         op: 'SWAP',
         params: {
@@ -78,12 +94,12 @@ export function SwapCard() {
           amount_in: amount,
           min_amount_out: minOut,
           venue: 'auto',
-          deadline: Math.floor(Date.now() / 1000) + 30 * 60,
+          deadline: deadline(),
         },
         label: `Swap ${amount} ${fromAsset.symbol} → ≥ ${round(minOut!, 8)} ${toAsset.symbol}`,
       })
       setAmount('')
-      setMsg({ ok: true, text: 'Submitted. It executes when the next block includes it (~3 min). Track it in Portfolio.' })
+      setMsg({ ok: true, text: 'Submitted. It executes when the next block includes it, usually within a second. Track it in Portfolio.' })
     } catch (e) {
       setMsg({ ok: false, text: (e as Error).message })
     } finally {
@@ -114,17 +130,46 @@ export function SwapCard() {
           <Line k="Rate" v={q.data && fromAsset && toAsset ? `1 ${toAsset.symbol} = ${fixed(q.data.executionPrice, 6)} ${fromAsset.symbol}` : '—'} />
           <Line k="Minimum received" v={minOut && toAsset ? `${fmtSize(minOut)} ${toAsset.symbol}` : '—'} />
           <Line k="Price impact" v={q.data?.priceImpact ? percent(String(Number(q.data.priceImpact) * 100), false) : q.data ? 'n/a (order book)' : '—'} />
-          <Line k="Route" v={q.data ? (q.data.venue === 'clob' ? 'Order book' : `Pool ${q.data.poolId?.slice(0, 8)}`) : '—'} />
-          <Line k="Fee" v={q.data && fromAsset ? `${fmtSize(q.data.fee)} ${fromAsset.symbol}` : '—'} />
+          <div className="flex items-start justify-between gap-3">
+            <span className="text-muted-foreground">Route</span>
+            {q.data ? (
+              <span className="flex flex-wrap items-center justify-end gap-0.5 text-right">
+                {hops.map((h, i) => (
+                  <span key={i} className="inline-flex items-center gap-0.5">
+                    {i === 0 && <span className="font-medium">{h.from.symbol}</span>}
+                    <ChevronRight className="h-3 w-3 text-muted-foreground" />
+                    <span className="font-medium" title={h.venue === 'clob' ? 'Order book' : `Pool ${h.poolId ?? ''}`}>
+                      {h.to.symbol}
+                    </span>
+                  </span>
+                ))}
+                <span className="ml-1 text-muted-foreground">
+                  {multi ? `${hops.length} hops` : hops[0]?.venue === 'clob' ? 'order book' : `pool ${hops[0]?.poolId?.slice(0, 8) ?? ''}`}
+                </span>
+              </span>
+            ) : (
+              <span>—</span>
+            )}
+          </div>
+          <Line k="Fees" v={q.data ? hops.map((h) => `${fmtSize(h.fee)} ${h.from.symbol}`).join(' + ') : '—'} />
+          {multi && q.data?.directAmountOut && (
+            <p className="text-muted-foreground">
+              {fmtSize(q.data.amountOut)} vs {fmtSize(q.data.directAmountOut)} {toAsset?.symbol} swapping directly.
+            </p>
+          )}
+          {multi && (
+            <p className="leading-snug text-muted-foreground">
+              {hops.length} swaps, one approval. Each refuses to fill below its own minimum; if a later one does, you keep the {hops.slice(0, -1).map((h) => h.to.symbol).join(' / ')} the earlier ones
+              bought. Up to {slippage} % of each in-between token can be left over.
+            </p>
+          )}
           <div className="flex justify-between">
             <span className="text-muted-foreground">Max slippage</span>
             <span>
               <input value={slippage} onChange={(e) => setSlippage(e.target.value)} className="num w-12 rounded border bg-background px-1 py-0.5 text-right" /> %
             </span>
           </div>
-          {q.data && !S.isZero(q.data.unfilledIn) && (
-            <p className="text-warn">Only {fmtSize(q.data.amountIn)} {fromAsset?.symbol} can fill at the moment; the rest is not spent.</p>
-          )}
+
         </div>
 
         <div className="mx-2 mt-4">
@@ -138,8 +183,9 @@ export function SwapCard() {
         </div>
         {msg && <p className={cn('mx-2 mt-2 rounded-md px-2.5 py-2 text-xs', msg.ok ? 'bg-bid/10 text-bid' : 'bg-ask/10 text-ask')}>{msg.text}</p>}
         <p className="mx-2 mb-2 mt-3 text-[10px] leading-snug text-muted-foreground">
-          The node routes the swap to whichever of the pair&apos;s pools or order book pays the most, and refuses it if the
-          output falls below your minimum. A gas fee of about 0.0001 QRDX is burned either way.
+          Each swap goes to whichever of its pair&apos;s pools or order book pays the most, and when no direct market pays
+          best, through up to two tokens in between. Every swap is refused if its output falls below its minimum. A gas fee
+          of about 0.0001 QRDX is burned for each, either way.
         </p>
       </div>
 

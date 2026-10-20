@@ -24,6 +24,7 @@ import { cn } from '@/lib/utils'
 const INTERVALS = ['1m', '5m', '15m', '1h', '4h', '1d'] as const
 type Kind = 'candles' | 'area'
 const KIND_KEY = 'qrdx-trade:chart-kind'
+const UNIT_KEY = 'qrdx-trade:chart-unit'
 
 /** A theme variable ("158 64% 36%") as rgba(), which the chart's colour parser accepts. */
 export function cssColor(name: string, alpha = 1): string {
@@ -42,10 +43,23 @@ export function cssColor(name: string, alpha = 1): string {
  * it has them, otherwise the reference index from public exchanges, labelled as
  * such. Candles or an area line; hovering shows the bar's OHLC.
  */
-export function PriceChart({ basePath, watermark, className }: { basePath: string; watermark?: string; className?: string }) {
+export function PriceChart({
+  basePath,
+  watermark,
+  className,
+  quoteSymbol,
+}: {
+  basePath: string
+  watermark?: string
+  className?: string
+  /** A spot market's quote: the chart can show prices in it or in dollars. Omitted for USD markets. */
+  quoteSymbol?: string
+}) {
   const [interval, setInterval_] = useState<(typeof INTERVALS)[number]>('1h')
   const [kind, setKind] = useState<Kind>('candles')
-  const { data, error } = useApi<CandleSeries>(`${basePath}/candles?interval=${interval}&limit=300`, 30_000)
+  const [unit, setUnit] = useState<'quote' | 'usd'>('quote')
+  const usd = !!quoteSymbol && unit === 'usd'
+  const { data, error } = useApi<CandleSeries>(`${basePath}/candles?interval=${interval}&limit=300${usd ? '&unit=usd' : ''}`, 30_000)
   const box = useRef<HTMLDivElement>(null)
   const chart = useRef<IChartApi | null>(null)
   const candles = useRef<ISeriesApi<'Candlestick'> | null>(null)
@@ -59,8 +73,15 @@ export function PriceChart({ basePath, watermark, className }: { basePath: strin
     try {
       const k = localStorage.getItem(KIND_KEY)
       if (k === 'candles' || k === 'area') setKind(k)
+      if (localStorage.getItem(UNIT_KEY) === 'usd') setUnit('usd')
     } catch {}
   }, [])
+  const pickUnit = (u: 'quote' | 'usd') => {
+    setUnit(u)
+    try {
+      localStorage.setItem(UNIT_KEY, u)
+    } catch {}
+  }
   const pickKind = (k: Kind) => {
     setKind(k)
     try {
@@ -189,11 +210,34 @@ export function PriceChart({ basePath, watermark, className }: { basePath: strin
             <Icon className="h-3.5 w-3.5" />
           </button>
         ))}
+        {quoteSymbol && quoteSymbol.toUpperCase() !== 'USD' && (
+          <>
+            <span className="mx-1.5 h-4 w-px bg-border" />
+            <div className="flex rounded-md bg-muted p-0.5 text-[11px]" role="group" aria-label="Price in">
+              {(
+                [
+                  ['quote', quoteSymbol],
+                  ['usd', 'USD'],
+                ] as const
+              ).map(([u, label]) => (
+                <button
+                  key={u}
+                  onClick={() => pickUnit(u)}
+                  aria-pressed={unit === u}
+                  title={u === 'usd' ? 'Prices in dollars: each candle at its quote’s USD price' : `Prices in ${quoteSymbol}, as the market trades`}
+                  className={cn('rounded px-1.5 py-0.5 font-medium', unit === u ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground')}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
         <span
           className="ml-auto truncate pl-2 text-[11px] text-muted-foreground"
           title={data?.exact === false ? 'High and low are bounds derived from two USD series' : undefined}
         >
-          {data?.kind === 'index' ? data.label + (data.exact ? '' : ' · derived') : data?.kind === 'market' ? data.label : ''}
+          {data?.kind === 'index' ? data.label + (data.exact ? '' : ' · derived') : data?.kind === 'market' ? data.label + (usd && !data.exact ? ' · approximate' : '') : ''}
         </span>
       </div>
       <div className="relative min-h-[280px] flex-1">

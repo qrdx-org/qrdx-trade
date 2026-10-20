@@ -193,7 +193,7 @@ export function SpotTradeView({ base, quote }: { base: string; quote: string }) 
 
       <div className="grid min-h-0 flex-1 grid-cols-1 gap-1 lg:grid-cols-[minmax(0,1fr)_300px_320px] lg:grid-rows-[minmax(0,1fr)_minmax(220px,32%)] xl:grid-cols-[minmax(0,1fr)_320px_340px]">
         <Panel className={cn('min-h-[420px] lg:min-h-0', mobileTab !== 'chart' && 'hidden lg:flex')}>
-          <PriceChart basePath={api} watermark={pairLabel} />
+          <PriceChart basePath={api} watermark={pairLabel} quoteSymbol={m.quote.symbol} />
         </Panel>
         <Panel className={cn('min-h-[460px] lg:min-h-0', mobileTab === 'chart' && 'hidden lg:flex')}>
           <PanelTabs
