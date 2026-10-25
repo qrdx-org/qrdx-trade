@@ -173,8 +173,12 @@ Behaviour that follows from the chain:
   `min_amount_out = quote × (1 − slippage)`, so the node routes to the better of
   the book and the pools.
 - **Fees.** Every executed exchange operation burns gas (≈0.00004–0.00015 QRDX),
-  even when it fails. The form shows it. Spot book fees are 0.02 % maker /
-  0.05 % taker; pool fees are the pool's tier.
+  even when it fails, except in the free trading lane of nodes from 2026-10: a trading
+  operation (order, cancel, modify, trigger, TWAP, swap, leverage, a batch of those) signed at
+  gas price 0 pays nothing while the account has free actions left (`exchange_getFreeActions`;
+  the wallet decides, and its approval says which). Book fees follow the account's 14-day
+  volume tier (`perp_getFeeSchedule`; 0.02 % maker / 0.05 % taker at the bottom); pool fees are
+  the pool's tier.
 - **Escrow.** A resting spot order escrows its funds (quote for buys, base for
   sells); the balance panel shows available vs. in orders.
 
@@ -217,8 +221,27 @@ Operation parameters (from the node's `docs/PERPS_API.md`):
 | Remove liquidity | `REMOVE_LIQUIDITY` | `pool_id`, `position_id`, optional `amount` |
 | Perp deposit / withdraw | `PERP_DEPOSIT` / `PERP_WITHDRAW` | `amount` |
 | Perp leverage | `PERP_SET_LEVERAGE` | `market_id`, `leverage`, `mode` |
-| Perp order | `PERP_ORDER` | `market_id`, `side`, `size`, `price`, `reduce_only`, `tif` |
-| Perp cancel | `PERP_CANCEL` | `market_id`, `order_id` |
+| Perp order | `PERP_ORDER` | `market_id`, `side`, `size`, `price`, `reduce_only`, `tif`; on newer nodes also `hidden`, `display_size`, `tp` / `sl` (`{trigger_price}`) |
+| Perp cancel | `PERP_CANCEL` | `market_id`, `order_id` (a trigger's id too) |
+
+Operations of nodes from 2026-10 (qrdx-node docs/TRADING_FEATURES.md), offered only where
+`/api/{v}/features` says `trading` (`lib/hooks/useFeatures.ts`):
+
+| UI action | op | params |
+|---|---|---|
+| Perp stop / take profit (form's Stop tab, a position's TP/SL, a chart level) | `PERP_TRIGGER` | `market_id`, `side`, `kind` (`sl` / `tp`, from where the trigger sits against the mark), `trigger_price`, `size` or `position: true`, optional `limit_price`, `reduce_only` |
+| Spot stop (form's Stop tab) | `PLACE_ORDER` | `order_type` `stop_loss` / `take_profit`, `trigger_price`, `amount`, optional `price` (its limit); inverted like a limit order (`spotTriggerParams`) |
+| Time in force, hidden, iceberg | `PLACE_ORDER` / `PERP_ORDER` | `tif` `gtc` / `alo` / `ioc` / `fok`, `hidden: true`, `display_size` (in token0 for spot) |
+| Spot buy with TP / SL | `PLACE_ORDER` | `tp` / `sl` `{trigger_price}`: one sell trigger holding exactly what the buy bought (uninverted pairs only) |
+| Edit an order | `PERP_MODIFY` / `MODIFY_ORDER` | `order_id`, the size or amount that should be left, `price` (a trigger: `trigger_price`) |
+| Several at once (cancel all, deposit + order, replace a TP/SL) | `qrdx_sendExchangeBatch` | the wallet sends them as one `BATCH`, all or nothing, up to 20 |
+| Multi-hop swap | `SWAP` | `path` (the route's tokens), `amount_in`, final `min_amount_out` |
+| TWAP | `TWAP_ORDER` / `TWAP_CANCEL` | `market_id`, `side`, `size`, `duration`, `slices`, `reduce_only` / `twap_id`; gas prepaid per slice (`twapPlan`) |
+| Isolated margin | `PERP_ISOLATED_MARGIN` | `market_id`, `amount` (negative removes) |
+
+Perp prices and sizes sit on the market's grid (`szDecimals`: 5 significant figures, whole
+lots; `lib/perps.ts gridPrice`): the form says when an input is off it, and computed prices (a
+market order's limit, a chart level) are rounded onto it.
 
 ### Wallet changes made for trading
 
@@ -492,7 +515,7 @@ after every token address so QRDX pairs are quoted in QRDX, and its side settles
 in account balances (the API reads it with `eth_getBalance`). The verified `qrdx`
 asset is native QRDX on every network (`native: true` in `lib/assets.ts`) and the
 default quote for launches. Testnet USDC is
-`0x0886aa41d05c4be1ad6c91b728d104fee55a713a` (18 decimals), pinned in
+`0x801ae63d236d7a4ea69868a9d7be5d27a09e5580` (18 decimals), pinned in
 `lib/assets.ts`; USD prices route through its pools. (The testnet reset of
 2026-10-12 removed the earlier USDC and the "Wrapped QRDX" token, and with them
 the `wqrdx` asset.)

@@ -105,6 +105,12 @@ export interface PerpMarket {
   nextFundingTime: number | null
   maxLeverage: string | null
   maintenanceRate: string | null
+  /** The order grid: sizes in this many decimals, prices of 5 significant figures (lib/perps gridPrice). Null: no grid. */
+  szDecimals: number | null
+  /** The market's liquidity vault (a user vault the protocol quotes on its book), if it has one. */
+  liquidityVault: string | null
+  /** A deployer market's deployer (docs/HYPERLIQUID_PARITY.md), which runs its oracle. */
+  deployer: string | null
   change24h: string | null
   volume24h: string | null
   indexPrice: string | null
@@ -227,8 +233,57 @@ export interface AccountResponse {
   lpPositions: LpPosition[]
   perp: PerpAccount | null
   exchangeNonce: number | null
+  /** Waiting stop-loss / take-profit orders; null on a node without trigger orders. */
+  triggers: AccountTrigger[] | null
+  /** TWAPs in progress; null on a node without them. */
+  twaps: AccountTwap[] | null
+  /** 14-day volume and the rates it earns (perp_getFeeSchedule); null on an older node. */
+  fees: { volume: string; taker: string; maker: string; referrer: string | null; referralCode: string | null } | null
+  /** Free trading actions (exchange_getFreeActions); null on an older node. */
+  freeActions: { budget: number; used: number; remaining: number; freeNow: boolean; whyNot: string | null } | null
   source: DataSource
   asOf: number
+}
+
+/**
+ * A trigger order (perp_getTriggers). Perps ones judge the mark price; spot ones the pair's
+ * last trade, shown in the market's orientation like spotOrders.
+ */
+export interface AccountTrigger {
+  kindOf: 'perp' | 'spot'
+  orderId: string
+  /** A perp market id, or the spot market's base/quote label. */
+  market: string
+  path: string | null
+  /** The node's pair (token0:token1) for a spot trigger: CANCEL_ORDER takes it. */
+  pair: string | null
+  side: 'buy' | 'sell'
+  kind: 'sl' | 'tp' | 'oco' | string
+  triggerPrice: string
+  /** "position": a position's TP/SL, closing all of it. */
+  size: string
+  limitPrice: string | null
+  reduceOnly: boolean
+  base: ApiAsset | null
+  quote: ApiAsset | null
+}
+
+export interface AccountTwap {
+  twapId: string
+  perp: boolean
+  market: string
+  side: 'buy' | 'sell' | null
+  tokenIn: ApiAsset | null
+  tokenOut: ApiAsset | null
+  total: string
+  done: string
+  received: string
+  slices: number
+  slicesDone: number
+  /** Seconds between slices, and when the next runs (block time). */
+  interval: string
+  nextTime: string
+  reduceOnly: boolean
 }
 
 export interface ApiErrorBody {

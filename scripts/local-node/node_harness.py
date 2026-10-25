@@ -76,6 +76,12 @@ _oqs.KeyEncapsulation = _KEM
 sys.modules["oqs"] = _oqs
 
 os.environ.setdefault("QRDX_PERP_COLLATERAL_TOKEN", "QRDX")
+# Nodes from 2026-10 list validator-priced perp markets by governance and want 10,000 of seed
+# liquidity with each: a local network lists the seeded market directly, without seed.
+os.environ.setdefault("QRDX_PERP_OPEN_LISTING", "1")
+# The chain id exchange signatures bind to: the harness's (newer nodes' dev networks default to 88888).
+os.environ.setdefault("QRDX_CHAIN_ID", os.environ.get("CHAIN_ID", "9999"))
+os.environ.setdefault("QRDX_PERP_MARKET_MIN_LIQUIDITY", "0")
 sys.path.insert(0, os.environ.get(
     "QRDX_NODE_DIR", os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "qrdx-node")))
 
@@ -302,11 +308,13 @@ def seed():
             for side, px in (("buy", BTC_USD * (1 - off)), ("sell", BTC_USD * (1 + off))):
                 run(maker, ExchangeOpType.PERP_ORDER, {
                     "market_id": "BTC-USD-PERP", "side": side, "size": str(D("0.05") * k),
-                    "price": str(px.quantize(D("0.5")))})
+                    # Whole dollars: on the order grid of nodes from 2026-10 (5 significant
+                    # figures, an integer always fits) as on older ones.
+                    "price": str(px.quantize(D("1")))})
     for who in TAKERS:
         run(who, ExchangeOpType.PERP_DEPOSIT, {"amount": "1000000"})
         run(who, ExchangeOpType.PERP_ORDER, {"market_id": "BTC-USD-PERP", "side": "buy",
-                                              "size": "0.1", "price": str(BTC_USD * D("1.01")), "tif": "ioc"})
+                                              "size": "0.1", "price": str((BTC_USD * D("1.01")).quantize(D("1"))), "tif": "ioc"})
     print("seeded:", json.dumps(TOKENS, indent=1), flush=True)
 
 
@@ -395,6 +403,44 @@ METHODS.update({
     "market_getCandles": lambda market, interval="1m", limit=200, end=None:
         views.market_candles(mgr, market, interval, limit, end),
 })
+
+
+def _serve_node_rpc_modules():
+    """Every read of the node's own exchange RPC modules the harness does not serve itself, run
+    against the same engine (the manager is the node's singleton): what a newer node adds —
+    triggers, TWAPs, fees, agents, vaults, QNS, account control — appears here with it, and a
+    method the node does not have stays "not found", as on the real node."""
+    import asyncio
+    try:
+        from qrdx.rpc.modules import exchange as rpc_exchange
+        from qrdx.rpc.server import RPCError as NodeRpcError
+    except Exception as e:  # (an older node, or one whose RPC layer needs more than the engine)
+        print("node RPC modules not served:", e, flush=True)
+        return
+
+    def wrap(fn):
+        def call(*args):
+            try:
+                return asyncio.run(fn(*args))
+            except NodeRpcError as e:
+                raise RpcError(getattr(e, "code", -32000), str(e))
+        return call
+
+    for cls_name in ("ExchangeModule", "PerpModule", "MarketModule", "AccountModule", "QnsModule"):
+        cls = getattr(rpc_exchange, cls_name, None)
+        if cls is None:
+            continue
+        inst = cls()
+        for name in dir(cls):
+            if name.startswith("_"):
+                continue
+            fn = getattr(inst, name)
+            key = f"{cls.namespace}_{name}"
+            if asyncio.iscoroutinefunction(fn) and key not in METHODS:
+                METHODS[key] = wrap(fn)
+
+
+_serve_node_rpc_modules()
 
 
 def faucet(address):

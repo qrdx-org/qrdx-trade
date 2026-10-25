@@ -62,8 +62,8 @@ export const NETWORKS: Record<NetworkId, NetworkConfig> = {
     nodeUrl: 'https://test.qrdx.org',
     explorerUrl: 'https://explorer.qrdx.org',
     blockTimeSec: 0.25,
-    // Deployed 2026-10-19; its runtime code matches lib/nft-market/artifact.json byte for byte.
-    nftMarket: '0x7ee08544a2fb4ee0bd311c836addeeab3a244bab',
+    // The market deployed 2026-10-19 went with the regenesis of 2026-10-25; none is deployed yet.
+    nftMarket: null,
   },
   local: {
     id: 'local',

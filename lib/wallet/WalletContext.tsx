@@ -459,7 +459,9 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         }
         res = { txHashes }
       }
-      res.txHashes.forEach((txHash, i) => addPending(trader, slot, { txHash, op: req.ops[i]?.op ?? 'SWAP', label: `${req.label} (${i + 1} of ${req.ops.length})`, market: req.market }))
+      // A wallet on a node with BATCH sends the operations as one transaction, all or nothing.
+      if (res.txHashes.length === 1 && req.ops.length > 1) addPending(trader, slot, { txHash: res.txHashes[0], op: 'BATCH', label: req.label, market: req.market })
+      else res.txHashes.forEach((txHash, i) => addPending(trader, slot, { txHash, op: req.ops[i]?.op ?? 'SWAP', label: `${req.label} (${i + 1} of ${req.ops.length})`, market: req.market }))
       return res
     },
     [trader, account, rightNetwork, network.name, slot]

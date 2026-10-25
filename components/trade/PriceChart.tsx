@@ -20,8 +20,10 @@ import { useApi } from '@/lib/hooks/useApi'
 import { compact, priceDecimals } from '@/lib/format'
 import type { Candle, CandleSeries } from '@/lib/types'
 import { cn } from '@/lib/utils'
+import { ChartDrawings, DrawingTools, type ChartLevel, type ChartPosition, type Tool } from '@/components/trade/ChartDrawings'
 
 const INTERVALS = ['1m', '5m', '15m', '1h', '4h', '1d'] as const
+const SECONDS: Record<(typeof INTERVALS)[number], number> = { '1m': 60, '5m': 300, '15m': 900, '1h': 3600, '4h': 14400, '1d': 86400 }
 type Kind = 'candles' | 'area'
 const KIND_KEY = 'qrdx-trade:chart-kind'
 const UNIT_KEY = 'qrdx-trade:chart-unit'
@@ -48,12 +50,26 @@ export function PriceChart({
   watermark,
   className,
   quoteSymbol,
+  drawing,
 }: {
   basePath: string
   watermark?: string
   className?: string
   /** A spot market's quote: the chart can show prices in it or in dollars. Omitted for USD markets. */
   quoteSymbol?: string
+  /** Drawings: where to keep them, and what their levels can do in this market. */
+  drawing?: {
+    id: string
+    usePrice?: (price: string) => void
+    useTrigger?: (price: string) => void
+    placeTrigger?: (kind: 'tp' | 'sl', price: string) => Promise<string>
+    alert?: { path: string; label: string; slot: string }
+    position?: ChartPosition | null
+    /** The account's open orders and triggers here, as lines. */
+    levels?: ChartLevel[]
+    /** The quote unit prices are in ("USDC", "USD"). */
+    unit: string
+  }
 }) {
   const [interval, setInterval_] = useState<(typeof INTERVALS)[number]>('1h')
   const [kind, setKind] = useState<Kind>('candles')
@@ -67,6 +83,10 @@ export function PriceChart({
   const volume = useRef<ISeriesApi<'Histogram'> | null>(null)
   const rowsByTime = useRef(new Map<number, Candle>())
   const [hover, setHover] = useState<Candle | null>(null)
+  const [tool, setTool] = useState<Tool>('cursor')
+  const [clearToken, setClearToken] = useState(0)
+  const [drawCount, setDrawCount] = useState(0)
+  const [ready, setReady] = useState<IChartApi | null>(null)
   const { resolvedTheme } = useTheme()
 
   useEffect(() => {
@@ -137,9 +157,11 @@ export function PriceChart({
       setHover(t !== null ? rowsByTime.current.get(t) ?? null : null)
     })
     chart.current = c
+    setReady(c)
     return () => {
       c.remove()
       chart.current = null
+      setReady(null)
     }
   }, [resolvedTheme, watermark])
 
@@ -233,6 +255,12 @@ export function PriceChart({
             </div>
           </>
         )}
+        {drawing && (
+          <>
+            <span className="mx-1.5 h-4 w-px bg-border" />
+            <DrawingTools tool={tool} setTool={setTool} count={drawCount} onClear={() => setClearToken((n) => n + 1)} />
+          </>
+        )}
         <span
           className="ml-auto truncate pl-2 text-[11px] text-muted-foreground"
           title={data?.exact === false ? 'High and low are bounds derived from two USD series' : undefined}
@@ -242,6 +270,25 @@ export function PriceChart({
       </div>
       <div className="relative min-h-[280px] flex-1">
         <div ref={box} className="absolute inset-0" />
+        {drawing && data && data.kind !== 'none' && (
+          <ChartDrawings
+            chart={ready}
+            series={kind === 'candles' ? candles.current : area.current}
+            times={data.candles.map((c) => c.t)}
+            interval={SECONDS[interval]}
+            last={data.candles.length ? Number(data.candles[data.candles.length - 1].c) : null}
+            storageKey={`${drawing.id}:${usd ? 'usd' : 'quote'}`}
+            tool={tool}
+            setTool={setTool}
+            // Converted (USD) prices are not the market's: no order prices or alerts from them.
+            actions={usd ? undefined : { usePrice: drawing.usePrice, useTrigger: drawing.useTrigger, placeTrigger: drawing.placeTrigger, alert: drawing.alert }}
+            position={usd ? null : drawing.position}
+            levels={usd ? undefined : drawing.levels}
+            unit={usd ? 'USD' : drawing.unit}
+            clearToken={clearToken}
+            onCount={setDrawCount}
+          />
+        )}
         {shown && data?.kind !== 'none' && (
           <div className="num pointer-events-none absolute left-3 top-2 z-10 flex gap-3 text-[11px] text-muted-foreground">
             {(['o', 'h', 'l', 'c'] as const).map((k) => (

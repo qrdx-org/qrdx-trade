@@ -6,11 +6,11 @@
 import { VERIFIED_ASSETS, isNativeAsset, isTokenAddress, marketPath, preferredOrder } from '../assets'
 import { S, dec, mul, str } from '../decimal'
 import { isInverted, orientPrice } from '../pairs'
-import type { AccountResponse, ApiAsset, SwapQuote } from '../types'
+import type { AccountResponse, AccountTrigger, AccountTwap, ApiAsset, SwapQuote } from '../types'
 import { ApiError, nowSec } from './http'
 import { apiAsset } from './markets'
 import type { Net } from './net'
-import type { NodeSpotOrder } from './node'
+import type { NodeSpotOrder, NodeTrigger, NodeTwap } from './node'
 import { refForAddress, resolveSegment, tokenIndex } from './resolve'
 import { mapLimit } from './util'
 
@@ -44,12 +44,18 @@ export async function account(net: Net, address: string, extraTokens: string[]):
   const newest = [...idx.byAddress.values()].sort((a, b) => b.created_height - a.created_height).slice(0, MAX_SCANNED_TOKENS)
   for (const t of newest) tokens.add(t.token_address.toLowerCase())
 
-  const [orders, positions, perp, nonce] = await Promise.all([
+  const [orders, positions, perp, nonce, triggers, twaps, fees, free] = await Promise.all([
     node.spotOrders(address),
     node.positions(address).catch(() => []),
     node.perpAccount(address).catch(() => null),
     node.nonce(address).catch(() => null),
+    // The trading features (docs/TRADING_FEATURES.md): null on a node that predates them.
+    node.triggers(address).catch(() => null),
+    node.twaps(address).catch(() => null),
+    node.feeSchedule(address).catch(() => null),
+    node.freeActions(address).catch(() => null),
   ])
+  for (const t of triggers ?? []) if (t.kind_of === 'spot') for (const a of t.market.split(':')) tokens.add(a.toLowerCase())
   for (const o of orders) for (const t of o.pair.split(':')) tokens.add(t.toLowerCase())
   for (const p of positions) for (const t of [p.token0, p.token1]) tokens.add(t.toLowerCase())
 
@@ -83,6 +89,13 @@ export async function account(net: Net, address: string, extraTokens: string[]):
     lpPositions: positions,
     perp,
     exchangeNonce: nonce,
+    triggers: triggers ? triggers.map((t) => orientTrigger(t, idx)) : null,
+    twaps: twaps ? twaps.map((t) => twapView(t, idx)) : null,
+    fees:
+      fees && fees.taker !== undefined
+        ? { volume: fees.volume ?? '0', taker: fees.taker, maker: fees.maker ?? '0', referrer: fees.referrer ?? null, referralCode: fees.referral_code ?? null }
+        : null,
+    freeActions: free ? { budget: free.budget, used: free.used, remaining: free.remaining, freeNow: free.free_now, whyNot: free.why_not } : null,
     source: 'node',
     asOf: nowSec(),
   }
@@ -104,6 +117,68 @@ function orientOrder(o: NodeSpotOrder, idx: Awaited<ReturnType<typeof tokenIndex
     remaining: inverted ? str(mul(dec(o.remaining), dec(o.price))) : o.remaining,
     base: apiAsset(base),
     quote: apiAsset(quote),
+  }
+}
+
+/** A trigger in the market's orientation: a spot one on an inverted pair flips its side and prices. */
+function orientTrigger(t: NodeTrigger, idx: Awaited<ReturnType<typeof tokenIndex>>): AccountTrigger {
+  if (t.kind_of === 'perp') {
+    return {
+      kindOf: 'perp',
+      orderId: t.order_id,
+      market: t.market,
+      path: null,
+      pair: null,
+      side: t.side,
+      kind: t.kind,
+      triggerPrice: t.trigger_price,
+      size: t.size,
+      limitPrice: t.limit_price,
+      reduceOnly: !!t.reduce_only,
+      base: null,
+      quote: null,
+    }
+  }
+  const [t0, t1] = t.market.toLowerCase().split(':')
+  const [base, quote] = preferredOrder(refForAddress(t0, idx), refForAddress(t1, idx))
+  const inverted = isInverted(base.address!, t0)
+  const flip = (s: 'buy' | 'sell') => (inverted ? (s === 'buy' ? 'sell' : 'buy') : s)
+  const price = (p: string | null) => (p ? (orientPrice(p, inverted) ?? p) : null)
+  return {
+    kindOf: 'spot',
+    orderId: t.order_id,
+    market: `${base.segment}/${quote.segment}`,
+    path: marketPath('spot', base.segment, quote.segment),
+    pair: t.market,
+    side: flip(t.side),
+    kind: t.kind,
+    triggerPrice: price(t.trigger_price) ?? t.trigger_price,
+    // An inverted pair's amount is in token0, the quote here: shown in the base at the trigger.
+    size: inverted ? str(mul(dec(t.size), dec(t.trigger_price))) : t.size,
+    limitPrice: price(t.limit_price),
+    reduceOnly: false,
+    base: apiAsset(base),
+    quote: apiAsset(quote),
+  }
+}
+
+function twapView(t: NodeTwap, idx: Awaited<ReturnType<typeof tokenIndex>>): AccountTwap {
+  const asset = (a: string | null) => (a ? apiAsset(refForAddress(a.toLowerCase(), idx)) : null)
+  return {
+    twapId: t.twap_id,
+    perp: t.perp,
+    market: t.market,
+    side: t.side,
+    tokenIn: asset(t.token_in),
+    tokenOut: asset(t.token_out),
+    total: t.total,
+    done: t.done,
+    received: t.received,
+    slices: t.slices,
+    slicesDone: t.slices_done,
+    interval: t.interval,
+    nextTime: t.next_time,
+    reduceOnly: t.reduce_only,
   }
 }
 

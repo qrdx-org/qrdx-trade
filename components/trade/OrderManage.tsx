@@ -4,21 +4,39 @@ import { useState } from 'react'
 import { Pencil, X } from 'lucide-react'
 import type { ExchangeRequest } from '@/lib/wallet/WalletContext'
 import { useWallet } from '@/lib/wallet/WalletContext'
+import { useFeatures } from '@/lib/hooks/useFeatures'
 import { cn } from '@/lib/utils'
 
+/** The most operations one BATCH holds (qrdx-node BATCH_MAX_ACTIONS). */
+export const BATCH_MAX = 20
+
 /**
- * Several exchange operations, one after another: each is its own signed transaction (the
- * node has no batch operation), so the wallet asks for each. Consecutive nonces put them in
+ * Several exchange operations. On a node with BATCH (docs/TRADING_FEATURES.md §5) they go
+ * with one approval, up to 20 at a time, each group all or nothing. On an older node each is
+ * its own signed transaction, so the wallet asks for each; consecutive nonces put them in
  * order, and a block applies them in that order.
  */
 export function useSequence() {
   const w = useWallet()
+  const { trading } = useFeatures()
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const run = async (requests: ExchangeRequest[]): Promise<boolean> => {
+  const run = async (requests: ExchangeRequest[], label?: string): Promise<boolean> => {
     setError(null)
     setProgress({ done: 0, total: requests.length })
     try {
+      if (trading && requests.length > 1) {
+        for (let i = 0; i < requests.length; i += BATCH_MAX) {
+          const group = requests.slice(i, i + BATCH_MAX)
+          await w.sendExchangeBatch({
+            ops: group.map((r) => ({ op: r.op, params: r.params, gasLimit: r.gasLimit })),
+            label: label ?? group.map((r) => r.label).join('; '),
+            market: group[0].market,
+          })
+          setProgress({ done: Math.min(requests.length, i + BATCH_MAX), total: requests.length })
+        }
+        return true
+      }
       for (let i = 0; i < requests.length; i++) {
         await w.sendExchange(requests[i])
         setProgress({ done: i + 1, total: requests.length })
@@ -35,7 +53,18 @@ export function useSequence() {
 }
 
 /** "Cancel all", asking once before it starts. */
-export function CancelAll({ count, onConfirm, busy }: { count: number; onConfirm: () => void; busy: { done: number; total: number } | null }) {
+export function CancelAll({
+  count,
+  onConfirm,
+  busy,
+  noun = 'orders',
+}: {
+  count: number
+  onConfirm: () => void
+  busy: { done: number; total: number } | null
+  noun?: string
+}) {
+  const { trading } = useFeatures()
   const [asking, setAsking] = useState(false)
   if (count < 2) return null
   if (busy)
@@ -52,7 +81,9 @@ export function CancelAll({ count, onConfirm, busy }: { count: number; onConfirm
     )
   return (
     <span className="flex items-center gap-1.5 text-[11px]">
-      <span className="text-muted-foreground">Cancel {count} orders? Your wallet asks to sign each.</span>
+      <span className="text-muted-foreground">
+        Cancel {count} {noun}? {trading ? (count > BATCH_MAX ? `One approval per ${BATCH_MAX}.` : 'One approval.') : 'Your wallet asks to sign each.'}
+      </span>
       <button type="button" onClick={() => (setAsking(false), onConfirm())} className="rounded-md bg-ask px-2 py-0.5 font-medium text-white">
         Cancel all
       </button>
@@ -64,28 +95,35 @@ export function CancelAll({ count, onConfirm, busy }: { count: number; onConfirm
 }
 
 /**
- * Edit an open order's price and size. The node has no amend operation, so it is replaced:
- * cancelled, then placed again at the new terms, in one signing sequence. The new order joins
- * the back of the queue at its price, and if the cancel lands but the new order is refused,
- * no order is left.
+ * Edit an open order's price and size. On a node with MODIFY_ORDER / PERP_MODIFY it changes in
+ * one step: a smaller size at the same price keeps its place in the queue, anything else
+ * re-places it, all or nothing. On an older node it is replaced: cancelled, then placed again
+ * at the new terms, in one signing sequence; the new order joins the back of the queue, and if
+ * the cancel lands but the new order is refused, no order is left.
  */
 export function AmendOrder({
   price,
   size,
   sizeLabel,
+  priceLabel = 'Price',
   onSubmit,
   busy,
+  noSize,
 }: {
   price: string
   size: string
   sizeLabel: string
+  priceLabel?: string
   onSubmit: (price: string, size: string) => void
   busy: boolean
+  /** Only the price changes (a position's TP/SL, sized to the position). */
+  noSize?: boolean
 }) {
+  const { trading } = useFeatures()
   const [open, setOpen] = useState(false)
   const [p, setP] = useState(price)
   const [s, setS] = useState(size)
-  const valid = /^\d*\.?\d+$/.test(p) && Number(p) > 0 && /^\d*\.?\d+$/.test(s) && Number(s) > 0
+  const valid = /^\d*\.?\d+$/.test(p) && Number(p) > 0 && (noSize || (/^\d*\.?\d+$/.test(s) && Number(s) > 0))
   const changed = p !== price || s !== size
   if (!open)
     return (
@@ -102,15 +140,19 @@ export function AmendOrder({
         </button>
       </div>
       <label className="mb-1 block text-[11px] text-muted-foreground">
-        Price
+        {priceLabel}
         <input value={p} onChange={(e) => setP(e.target.value.replace(/[^0-9.]/g, ''))} inputMode="decimal" className="num mt-0.5 h-8 w-full rounded-md border bg-background px-2 text-xs text-foreground" />
       </label>
-      <label className="mb-2 block text-[11px] text-muted-foreground">
-        {sizeLabel}
-        <input value={s} onChange={(e) => setS(e.target.value.replace(/[^0-9.]/g, ''))} inputMode="decimal" className="num mt-0.5 h-8 w-full rounded-md border bg-background px-2 text-xs text-foreground" />
-      </label>
+      {!noSize && (
+        <label className="mb-2 block text-[11px] text-muted-foreground">
+          {sizeLabel}
+          <input value={s} onChange={(e) => setS(e.target.value.replace(/[^0-9.]/g, ''))} inputMode="decimal" className="num mt-0.5 h-8 w-full rounded-md border bg-background px-2 text-xs text-foreground" />
+        </label>
+      )}
       <p className="mb-2 text-[10px] leading-relaxed text-muted-foreground">
-        Replaces the order: it is cancelled, then placed again at these terms (two signatures). It loses its place in the queue.
+        {trading
+          ? 'Changes the order in one step. Only a smaller size at the same price keeps its place in the queue.'
+          : 'Replaces the order: it is cancelled, then placed again at these terms (two signatures). It loses its place in the queue.'}
       </p>
       <button
         type="button"
@@ -118,7 +160,7 @@ export function AmendOrder({
         onClick={() => (setOpen(false), onSubmit(p, s))}
         className={cn('h-8 w-full rounded-md bg-primary text-xs font-semibold text-primary-foreground disabled:opacity-50')}
       >
-        Replace order
+        {trading ? 'Change order' : 'Replace order'}
       </button>
     </div>
   )

@@ -248,12 +248,19 @@ validators can price its base from public USD spot prices.
   "bestBid": "84957.5", "bestAsk": "85085.0",
   "fundingRate": "0.0000125", "fundingTime": 1790895300, "nextFundingTime": 1790898900,
   "maxLeverage": "20", "maintenanceRate": "0.025",
+  "szDecimals": 4, "liquidityVault": null, "deployer": null,
   "change24h": "0.05", "volume24h": "17012.4",
   "indexPrice": "85440.25", "indexSource": "coinbase", "source": "node", "asOf": … }
 ```
 
 `indexPrice` is the external reference for comparison; the node's own oracle is
 `oraclePrice` (the validators' stake-weighted median).
+
+`szDecimals` is the market's order grid (nodes from 2026-10; `null` before): sizes are whole
+lots of 10^-szDecimals, and prices have at most 5 significant figures and 6 − szDecimals
+decimals (an integer always fits). The node refuses an order, trigger or modify off the grid.
+`liquidityVault` is the vault the protocol quotes on the market's book, when it has one;
+`deployer` the bonded deployer of a deployer market (`dex:ASSET`), which runs its oracle.
 
 ### `GET /api/v1/perps/{base}/{quote}/orderbook?depth=20`
 
@@ -322,6 +329,25 @@ node's router. `from` / `to` are asset segments, `amount` is in `from` units,
   `amountOut` less your slippage tolerance.
 - `404 not_found` when nothing can fill it.
 
+### `GET /api/v1/quote/route?from=&to=&amount=&sender=`
+
+The best way from one token to another through up to three markets (pools, or books with
+resting orders), each hop quoted by the node's router for what the hop before it delivers:
+
+```json
+{ "from": <asset>, "to": <asset>, "amountIn": "100", "amountOut": "0.0316",
+  "executionPrice": "3164.6", "priceImpact": "0.0021",
+  "hops": [ { "from": <asset>, "to": <asset>, "amountIn": "100", "amountOut": "0.0371",
+              "fee": "0.3", "venue": "amm", "poolId": "9bf3…", "priceImpact": "0.0011" }, … ],
+  "directAmountOut": null, "source": "node", "asOf": … }
+```
+
+To sign it on a node with multi-hop swaps (`/features` `trading`), send **one** `SWAP` with
+`path` = the hops' tokens in order (`[from, …each hop's to]`), `amount_in` and the final
+`min_amount_out`: each hop spends exactly what the one before bought, and the whole swap is
+undone unless the last hop delivers the minimum (lib/routing.ts `routePathOp`). On an older node
+each hop is its own `SWAP` (`routeOps`), and a failed later hop leaves the earlier ones done.
+
 ### `GET /api/v1/quote/liquidity?pool=&tickLower=&tickUpper=&amount0=&amount1=` (or `&liquidity=`)
 
 The node's liquidity quote: the liquidity `L` the amounts buy and the exact
@@ -347,7 +373,20 @@ transactions).
                     "base": <asset>, "quote": <asset> } ],
   "lpPositions": [ <node position> ],
   "perp": <node perps account>,
-  "exchangeNonce": 7, "source": "node", "asOf": … }
+  "exchangeNonce": 7,
+  "triggers": [ { "kindOf": "perp", "orderId": "2c48…e529.sl", "market": "BTC-USD-PERP",
+                  "path": null, "pair": null, "side": "sell", "kind": "sl",
+                  "triggerPrice": "79953", "size": "position", "limitPrice": null,
+                  "reduceOnly": true, "base": null, "quote": null } ],
+  "twaps": [ { "twapId": "422f…c204", "perp": true, "market": "BTC-USD-PERP", "side": "buy",
+               "tokenIn": null, "tokenOut": null, "total": "0.02", "done": "0.006",
+               "received": "0", "slices": 10, "slicesDone": 3, "interval": "30",
+               "nextTime": "1792955629.27", "reduceOnly": false } ],
+  "fees": { "volume": "850.85", "taker": "0.0005", "maker": "0.0002",
+            "referrer": null, "referralCode": null },
+  "freeActions": { "budget": 10850, "used": 10, "remaining": 10840,
+                   "freeNow": true, "whyNot": null },
+  "source": "node", "asOf": … }
 ```
 
 - `balances` covers verified assets, tokens of the account's open orders, and
@@ -356,6 +395,16 @@ transactions).
 - `spotOrders` are oriented to each pair's market (`market`, `side`, `price`,
   `amount`); `pair` and `orderId` are what `CANCEL_ORDER` takes.
 - `exchangeNonce` counts committed operations only.
+- `triggers`, `twaps`, `fees` and `freeActions` come from a node with the trading features of
+  2026-10 (qrdx-node docs/TRADING_FEATURES.md, TOKENOMICS.md), and are `null` on an older one.
+  - `triggers` are the waiting stop-loss / take-profit orders: perps ones (`PERP_TRIGGER`, on the
+    mark price; cancel with `PERP_CANCEL`) and spot ones (`PLACE_ORDER` of `stop_loss`,
+    `take_profit` or `oco`, on the pair's last trade; cancel with `CANCEL_ORDER` and `pair`). A
+    spot one is oriented to its market like `spotOrders`. `size: "position"` is a position's
+    TP/SL, which closes the whole position.
+  - `fees` are the account's 14-day perps volume and the rates it earns.
+  - `freeActions.freeNow` says whether its next trading operation goes in the free lane (gas
+    price 0); `whyNot` says why not.
 
 ### `GET /api/v1/accounts/{address}/pnl`
 
@@ -496,10 +545,10 @@ One address's stake (pass the `0xPQ` address):
 
 QRDX's native NFTs (qrdx-node docs/NATIVE_TOKENS.md §8) and the fixed-price market on top of them,
 `contracts/QRDXNFTMarket.sol`: a sale moves the NFT, the payment (QRDX or a native token) and the
-collection's royalty in one EVM transaction, and nothing is escrowed. On testnet the market contract is
-`0x7ee08544a2fb4ee0bd311c836addeeab3a244bab` (`nftMarket` in lib/config.ts;
-`NEXT_PUBLIC_QRDX_MAIN_NFT_MARKET` / `NEXT_PUBLIC_QRDX_TEST_NFT_MARKET` override it). `market` is `null`
-where none is configured (mainnet, for now), and the reads below still list collections and NFTs.
+collection's royalty in one EVM transaction, and nothing is escrowed. The market contract per network is
+`nftMarket` in lib/config.ts, which `NEXT_PUBLIC_QRDX_MAIN_NFT_MARKET` / `NEXT_PUBLIC_QRDX_TEST_NFT_MARKET`
+override. None is deployed since testnet's regenesis of 2026-10-25. `market` is `null` where none is
+configured, and the reads below still list collections and NFTs.
 
 A listing comes from the contract's logs. It is **live** while its seller still owns the NFT and the market
 may move it (an operator approval for the collection, or the NFT's own approval); otherwise it is **stale**:
@@ -543,6 +592,26 @@ contract on the node's own EVM and NFT registry; `pnpm nft-market:compile` rebui
 `lib/nft-market/artifact.json`.
 
 ## Status
+
+### `GET /api/v1/features`
+
+What this network's node runs and what the protocol charges on it, cached for a minute:
+
+```json
+{ "trading": true, "history": false,
+  "costs": { "poolBurnSubsidized": "10", "poolStakeStandard": "25",
+             "perpListingFee": "25", "exchangeMinGasPriceWei": "100000000" },
+  "source": "node", "asOf": … }
+```
+
+- `trading`: the node has the trading features of qrdx-node's 2026-10 release (trigger orders,
+  `MODIFY_ORDER` / `PERP_MODIFY`, `CANCEL_ALL`, `BATCH`, multi-hop `SWAP` by `path`, TWAPs, time
+  in force `fok` / `alo`, hidden and iceberg orders, the free trading lane, QNS). The site offers
+  them only where it is true.
+- `history`: the node keeps the trading history database (`history_*`).
+- `costs`: QRDX a pool costs to create (burned for a subsidized one, staked for a standard one;
+  constants of the node release), the perp listing fee and the exchange's gas price floor (chain
+  spec; `null` where the node does not report them).
 
 ### `GET /api/v1/status`
 

@@ -6,12 +6,22 @@ import { Input } from '@/components/ui/input'
 import { ConnectButton } from '@/components/wallet/ConnectButton'
 import { dec, div, isAmount, mul, round, str } from '@/lib/decimal'
 import { compact, fixed, price as fmtPrice } from '@/lib/format'
-import { collateralShortfall, walletCollateral } from '@/lib/perps'
+import { collateralShortfall, gridPrice, gridPriceError, gridSizeError, walletCollateral } from '@/lib/perps'
+import { perpTriggerKind, protectiveLegError, triggerGas, twapPlan } from '@/lib/orders'
+import { useFeatures } from '@/lib/hooks/useFeatures'
 import type { AccountResponse, OrderBook, PerpMarket } from '@/lib/types'
 import { useWallet } from '@/lib/wallet/WalletContext'
 import { cn } from '@/lib/utils'
 
 type Side = 'buy' | 'sell'
+type Kind = 'limit' | 'market' | 'stop' | 'twap'
+type Tif = 'gtc' | 'ioc' | 'fok' | 'alo'
+const TIFS: { id: Tif; label: string; title: string }[] = [
+  { id: 'gtc', label: 'GTC', title: 'Good till cancelled: what does not fill rests on the book' },
+  { id: 'alo', label: 'Post only', title: 'Refused if it would take: it only ever adds liquidity (pays the maker rate)' },
+  { id: 'ioc', label: 'IOC', title: 'Immediate or cancel: fills what it can now, cancels the rest' },
+  { id: 'fok', label: 'FOK', title: 'Fill or kill: fills whole, or nothing happens' },
+]
 
 /** What perps collateral is called: the node reports a token address, "QRDX", or "". */
 export function collateralLabel(account: AccountResponse | null): string {
@@ -26,12 +36,13 @@ export function collateralLabel(account: AccountResponse | null): string {
  * far side of the book plus a slippage allowance, so it fills what it can at
  * the book's prices and cancels the rest.
  */
-export function marketPrice(book: OrderBook | null, side: Side, slippagePct: number): string | null {
+export function marketPrice(book: OrderBook | null, side: Side, slippagePct: number, szDecimals: number | null = null): string | null {
   const best = side === 'buy' ? book?.bestAsk : book?.bestBid
   if (!best) return null
   const bps = BigInt(Math.round(slippagePct * 100))
   const p = (dec(best) * (side === 'buy' ? 10_000n + bps : 10_000n - bps)) / 10_000n
-  return round(str(p), 2, side === 'buy' ? 'up' : 'down')
+  // Onto the market's price grid, never tighter than the allowance: up for a buy, down for a sell.
+  return gridPrice(str(p), szDecimals, side === 'buy' ? 'up' : 'down')
 }
 
 export function PerpOrderForm({
@@ -39,20 +50,41 @@ export function PerpOrderForm({
   book,
   account,
   pickedPrice,
+  pickedTrigger,
 }: {
   market: PerpMarket
   book: OrderBook | null
   account: AccountResponse | null
   pickedPrice: string | null
+  /** A chart level to use as a Stop order's trigger. */
+  pickedTrigger?: { price: string; at: number } | null
 }) {
   const w = useWallet()
+  const { trading } = useFeatures()
   const perp = account?.perp ?? null
   const current = perp?.leverage[market.id]
   const [side, setSide] = useState<Side>('buy')
-  const [kind, setKind] = useState<'limit' | 'market'>('limit')
+  const [kindState, setKind] = useState<Kind>('limit')
+  // Stop and TWAP orders need a node with the trading features; fall back if it has none.
+  const kind: Kind = !trading && (kindState === 'stop' || kindState === 'twap') ? 'limit' : kindState
   const [price, setPrice] = useState('')
   const [size, setSize] = useState('')
   const [reduceOnly, setReduceOnly] = useState(false)
+  const [tif, setTif] = useState<Tif>('gtc')
+  const [hidden, setHidden] = useState(false)
+  const [display, setDisplay] = useState('')
+  const [withTpSl, setWithTpSl] = useState(false)
+  const [tp, setTp] = useState('')
+  const [sl, setSl] = useState('')
+  const [trigger, setTrigger] = useState('')
+  useEffect(() => {
+    if (pickedTrigger) {
+      setTrigger(pickedTrigger.price)
+      setKind('stop')
+    }
+  }, [pickedTrigger])
+  const [stopLimit, setStopLimit] = useState('')
+  const [minutes, setMinutes] = useState('30')
   const [slippage] = useState(1)
   const [lev, setLev] = useState('')
   const [mode, setMode] = useState<'cross' | 'isolated'>('cross')
@@ -68,8 +100,8 @@ export function PerpOrderForm({
     }
   }, [pickedPrice])
   useEffect(() => {
-    if (!price && market.markPrice) setPrice(round(market.markPrice, 1))
-  }, [market.markPrice, price])
+    if (!price && market.markPrice) setPrice(gridPrice(market.markPrice, market.szDecimals))
+  }, [market.markPrice, market.szDecimals, price])
   // What the node actually applies: an explicit setting, else what an open position runs at.
   const position = perp?.positions[market.id]
   const effective = current?.leverage ?? (position && Number(position.size) !== 0 ? position.leverage : null)
@@ -80,7 +112,18 @@ export function PerpOrderForm({
     } else if (!lev && effective) setLev(round(effective, 2))
   }, [current, effective, lev])
 
-  const execPrice = kind === 'market' ? marketPrice(book, side, slippage) : price
+  const mark = market.markPrice ?? market.oraclePrice ?? null
+  const execPrice =
+    kind === 'market'
+      ? marketPrice(book, side, slippage, market.szDecimals)
+      : kind === 'twap'
+        ? (marketPrice(book, side, slippage, market.szDecimals) ?? mark) // (for the margin estimate only)
+      : kind === 'stop'
+        ? stopLimit || trigger
+        : price
+  const stopKind = kind === 'stop' && mark && isAmount(trigger) && dec(trigger) > 0n ? perpTriggerKind(side, trigger, mark) : null
+  const resting = kind === 'limit' && (tif === 'gtc' || tif === 'alo')
+  const attach = trading && withTpSl && !reduceOnly && (kind === 'limit' || kind === 'market')
   const notional = execPrice && isAmount(execPrice) && isAmount(size) ? str(mul(dec(execPrice), dec(size))) : null
   const leverage = current?.leverage ?? (lev || effective || '')
   const margin = notional && isAmount(leverage) && dec(leverage) > 0n ? str(div(dec(notional), dec(leverage))) : null
@@ -90,10 +133,48 @@ export function PerpOrderForm({
   const topUp = perp && !reduceOnly ? collateralShortfall(margin, perp.withdrawable) : null
   const canTopUp = !!topUp && inWallet !== null && dec(inWallet) >= dec(topUp)
 
+  const twapMinutes = Number(minutes)
+  const plan = kind === 'twap' && twapMinutes >= 1 ? twapPlan(Math.round(twapMinutes * 60)) : null
+
+  const grid = (p: string) => gridPriceError(p, market.szDecimals, market.id)
   const problem = (() => {
     if (!isAmount(size) || dec(size) <= 0n) return 'Enter a size.'
+    const lots = gridSizeError(size, market.szDecimals, market.id)
+    if (lots) return lots
+    if (kind === 'stop') {
+      if (isAmount(trigger) && grid(trigger)) return grid(trigger)
+      if (stopLimit && isAmount(stopLimit) && grid(stopLimit)) return grid(stopLimit)
+      if (!isAmount(trigger) || dec(trigger) <= 0n) return 'Enter the trigger price.'
+      if (stopLimit && (!isAmount(stopLimit) || dec(stopLimit) <= 0n)) return 'Enter a limit price, or leave it empty for market.'
+      if (mark && dec(trigger) === dec(mark)) return 'The mark is at the trigger already: place an order instead.'
+      return null
+    }
+    if (kind === 'twap') {
+      if (!(twapMinutes >= 1 && twapMinutes <= 1440)) return 'A TWAP runs 1 minute to 24 hours.'
+      if (topUp && !canTopUp) return `Not enough ${unit} in the perps account or the wallet.`
+      return null
+    }
     if (!execPrice) return kind === 'market' ? 'The book is empty on that side.' : 'Enter a price.'
     if (!isAmount(execPrice) || dec(execPrice) <= 0n) return 'Enter a price.'
+    if (kind === 'limit' && grid(execPrice)) return grid(execPrice)
+    if (resting && display) {
+      const shown = gridSizeError(display, market.szDecimals, market.id)
+      if (shown) return shown
+      if (!isAmount(display) || dec(display) <= 0n) return 'Enter the size shown at a time.'
+      if (dec(display) >= dec(size)) return 'An iceberg shows less than its size.'
+    }
+    if (attach && mark) {
+      const long = side === 'buy'
+      if (!tp && !sl) return 'Enter a take profit, a stop loss, or both.'
+      if (tp) {
+        const e = protectiveLegError(long, 'tp', tp, mark) ?? grid(tp)
+        if (e) return e
+      }
+      if (sl) {
+        const e = protectiveLegError(long, 'sl', sl, mark) ?? grid(sl)
+        if (e) return e
+      }
+    }
     if (topUp && !canTopUp) return `Not enough ${unit} in the perps account or the wallet.`
     return null
   })()
@@ -112,27 +193,79 @@ export function PerpOrderForm({
   }
   const submitted = 'Submitted. It executes when the next block includes it (~3 min).'
 
+  /** The order to sign: a PERP_ORDER, a PERP_TRIGGER (stop) or a TWAP_ORDER. */
+  const orderRequest = () => {
+    const dir = side === 'buy' ? 'Long' : 'Short'
+    if (kind === 'stop') {
+      return {
+        op: 'PERP_TRIGGER',
+        params: {
+          market_id: market.id,
+          side,
+          kind: stopKind!,
+          trigger_price: trigger,
+          size,
+          ...(stopLimit ? { limit_price: stopLimit } : {}),
+          ...(reduceOnly ? { reduce_only: true } : {}),
+        },
+        gasLimit: triggerGas() + 60_000,
+        label: `${stopKind === 'sl' ? 'Stop' : 'Take profit'}: ${dir.toLowerCase()} ${size} ${market.base} when the mark reaches ${trigger}${stopLimit ? `, limit ${stopLimit}` : ''}`,
+        market: market.id,
+      }
+    }
+    if (kind === 'twap') {
+      return {
+        op: 'TWAP_ORDER',
+        params: {
+          market_id: market.id,
+          side,
+          size,
+          duration: Math.round(twapMinutes * 60),
+          slices: plan!.slices,
+          ...(reduceOnly ? { reduce_only: true } : {}),
+        },
+        gasLimit: plan!.gas + 20_000,
+        label: `TWAP: ${dir.toLowerCase()} ${size} ${market.base} over ${twapMinutes} min`,
+        market: market.id,
+      }
+    }
+    const legs = attach ? (['tp', 'sl'] as const).filter((k) => (k === 'tp' ? tp : sl)) : []
+    return {
+      op: 'PERP_ORDER',
+      params: {
+        market_id: market.id,
+        side,
+        size,
+        price: execPrice!,
+        ...(reduceOnly ? { reduce_only: true } : {}),
+        ...(kind === 'market' ? { tif: 'ioc' } : trading && tif !== 'gtc' ? { tif } : {}),
+        ...(resting && hidden ? { hidden: true } : {}),
+        ...(resting && display ? { display_size: display } : {}),
+        ...Object.fromEntries(legs.map((k) => [k, { trigger_price: k === 'tp' ? tp : sl }])),
+      },
+      // Each attached TP/SL prepays a trigger's matching; the order matches with what is left.
+      ...(legs.length ? { gasLimit: 1_000_000 + legs.length * triggerGas() } : {}),
+      label:
+        `${dir} ${size} ${market.base} ${kind === 'market' ? 'market' : `@ ${execPrice}`}${reduceOnly ? ' (reduce-only)' : ''}` +
+        (legs.length ? ` · ${legs.map((k) => `${k.toUpperCase()} ${k === 'tp' ? tp : sl}`).join(' / ')}` : ''),
+      market: market.id,
+    }
+  }
+
   const placeOrder = () =>
     run(
       'order',
       async () => {
-        if (topUp) {
+        const order = orderRequest()
+        const deposit = topUp && kind !== 'stop' ? { op: 'PERP_DEPOSIT', params: { amount: topUp }, label: `Deposit ${topUp} ${unit} perps collateral` } : null
+        if (deposit && trading) {
+          // One approval, and on a node with BATCH one transaction: the deposit and the order land together or not at all.
+          await w.sendExchangeBatch({ ops: [deposit, order], label: `${deposit.label}, then ${order.label}`, market: market.id })
+        } else {
           // Two operations in one block window: the deposit's nonce comes first, so it settles first.
-          await w.sendExchange({ op: 'PERP_DEPOSIT', params: { amount: topUp }, label: `Deposit ${topUp} ${unit} perps collateral` })
+          if (deposit) await w.sendExchange(deposit)
+          await w.sendExchange(order)
         }
-        await w.sendExchange({
-          op: 'PERP_ORDER',
-          params: {
-            market_id: market.id,
-            side,
-            size,
-            price: execPrice!,
-            ...(reduceOnly ? { reduce_only: true } : {}),
-            ...(kind === 'market' ? { tif: 'ioc' } : {}),
-          },
-          label: `${side === 'buy' ? 'Long' : 'Short'} ${size} ${market.base} ${kind === 'market' ? 'market' : `@ ${execPrice}`}${reduceOnly ? ' (reduce-only)' : ''}`,
-          market: market.id,
-        })
         setSize('')
       },
       submitted
@@ -202,9 +335,9 @@ export function PerpOrderForm({
         ))}
       </div>
       <div className="flex items-center gap-4 border-b text-[13px]">
-        {(['limit', 'market'] as const).map((k) => (
+        {(trading ? (['limit', 'market', 'stop', 'twap'] as const) : (['limit', 'market'] as const)).map((k) => (
           <button key={k} onClick={() => setKind(k)} className={cn('relative pb-2 font-medium transition-colors', kind === k ? 'text-foreground' : 'text-muted-foreground hover:text-foreground')}>
-            {k === 'limit' ? 'Limit' : 'Market'}
+            {k === 'limit' ? 'Limit' : k === 'market' ? 'Market' : k === 'stop' ? 'Stop' : 'TWAP'}
             {kind === k && <span className="absolute inset-x-0 -bottom-px h-0.5 rounded-full bg-foreground" />}
           </button>
         ))}
@@ -231,6 +364,43 @@ export function PerpOrderForm({
           </span>
           <Input value={price} onChange={(e) => setPrice(e.target.value.trim())} inputMode="decimal" className="num h-10 text-right text-sm font-medium" />
         </label>
+      ) : kind === 'stop' ? (
+        <>
+          <label className="block">
+            <span className="mb-1.5 flex justify-between text-xs text-muted-foreground">
+              <span>Trigger (mark price)</span>
+              <span>{market.quote}</span>
+            </span>
+            <Input value={trigger} onChange={(e) => setTrigger(e.target.value.trim())} inputMode="decimal" placeholder={mark ? fmtPrice(mark, ref) : ''} className="num h-10 text-right text-sm font-medium" />
+          </label>
+          <label className="block">
+            <span className="mb-1.5 flex justify-between text-xs text-muted-foreground">
+              <span>Limit price</span>
+              <span>empty: market</span>
+            </span>
+            <Input value={stopLimit} onChange={(e) => setStopLimit(e.target.value.trim())} inputMode="decimal" placeholder="Market" className="num h-10 text-right text-sm font-medium" />
+          </label>
+          <p className="text-[11px] text-muted-foreground">
+            {stopKind
+              ? `${stopKind === 'sl' ? 'Stop' : 'Take profit'}: ${side === 'buy' ? 'buys' : 'sells'} when the mark ${dec(trigger) > dec(mark ?? '0') ? 'rises' : 'falls'} to ${fmtPrice(trigger, ref)}, ${stopLimit ? `as a limit at ${fmtPrice(stopLimit, ref)}` : 'as a market order at most 10 % through the mark'}.`
+              : 'Fires when the mark price reaches the trigger. Margin is checked when it fires, not now.'}
+          </p>
+        </>
+      ) : kind === 'twap' ? (
+        <>
+          <label className="block">
+            <span className="mb-1.5 flex justify-between text-xs text-muted-foreground">
+              <span>Duration</span>
+              <span>minutes</span>
+            </span>
+            <Input value={minutes} onChange={(e) => setMinutes(e.target.value.replace(/[^0-9.]/g, ''))} inputMode="decimal" className="num h-10 text-right text-sm font-medium" />
+          </label>
+          <p className="text-[11px] text-muted-foreground">
+            {plan
+              ? `${plan.slices} slices, one every ${fixed(String((twapMinutes * 60) / plan.slices), 0)} s, each at most 3 % from the mark; a slice that misses is made up later.`
+              : 'Works the size into the market in equal slices.'}
+          </p>
+        </>
       ) : (
         <p className="text-xs text-muted-foreground">
           Fills now against the book up to {execPrice ? fmtPrice(execPrice, ref) : '—'} ({slippage}% past the best {side === 'buy' ? 'ask' : 'bid'}); the rest is cancelled.
@@ -243,15 +413,62 @@ export function PerpOrderForm({
         </span>
         <Input value={size} onChange={(e) => setSize(e.target.value.trim())} inputMode="decimal" placeholder="0.00" className="num h-10 text-right text-sm font-medium" />
       </label>
-      <label className="flex items-center gap-2 text-xs">
-        <input type="checkbox" checked={reduceOnly} onChange={(e) => setReduceOnly(e.target.checked)} />
-        Reduce only
-      </label>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs">
+        <label className="flex items-center gap-2">
+          <input type="checkbox" checked={reduceOnly} onChange={(e) => setReduceOnly(e.target.checked)} />
+          Reduce only
+        </label>
+        {trading && (kind === 'limit' || kind === 'market') && !reduceOnly && (
+          <label className="flex items-center gap-2" title="Reduce-only stop-loss and take-profit orders sized to this one; the first to fire cancels the other">
+            <input type="checkbox" checked={withTpSl} onChange={(e) => setWithTpSl(e.target.checked)} />
+            TP / SL
+          </label>
+        )}
+        {trading && resting && (
+          <label className="flex items-center gap-2" title="Matches like any order but shows nothing in the book's depth (its terms are still public on chain)">
+            <input type="checkbox" checked={hidden} onChange={(e) => setHidden(e.target.checked)} />
+            Hidden
+          </label>
+        )}
+      </div>
+      {trading && kind === 'limit' && (
+        <div className="flex flex-wrap items-center gap-1 text-[11px]">
+          {TIFS.map((t) => (
+            <button key={t.id} type="button" title={t.title} onClick={() => setTif(t.id)} className={cn('rounded border px-2 py-0.5', tif === t.id ? 'border-foreground/60 text-foreground' : 'text-muted-foreground hover:text-foreground')}>
+              {t.label}
+            </button>
+          ))}
+          {resting && (
+            <span className="ml-auto flex items-center gap-1 text-muted-foreground" title="Iceberg: show this much at a time; the rest waits hidden behind it">
+              Show
+              <input value={display} onChange={(e) => setDisplay(e.target.value.trim())} inputMode="decimal" placeholder="all" className="num h-6 w-16 rounded border bg-background px-1.5 text-right text-foreground" />
+            </span>
+          )}
+        </div>
+      )}
+      {attach && (
+        <div className="grid grid-cols-2 gap-2">
+          <label className="block">
+            <span className="mb-1 block text-[11px] text-muted-foreground">Take profit</span>
+            <Input value={tp} onChange={(e) => setTp(e.target.value.trim())} inputMode="decimal" placeholder={side === 'buy' ? 'above mark' : 'below mark'} className="num h-9 text-right text-xs" />
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-[11px] text-muted-foreground">Stop loss</span>
+            <Input value={sl} onChange={(e) => setSl(e.target.value.trim())} inputMode="decimal" placeholder={side === 'buy' ? 'below mark' : 'above mark'} className="num h-9 text-right text-xs" />
+          </label>
+        </div>
+      )}
 
       <div className="space-y-1.5 rounded-lg border bg-muted/30 p-2.5 text-xs">
         <Line k="Order value" v={notional ? `${fixed(notional, 2)} ${market.quote}` : '—'} />
         <Line k="Margin required" v={margin ? `${fixed(margin, 2)} ${unit}` : '—'} />
         <Line k="Mark / oracle" v={`${fmtPrice(market.markPrice, ref)} / ${fmtPrice(market.oraclePrice, ref)}`} />
+        {account?.fees && (
+          <Line
+            k="Fees (taker / maker)"
+            v={`${(Number(account.fees.taker) * 100).toFixed(3)} % / ${(Number(account.fees.maker) * 100).toFixed(3)} %`}
+          />
+        )}
       </div>
 
       {!w.trader ? (
@@ -264,7 +481,10 @@ export function PerpOrderForm({
         >
           {busy === 'order'
             ? 'Confirm in wallet…'
-            : (problem ?? `${canTopUp ? `Deposit ${fixed(topUp!, 2)} ${unit} and ` : ''}${side === 'buy' ? (canTopUp ? 'long' : 'Long') : canTopUp ? 'short' : 'Short'} ${market.base}`)}
+            : (problem ??
+              (kind === 'stop'
+                ? `Place ${stopKind === 'sl' ? 'stop' : 'take profit'}: ${side === 'buy' ? 'long' : 'short'} ${market.base}`
+                : `${canTopUp ? `Deposit ${fixed(topUp!, 2)} ${unit} and ` : ''}${kind === 'twap' ? 'TWAP ' : ''}${side === 'buy' ? (canTopUp || kind === 'twap' ? 'long' : 'Long') : canTopUp || kind === 'twap' ? 'short' : 'Short'} ${market.base}`))}
         </Button>
       )}
       {msg && <p className={cn('rounded-md px-2.5 py-2 text-xs', msg.ok ? 'bg-bid/10 text-bid' : 'bg-ask/10 text-ask')}>{msg.text}</p>}

@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { AccountPanel, BalancesTable, SpotOrdersTable } from '@/components/trade/AccountPanel'
+import { TriggersTable, TwapsTable } from '@/components/trade/TriggerTables'
+import { useFeatures } from '@/lib/hooks/useFeatures'
 import { MarketSelector } from '@/components/trade/MarketSelector'
 import { PairError, UnverifiedBanner } from '@/components/trade/MarketStatus'
 import { HeaderStat, MarketHeader } from '@/components/trade/MarketHeader'
@@ -40,7 +42,7 @@ export function useAccount(): ReturnType<typeof useApi<AccountResponse>> {
 }
 
 export function SpotTradeView({ base, quote }: { base: string; quote: string }) {
-  const { apiBase, network } = useNet()
+  const { apiBase, network, slot } = useNet()
   const router = useRouter()
   const api = `${apiBase}/markets/${base}/${quote}`
   // A block every 250 ms: the node's stream says when this market changed; polling is the fallback.
@@ -57,6 +59,8 @@ export function SpotTradeView({ base, quote }: { base: string; quote: string }) 
   useNodeStream(network.nodeUrl, [pair && `trades:${pair}`, pair && `tickers:${pair}`], () => (trades.refresh(), market.refresh()), 1_000)
   const account = useAccount()
   const [picked, setPicked] = useState<string | null>(null)
+  const [pickedTrigger, setPickedTrigger] = useState<{ price: string; at: number } | null>(null)
+  const { trading } = useFeatures()
   const [mobileTab, setMobileTab] = useState<'chart' | 'book' | 'trades'>('chart')
   const [sideTab, setSideTab] = useState<'book' | 'trades'>('book')
 
@@ -193,7 +197,36 @@ export function SpotTradeView({ base, quote }: { base: string; quote: string }) 
 
       <div className="grid min-h-0 flex-1 grid-cols-1 gap-1 lg:grid-cols-[minmax(0,1fr)_300px_320px] lg:grid-rows-[minmax(0,1fr)_minmax(220px,32%)] xl:grid-cols-[minmax(0,1fr)_320px_340px]">
         <Panel className={cn('min-h-[420px] lg:min-h-0', mobileTab !== 'chart' && 'hidden lg:flex')}>
-          <PriceChart basePath={api} watermark={pairLabel} quoteSymbol={m.quote.symbol} />
+          <PriceChart
+            basePath={api}
+            watermark={pairLabel}
+            quoteSymbol={m.quote.symbol}
+            drawing={{
+              id: `${slot}:${m.path}`,
+              usePrice: setPicked,
+              ...(trading ? { useTrigger: (price: string) => setPickedTrigger({ price, at: Date.now() }) } : {}),
+              alert: { path: m.path, label: pairLabel, slot },
+              unit: m.quote.symbol,
+              levels: [
+                ...(account.data?.spotOrders ?? [])
+                  .filter((o) => o.path === m.path)
+                  .map((o) => ({
+                    key: `o:${o.orderId}`,
+                    price: Number(o.price),
+                    label: `${o.side === 'buy' ? 'Buy' : 'Sell'} ${o.remaining} @ ${o.price}`,
+                    tone: (o.side === 'buy' ? 'bid' : 'ask') as 'bid' | 'ask',
+                  })),
+                ...(account.data?.triggers ?? [])
+                  .filter((t) => t.kindOf === 'spot' && t.path === m.path)
+                  .map((t) => ({
+                    key: `t:${t.orderId}`,
+                    price: Number(t.triggerPrice),
+                    label: `${t.kind === 'tp' ? 'TP' : t.kind === 'oco' ? 'Stop / TP' : 'Stop'} ${t.side} @ ${t.triggerPrice}`,
+                    tone: 'muted' as const,
+                  })),
+              ],
+            }}
+          />
         </Panel>
         <Panel className={cn('min-h-[460px] lg:min-h-0', mobileTab === 'chart' && 'hidden lg:flex')}>
           <PanelTabs
@@ -213,7 +246,7 @@ export function SpotTradeView({ base, quote }: { base: string; quote: string }) 
         <Panel className="lg:row-span-2">
           <div className="flex min-h-0 flex-1 flex-col lg:overflow-y-auto">
             <TradeGate>
-              <SpotOrderForm market={m} book={book.data} account={account.data} pickedPrice={picked} />
+              <SpotOrderForm market={m} book={book.data} account={account.data} pickedPrice={picked} pickedTrigger={pickedTrigger} />
             </TradeGate>
           </div>
         </Panel>
@@ -226,6 +259,22 @@ export function SpotTradeView({ base, quote }: { base: string; quote: string }) 
                 label: `Open orders${account.data?.spotOrders.length ? ` (${account.data.spotOrders.length})` : ''}`,
                 render: () => <SpotOrdersTable account={account.data} />,
               },
+              // Only on a node with trigger orders and TWAPs (null otherwise).
+              ...(account.data?.triggers
+                ? [
+                    {
+                      id: 'triggers',
+                      label: `Stops${(() => {
+                        const n = account.data.triggers.filter((t) => t.kindOf === 'spot').length
+                        return n ? ` (${n})` : ''
+                      })()}`,
+                      render: () => <TriggersTable account={account.data} kindOf="spot" />,
+                    },
+                  ]
+                : []),
+              ...(account.data?.twaps?.some((t) => !t.perp)
+                ? [{ id: 'twaps', label: `TWAP (${account.data.twaps.filter((t) => !t.perp).length})`, render: () => <TwapsTable account={account.data} perp={false} /> }]
+                : []),
             ]}
             extra={[{ id: 'info', label: 'Info', public: true, render: () => <MarketInfo base={m.base} quote={m.quote} pools={m.pools} /> }]}
           />

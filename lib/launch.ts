@@ -33,22 +33,31 @@ export const FEE_TIERS = [
 export type FeeTier = (typeof FEE_TIERS)[number]['tier']
 export const tickSpacing = (tier: number) => FEE_TIERS.find((f) => f.tier === tier)?.spacing ?? 60
 
-/** Pool types and what creating one costs in QRDX (amm.py POOL_STAKE_REQUIREMENTS). */
+/** Pool types (amm.py POOL_STAKE_REQUIREMENTS). What each costs is the network's: see poolTypes. */
 export const POOL_TYPES = [
   {
     type: 'SUBSIDIZED',
-    qrdx: '5000',
-    label: 'Burn 5,000 QRDX',
+    verb: 'Burn',
     detail: 'Burned for good. The pool is permanent and community-owned: the strongest signal to buyers.',
   },
   {
     type: 'STANDARD',
-    qrdx: '10000',
-    label: 'Stake 10,000 QRDX',
+    verb: 'Stake',
     detail: 'Refunded if you remove the pool, which is only possible once every position in it is withdrawn.',
   },
 ] as const
 export type PoolType = (typeof POOL_TYPES)[number]['type']
+
+/**
+ * The pool types with what each costs on this network (the /features costs; '' until known,
+ * which nothing may be signed with).
+ */
+export function poolTypes(costs: { poolBurnSubsidized: string; poolStakeStandard: string }) {
+  return POOL_TYPES.map((p) => {
+    const qrdx = p.type === 'SUBSIDIZED' ? costs.poolBurnSubsidized : costs.poolStakeStandard
+    return { ...p, qrdx, label: qrdx ? `${p.verb} ${Number(qrdx).toLocaleString('en-US')} QRDX` : `${p.verb} QRDX` }
+  })
+}
 
 const MIN_TICK = -887272
 const MAX_TICK = 887272

@@ -14,6 +14,7 @@ import { usePendingTxs } from '@/lib/wallet/pending'
 import { useNet, useWallet } from '@/lib/wallet/WalletContext'
 import { cn } from '@/lib/utils'
 import { orderMarket, spotLimitParams } from '@/lib/orders'
+import { useFeatures } from '@/lib/hooks/useFeatures'
 import { AmendOrder, CancelAll, useSequence } from '@/components/trade/OrderManage'
 
 export type AccountTab = {
@@ -106,6 +107,7 @@ export function BalancesTable({ account }: { account: AccountResponse | null }) 
 
 export function SpotOrdersTable({ account, onlyMarket }: { account: AccountResponse | null; onlyMarket?: string }) {
   const seq = useSequence()
+  const { trading } = useFeatures()
   const [busy, setBusy] = useState<string | null>(null)
   if (!account) return <Loading />
   const orders = onlyMarket ? account.spotOrders.filter((o) => o.market === onlyMarket) : account.spotOrders
@@ -124,6 +126,20 @@ export function SpotOrdersTable({ account, onlyMarket }: { account: AccountRespo
   }
   const amend = async (o: Order, price: string, size: string) => {
     setBusy(o.orderId)
+    if (trading) {
+      // MODIFY_ORDER in the node's terms: `amount` (what should be left) in token0, price token1 per token0.
+      const node = spotLimitParams(orderMarket(o), o.side, price, size)
+      await seq.run([
+        {
+          op: 'MODIFY_ORDER',
+          params: { pair: node.pair, order_id: o.orderId, amount: node.amount, price: node.price },
+          label: `Change ${o.side} ${o.base.symbol} to ${size} @ ${price} ${o.quote.symbol}`,
+          market: o.market ?? undefined,
+        },
+      ])
+      setBusy(null)
+      return
+    }
     await seq.run([
       cancelReq(o),
       {
@@ -142,7 +158,7 @@ export function SpotOrdersTable({ account, onlyMarket }: { account: AccountRespo
           <span className="text-xs text-ask">{seq.error}</span>
           <CancelAll count={orders.length} busy={busy === '*' ? seq.progress : null} onConfirm={async () => {
             setBusy('*')
-            await seq.run(orders.map(cancelReq))
+            await seq.run(orders.map(cancelReq), `Cancel ${orders.length} spot orders`)
             setBusy(null)
           }} />
         </div>

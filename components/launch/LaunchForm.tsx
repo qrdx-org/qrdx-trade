@@ -12,7 +12,7 @@ import { apiGet, useApi } from '@/lib/hooks/useApi'
 import {
   FEE_TIERS,
   LaunchCurve,
-  POOL_TYPES,
+  poolTypes,
   PoolType,
   deriveTokenAddress,
   launchCurve,
@@ -30,6 +30,7 @@ import type { PoolRow } from '@/components/pools/PoolsList'
 import { useNet, useWallet } from '@/lib/wallet/WalletContext'
 import { cn } from '@/lib/utils'
 import { TokenStandard } from '@/components/launch/TokenStandard'
+import { useFeatures } from '@/lib/hooks/useFeatures'
 
 /**
  * Three ways in:
@@ -83,6 +84,7 @@ export function LaunchForm({ existingToken, onLaunched }: { existingToken?: stri
   const w = useWallet()
   const router = useRouter()
   const { slot, apiBase, network } = useNet()
+  const features = useFeatures()
   const assets = useApi<{ assets: ApiAsset[] }>(`${apiBase}/assets`, 60_000)
   const prices = useApi<{ prices: Record<string, IndexPrice | null> }>(`${apiBase}/prices`, 60_000)
   const existing = useApi<TokenInfo>(existingToken ? `${apiBase}/assets/${existingToken}` : null)
@@ -192,7 +194,8 @@ export function LaunchForm({ existingToken, onLaunched }: { existingToken?: stri
       .then((hex) => setQrdxBalance(str(BigInt(hex))))
       .catch(() => setQrdxBalance(null))
   }, [w.wallet, w.account, w.rightNetwork, job?.stage])
-  const cost = POOL_TYPES.find((p) => p.type === poolType)!
+  const poolCosts = poolTypes(features.costs)
+  const cost = poolCosts.find((p) => p.type === poolType)!
 
   // Pools that already exist for the pair: CREATE_POOL refuses a second one per fee tier.
   const pairPools = useApi<{ pools: PoolRow[] }>(
@@ -260,6 +263,7 @@ export function LaunchForm({ existingToken, onLaunched }: { existingToken?: stri
     if (takenPool) return `A ${tokenSymbol}/${quote.symbol} pool with this fee already exists.`
     if (!startPrice) return 'Enter a starting market cap.'
     if (typeof preview === 'string') return preview
+    if (!cost.qrdx) return 'Reading what a pool costs on this network…'
     if (qrdxBalance !== null && dec(qrdxBalance) < dec(cost.qrdx) + dec('1')) return `You need ${cost.qrdx} QRDX plus gas to create the pool.`
     return null
   })()
@@ -577,7 +581,7 @@ export function LaunchForm({ existingToken, onLaunched }: { existingToken?: stri
             )}
             <Field label="Pool cost">
               <div className="space-y-1">
-                {POOL_TYPES.map((p) => (
+                {poolCosts.map((p) => (
                   <label key={p.type} className={cn('flex cursor-pointer gap-2 rounded border p-2 text-xs', poolType === p.type && 'border-primary bg-accent/50')}>
                     <input type="radio" checked={poolType === p.type} onChange={() => setPoolType(p.type)} />
                     <span>
@@ -595,7 +599,7 @@ export function LaunchForm({ existingToken, onLaunched }: { existingToken?: stri
       <div className="mt-4 space-y-1 rounded-md bg-muted/40 p-2 text-xs">
         {withMarket && <Line k="Start price" v={curvePreview ? `about ${fmtPrice(String(curvePreview.startPrice))} ${quote?.symbol}` : '—'} />}
         {withMarket && <Line k="Curve ends at" v={curvePreview ? `about ${fmtPrice(String(curvePreview.endPrice))} ${quote?.symbol}` : '—'} />}
-        <Line k="You pay" v={withMarket ? `${Number(cost.qrdx).toLocaleString()} QRDX + gas` : 'gas only (~0.0001 QRDX)'} />
+        <Line k="You pay" v={withMarket ? (cost.qrdx ? `${Number(cost.qrdx).toLocaleString()} QRDX + gas` : '—') : 'gas only (~0.0001 QRDX)'} />
         <Line k="Your QRDX" v={qrdxBalance === null ? '—' : fixed(qrdxBalance, 2)} />
         <Line k="Approvals" v={kind === 'launch' ? '2 now, 1 after the next block' : kind === 'market' ? '1 now, 1 after the next block' : '1'} />
       </div>

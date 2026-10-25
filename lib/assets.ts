@@ -82,7 +82,7 @@ export const VERIFIED_ASSETS: VerifiedAsset[] = [
     addresses: {
       // "USDC" on test.qrdx.org since the reset of 2026-10-12 (18 decimals; the node's token,
       // not bridged USDC), created at block 42,626 and paired with native QRDX.
-      testnet: '0x0886aa41d05c4be1ad6c91b728d104fee55a713a',
+      testnet: '0x801ae63d236d7a4ea69868a9d7be5d27a09e5580',
     },
   },
   {

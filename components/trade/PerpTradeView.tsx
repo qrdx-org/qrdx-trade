@@ -12,6 +12,7 @@ import { TradeGate } from '@/components/trade/TradeGate'
 import { OrderBookPanel } from '@/components/trade/OrderBookPanel'
 import { PerpOrderForm } from '@/components/trade/PerpOrderForm'
 import { PerpOrdersTable, PositionsTable } from '@/components/trade/PerpTables'
+import { TriggersTable, TwapsTable } from '@/components/trade/TriggerTables'
 import { PriceChart } from '@/components/trade/PriceChart'
 import { TerminalSkeleton, useAccount } from '@/components/trade/SpotTradeView'
 import { TokenBadge } from '@/components/trade/TokenBadge'
@@ -21,7 +22,10 @@ import { useApi } from '@/lib/hooks/useApi'
 import { useNodeStream, useStreamLive } from '@/lib/hooks/useNodeStream'
 import type { OrderBook, PerpMarket, TradesResponse } from '@/lib/types'
 import { cn } from '@/lib/utils'
-import { useNet } from '@/lib/wallet/WalletContext'
+import { useNet, useWallet } from '@/lib/wallet/WalletContext'
+import { useFeatures } from '@/lib/hooks/useFeatures'
+import { protectiveLegError, triggerGas } from '@/lib/orders'
+import { gridPrice } from '@/lib/perps'
 
 function useNow(ms = 1000) {
   const [now, setNow] = useState(() => Date.now() / 1000)
@@ -46,7 +50,10 @@ export function PerpTradeView({ base, quote }: { base: string; quote: string }) 
   // Mark and oracle prices move with most blocks; the header need not follow faster than this.
   useNodeStream(network.nodeUrl, [id && `perp_markets:${id}`], market.refresh, 2_000)
   const account = useAccount()
+  const w = useWallet()
+  const { trading } = useFeatures()
   const [picked, setPicked] = useState<string | null>(null)
+  const [pickedTrigger, setPickedTrigger] = useState<{ price: string; at: number } | null>(null)
   const [mobileTab, setMobileTab] = useState<'chart' | 'book' | 'trades'>('chart')
   const [sideTab, setSideTab] = useState<'book' | 'trades'>('book')
   const now = useNow()
@@ -146,7 +153,70 @@ export function PerpTradeView({ base, quote }: { base: string; quote: string }) 
 
       <div className="grid min-h-0 flex-1 grid-cols-1 gap-1 lg:grid-cols-[minmax(0,1fr)_300px_320px] lg:grid-rows-[minmax(0,1fr)_minmax(220px,32%)] xl:grid-cols-[minmax(0,1fr)_320px_340px]">
         <Panel className={cn('min-h-[420px] lg:min-h-0', mobileTab !== 'chart' && 'hidden lg:flex')}>
-          <PriceChart basePath={api} watermark={`${m.base}-PERP`} />
+          <PriceChart
+            basePath={api}
+            watermark={`${m.base}-PERP`}
+            drawing={{
+              id: `${slot}:${m.path}`,
+              usePrice: setPicked,
+              ...(trading
+                ? (() => {
+                    const p = account.data?.perp?.positions?.[m.id]
+                    if (!p || Number(p.size) === 0 || !w.trader) return { useTrigger: (price: string) => setPickedTrigger({ price, at: Date.now() }) }
+                    const long = Number(p.size) > 0
+                    // The level becomes the position's TP/SL: a new one replaces the waiting one of its kind.
+                    return {
+                      placeTrigger: async (kind: 'tp' | 'sl', level: string) => {
+                        // A drawn level, onto the market's price grid.
+                        const price = gridPrice(level, m.szDecimals)
+                        const e = protectiveLegError(long, kind, price, p.mark_price)
+                        if (e) return e
+                        const waiting = (account.data?.triggers ?? []).find((t) => t.kindOf === 'perp' && t.market === m.id && t.size === 'position' && t.kind === kind)
+                        const place = {
+                          op: 'PERP_TRIGGER',
+                          params: { market_id: m.id, side: long ? 'sell' : 'buy', kind, trigger_price: price, position: true, reduce_only: true },
+                          gasLimit: triggerGas() + 60_000,
+                          label: `${kind === 'tp' ? 'Take profit' : 'Stop loss'} ${m.id} @ ${price}`,
+                          market: m.id,
+                        }
+                        if (waiting) {
+                          await w.sendExchangeBatch({
+                            ops: [{ op: 'PERP_CANCEL', params: { market_id: m.id, order_id: waiting.orderId } }, place],
+                            label: `Move ${m.id} ${kind === 'tp' ? 'take profit' : 'stop loss'} to ${price}`,
+                            market: m.id,
+                          })
+                        } else await w.sendExchange(place)
+                        return `Submitted: the position's ${kind === 'tp' ? 'take profit' : 'stop loss'} at ${price}. It closes the whole position when the mark gets there.`
+                      },
+                    }
+                  })()
+                : {}),
+              alert: { path: m.path, label: `${m.base}-${m.quote}`, slot },
+              unit: m.quote,
+              levels: [
+                ...(account.data?.perp?.orders ?? [])
+                  .filter((o) => o.market_id === m.id)
+                  .map((o) => ({
+                    key: `o:${o.order_id}`,
+                    price: Number(o.price),
+                    label: `${o.side === 'buy' ? 'Buy' : 'Sell'} ${o.remaining} @ ${fmtPrice(o.price, ref)}`,
+                    tone: (o.side === 'buy' ? 'bid' : 'ask') as 'bid' | 'ask',
+                  })),
+                ...(account.data?.triggers ?? [])
+                  .filter((t) => t.kindOf === 'perp' && t.market === m.id)
+                  .map((t) => ({
+                    key: `t:${t.orderId}`,
+                    price: Number(t.triggerPrice),
+                    label: `${t.kind === 'tp' ? 'TP' : 'SL'} ${t.size === 'position' ? 'position' : t.size} @ ${fmtPrice(t.triggerPrice, ref)}`,
+                    tone: (t.kind === 'tp' ? 'bid' : 'ask') as 'bid' | 'ask',
+                  })),
+              ],
+              position: (() => {
+                const p = account.data?.perp?.positions?.[m.id]
+                return p && Number(p.size) !== 0 ? { size: Number(p.size), entry: Number(p.entry_price), liquidation: p.liquidation_price ? Number(p.liquidation_price) : null } : null
+              })(),
+            }}
+          />
         </Panel>
         <Panel className={cn('min-h-[460px] lg:min-h-0', mobileTab === 'chart' && 'hidden lg:flex')}>
           <PanelTabs
@@ -166,7 +236,7 @@ export function PerpTradeView({ base, quote }: { base: string; quote: string }) 
         <Panel className="lg:row-span-2">
           <div className="flex min-h-0 flex-1 flex-col lg:overflow-y-auto">
             <TradeGate>
-              <PerpOrderForm market={m} book={book.data} account={account.data} pickedPrice={picked} />
+              <PerpOrderForm market={m} book={book.data} account={account.data} pickedPrice={picked} pickedTrigger={pickedTrigger} />
             </TradeGate>
           </div>
         </Panel>
@@ -179,6 +249,22 @@ export function PerpTradeView({ base, quote }: { base: string; quote: string }) 
                 label: `Open orders${account.data?.perp?.orders.length ? ` (${account.data.perp.orders.length})` : ''}`,
                 render: () => <PerpOrdersTable account={account.data} />,
               },
+              // Only on a node with trigger orders and TWAPs (null otherwise).
+              ...(account.data?.triggers
+                ? [
+                    {
+                      id: 'triggers',
+                      label: `TP / SL${(() => {
+                        const n = account.data.triggers.filter((t) => t.kindOf === 'perp').length
+                        return n ? ` (${n})` : ''
+                      })()}`,
+                      render: () => <TriggersTable account={account.data} kindOf="perp" />,
+                    },
+                  ]
+                : []),
+              ...(account.data?.twaps?.some((t) => t.perp)
+                ? [{ id: 'twaps', label: `TWAP (${account.data.twaps.filter((t) => t.perp).length})`, render: () => <TwapsTable account={account.data} perp /> }]
+                : []),
             ]}
           />
         </Panel>

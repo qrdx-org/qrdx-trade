@@ -5,7 +5,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ConnectButton } from '@/components/wallet/ConnectButton'
 import { S, dec, div, isAmount, lessSlippage, mul, round, str } from '@/lib/decimal'
-import { spotLimitParams } from '@/lib/orders'
+import { perpTriggerKind, spotLimitParams, spotTriggerParams } from '@/lib/orders'
+import { useFeatures } from '@/lib/hooks/useFeatures'
 import { fixed, percent, price as fmtPrice, size as fmtSize } from '@/lib/format'
 import { useApi, useDebounced } from '@/lib/hooks/useApi'
 import type { AccountResponse, OrderBook, SpotMarket, SwapQuote } from '@/lib/types'
@@ -13,7 +14,14 @@ import { useNet, useWallet } from '@/lib/wallet/WalletContext'
 import { cn } from '@/lib/utils'
 
 type Side = 'buy' | 'sell'
-type Kind = 'limit' | 'market'
+type Kind = 'limit' | 'market' | 'stop'
+type Tif = 'gtc' | 'alo' | 'ioc' | 'fok'
+const TIFS: { id: Tif; label: string; title: string }[] = [
+  { id: 'gtc', label: 'GTC', title: 'Good till cancelled: what does not fill rests on the book' },
+  { id: 'alo', label: 'Post only', title: 'Refused if it would take: it only ever adds liquidity' },
+  { id: 'ioc', label: 'IOC', title: 'Immediate or cancel: fills what it can now, cancels the rest' },
+  { id: 'fok', label: 'FOK', title: 'Fill or kill: fills whole, or nothing happens' },
+]
 
 /** Exchange gas a single spot operation burns, in QRDX (docs/PERPS_API.md §1). */
 const GAS_NOTE = 'A gas fee of about 0.0001 QRDX is burned whether or not it fills.'
@@ -23,16 +31,36 @@ export function SpotOrderForm({
   book,
   account,
   pickedPrice,
+  pickedTrigger,
 }: {
   market: SpotMarket
   book: OrderBook | null
   account: AccountResponse | null
   pickedPrice: string | null
+  /** A chart level to use as a Stop order's trigger. */
+  pickedTrigger?: { price: string; at: number } | null
 }) {
   const w = useWallet()
   const { apiBase } = useNet()
+  const { trading } = useFeatures()
   const [side, setSide] = useState<Side>('buy')
-  const [kind, setKind] = useState<Kind>('limit')
+  const [kindState, setKind] = useState<Kind>('limit')
+  const kind: Kind = !trading && kindState === 'stop' ? 'limit' : kindState
+  const [tif, setTif] = useState<Tif>('gtc')
+  const [hidden, setHidden] = useState(false)
+  const [display, setDisplay] = useState('')
+  const [withTpSl, setWithTpSl] = useState(false)
+  const [tp, setTp] = useState('')
+  const [sl, setSl] = useState('')
+  const [trigger, setTrigger] = useState('')
+  useEffect(() => {
+    if (pickedTrigger) {
+      setTrigger(pickedTrigger.price)
+      setKind('stop')
+    }
+  }, [pickedTrigger])
+  // A stop's limit (empty: a market order when it fires); apart from the limit price, which the book seeds.
+  const [stopLimit, setStopLimit] = useState('')
   const [price, setPrice] = useState('')
   const [size, setSize] = useState('')
   const [amountIn, setAmountIn] = useState('')
@@ -77,13 +105,37 @@ export function SpotOrderForm({
   const q = useApi<SwapQuote>(quotePath, 10_000)
 
   const limitTotal = useMemo(() => {
-    if (!isAmount(price) || !isAmount(size)) return null
-    return str(mul(dec(price), dec(size)))
-  }, [price, size])
+    const at = kind === 'stop' ? stopLimit || trigger : price
+    if (!isAmount(at) || !isAmount(size)) return null
+    return str(mul(dec(at), dec(size)))
+  }, [price, size, kind, trigger, stopLimit])
+  // Spot triggers judge the pair's last order-book trade.
+  const last = market.last ?? book?.mid ?? null
+  const stopKind = kind === 'stop' && last && isAmount(trigger) && dec(trigger) > 0n ? (perpTriggerKind(side, trigger, last) === 'sl' ? 'stop_loss' : 'take_profit') : null
+  const resting = kind === 'limit' && (tif === 'gtc' || tif === 'alo')
+  // An attached TP/SL protects what a node-side buy bought: a buy of the base on an uninverted pair.
+  const canAttach = trading && kind === 'limit' && side === 'buy' && !market.inverted
+  const attach = canAttach && withTpSl
 
   const problem = (() => {
     if (market.status !== 'live') return 'This pair has no on-chain market.'
+    if (kind === 'stop') {
+      if (!isAmount(trigger) || dec(trigger) <= 0n) return 'Enter the trigger price.'
+      if (stopLimit && (!isAmount(stopLimit) || dec(stopLimit) <= 0n)) return 'Enter a limit price, or leave it empty for market.'
+      if (last && dec(trigger) === dec(last)) return 'The price is at the trigger already: place an order instead.'
+      if (!isAmount(size, base.decimals) || dec(size) <= 0n) return `Enter a size (up to ${base.decimals} decimals).`
+      // Escrowed now: the base for a sell; for a buy, quote at its highest price (10 % over the trigger without a limit).
+      const need = side === 'buy' ? str(mul(dec(limitTotal!), stopLimit ? dec('1') : dec('1.1'))) : size
+      if (w.trader && account && dec(need) > dec(avail)) return `Not enough ${availSym}.`
+      return null
+    }
     if (kind === 'limit') {
+      if (resting && display && (!isAmount(display) || dec(display) <= 0n || dec(display) >= dec(size || '0'))) return 'An iceberg shows less than its size.'
+      if (attach) {
+        if (!tp && !sl) return 'Enter a take profit, a stop loss, or both.'
+        if (tp && (!isAmount(tp) || dec(tp) <= dec(price || '0'))) return 'The take profit goes above the buy price.'
+        if (sl && (!isAmount(sl) || dec(sl) >= dec(price || '0'))) return 'The stop loss goes below the buy price.'
+      }
       if (!isAmount(price) || dec(price) <= 0n) return 'Enter a price.'
       if (!isAmount(size, base.decimals) || dec(size) <= 0n) return `Enter a size (up to ${base.decimals} decimals).`
       const need = side === 'buy' ? limitTotal! : size
@@ -105,7 +157,10 @@ export function SpotOrderForm({
     const part = (a * BigInt(pct)) / 100n
     if (kind === 'market') return setAmountIn(round(str(part), side === 'buy' ? quote.decimals : base.decimals, 'down'))
     if (side === 'sell') return setSize(round(str(part), base.decimals, 'down'))
-    if (isAmount(price) && dec(price) > 0n) setSize(round(str(div(part, dec(price))), base.decimals, 'down'))
+    const at = kind === 'stop' ? stopLimit || trigger : price
+    // A buy stop without a limit escrows up to 10 % over its trigger.
+    const per = kind === 'stop' && !stopLimit ? mul(dec(at || '0'), dec('1.1')) : dec(at || '0')
+    if (isAmount(at) && per > 0n) setSize(round(str(div(part, per)), base.decimals, 'down'))
   }
 
   const submit = async () => {
@@ -113,11 +168,29 @@ export function SpotOrderForm({
     setBusy(true)
     setMsg(null)
     try {
-      if (kind === 'limit') {
+      if (kind === 'stop') {
         await w.sendExchange({
           op: 'PLACE_ORDER',
-          params: spotLimitParams(market, side, price, size),
-          label: `${side === 'buy' ? 'Buy' : 'Sell'} ${size} ${base.symbol} @ ${price} ${quote.symbol}`,
+          params: spotTriggerParams(market, side, stopKind!, trigger, size, stopLimit || undefined),
+          label: `${stopKind === 'stop_loss' ? 'Stop' : 'Take profit'}: ${side} ${size} ${base.symbol} when ${base.symbol} trades at ${trigger} ${quote.symbol}${stopLimit ? `, limit ${stopLimit}` : ''}`,
+          market: market.id,
+        })
+      } else if (kind === 'limit') {
+        const node = spotLimitParams(market, side, price, size)
+        const legs = attach ? (['tp', 'sl'] as const).filter((k) => (k === 'tp' ? tp : sl)) : []
+        await w.sendExchange({
+          op: 'PLACE_ORDER',
+          params: {
+            ...node,
+            ...(trading && tif !== 'gtc' ? { tif } : {}),
+            ...(resting && hidden ? { hidden: true } : {}),
+            // display_size is in token0, which is this market's quote when it is inverted.
+            ...(resting && display ? { display_size: market.inverted ? str(mul(dec(display), dec(price))) : display } : {}),
+            ...Object.fromEntries(legs.map((k) => [k, { trigger_price: k === 'tp' ? tp : sl }])),
+          },
+          label:
+            `${side === 'buy' ? 'Buy' : 'Sell'} ${size} ${base.symbol} @ ${price} ${quote.symbol}` +
+            (legs.length ? ` · ${legs.map((k) => `${k.toUpperCase()} ${k === 'tp' ? tp : sl}`).join(' / ')}` : ''),
           market: market.id,
         })
       } else {
@@ -186,13 +259,13 @@ export function SpotOrderForm({
       </div>
 
       <div className="flex items-center gap-4 border-b text-[13px]">
-        {(['limit', 'market'] as const).map((k) => (
+        {(trading ? (['limit', 'market', 'stop'] as const) : (['limit', 'market'] as const)).map((k) => (
           <button
             key={k}
             onClick={() => setKind(k)}
             className={cn('relative pb-2 font-medium transition-colors', kind === k ? 'text-foreground' : 'text-muted-foreground hover:text-foreground')}
           >
-            {k === 'limit' ? 'Limit' : 'Market'}
+            {k === 'limit' ? 'Limit' : k === 'market' ? 'Market' : 'Stop'}
             {kind === k && <span className="absolute inset-x-0 -bottom-px h-0.5 rounded-full bg-foreground" />}
           </button>
         ))}
@@ -203,7 +276,24 @@ export function SpotOrderForm({
         <span className="num font-medium">{w.trader ? `${fmtSize(avail)} ${availSym}` : '—'}</span>
       </div>
 
-      {kind === 'limit' ? (
+      {kind === 'stop' ? (
+        <>
+          <Field label="Trigger (last trade)" unit={quote.symbol}>
+            <Input value={trigger} onChange={(e) => setTrigger(e.target.value.trim())} inputMode="decimal" placeholder={last ? fmtPrice(last, ref) : ''} className={INPUT} />
+          </Field>
+          <Field label="Limit price (empty: market)" unit={quote.symbol}>
+            <Input value={stopLimit} onChange={(e) => setStopLimit(e.target.value.trim())} inputMode="decimal" placeholder="Market" className={INPUT} />
+          </Field>
+          <Field label="Size" unit={base.symbol}>
+            <Input value={size} onChange={(e) => setSize(e.target.value.trim())} inputMode="decimal" placeholder="0.00" className={INPUT} />
+          </Field>
+          <p className="text-[11px] text-muted-foreground">
+            {stopKind
+              ? `${stopKind === 'stop_loss' ? 'Stop' : 'Take profit'}: ${side === 'buy' ? 'buys' : 'sells'} when ${base.symbol} trades ${dec(trigger) > dec(last ?? '0') ? 'up' : 'down'} to ${fmtPrice(trigger, ref)}, ${stopLimit ? `as a limit at ${fmtPrice(stopLimit, ref)}` : 'as a market order at most 10 % through the trigger'}. Its funds are locked until then.`
+              : 'Fires when the pair trades at the trigger. Its funds are locked until it fires or you cancel it.'}
+          </p>
+        </>
+      ) : kind === 'limit' ? (
         <>
           <Field
             label="Price"
@@ -233,6 +323,44 @@ export function SpotOrderForm({
           <Field label="Size" unit={base.symbol}>
             <Input value={size} onChange={(e) => setSize(e.target.value.trim())} inputMode="decimal" placeholder="0.00" className={INPUT} />
           </Field>
+          {trading && (
+            <div className="space-y-2 text-[11px]">
+              <div className="flex flex-wrap items-center gap-1">
+                {TIFS.map((t) => (
+                  <button key={t.id} type="button" title={t.title} onClick={() => setTif(t.id)} className={cn('rounded border px-2 py-0.5', tif === t.id ? 'border-foreground/60 text-foreground' : 'text-muted-foreground hover:text-foreground')}>
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs">
+                {resting && (
+                  <label className="flex items-center gap-2" title="Matches like any order but shows nothing in the book's depth (its terms are still public on chain)">
+                    <input type="checkbox" checked={hidden} onChange={(e) => setHidden(e.target.checked)} />
+                    Hidden
+                  </label>
+                )}
+                {resting && (
+                  <span className="flex items-center gap-1 text-muted-foreground" title="Iceberg: show this much at a time; the rest waits hidden behind it">
+                    Show
+                    <input value={display} onChange={(e) => setDisplay(e.target.value.trim())} inputMode="decimal" placeholder="all" className="num h-6 w-16 rounded border bg-background px-1.5 text-right text-foreground" />
+                    {base.symbol}
+                  </span>
+                )}
+                {canAttach && (
+                  <label className="flex items-center gap-2" title="One sell trigger that holds exactly what this buy bought: the first of TP and SL to fire cancels the other">
+                    <input type="checkbox" checked={withTpSl} onChange={(e) => setWithTpSl(e.target.checked)} />
+                    TP / SL
+                  </label>
+                )}
+              </div>
+              {attach && (
+                <div className="grid grid-cols-2 gap-2">
+                  <Input value={tp} onChange={(e) => setTp(e.target.value.trim())} inputMode="decimal" placeholder="Take profit" className="num h-9 text-right text-xs" />
+                  <Input value={sl} onChange={(e) => setSl(e.target.value.trim())} inputMode="decimal" placeholder="Stop loss" className="num h-9 text-right text-xs" />
+                </div>
+              )}
+            </div>
+          )}
         </>
       ) : (
         <Field label={side === 'buy' ? 'Spend' : 'Sell'} unit={side === 'buy' ? quote.symbol : base.symbol}>
@@ -254,10 +382,10 @@ export function SpotOrderForm({
       </div>
 
       <div className="space-y-1.5 rounded-lg border bg-muted/30 p-2.5 text-xs">
-        {kind === 'limit' ? (
+        {kind !== 'market' ? (
           <>
-            <Line k="Total" v={limitTotal ? `${fixed(limitTotal, Math.min(8, quote.decimals))} ${quote.symbol}` : '—'} />
-            <Line k="Rests on" v="QRDX order book" />
+            <Line k="Total" v={limitTotal ? `${kind === 'stop' && !stopLimit ? '≈ ' : ''}${fixed(limitTotal, Math.min(8, quote.decimals))} ${quote.symbol}` : '—'} />
+            <Line k={kind === 'stop' ? 'Waits for' : 'Rests on'} v={kind === 'stop' ? 'its trigger, funds locked' : hidden ? 'QRDX order book, hidden' : 'QRDX order book'} />
           </>
         ) : (
           <>
@@ -298,7 +426,7 @@ export function SpotOrderForm({
             accent === 'bid' ? 'bg-bid hover:bg-bid/90 shadow-lg shadow-bid/20' : 'bg-ask hover:bg-ask/90 shadow-lg shadow-ask/20'
           )}
         >
-          {busy ? 'Confirm in wallet…' : problem && problem !== 'Getting a quote…' ? problem : `${side === 'buy' ? 'Buy' : 'Sell'} ${base.symbol}`}
+          {busy ? 'Confirm in wallet…' : problem && problem !== 'Getting a quote…' ? problem : kind === 'stop' ? `Place ${stopKind === 'stop_loss' ? 'stop' : 'take profit'}: ${side} ${base.symbol}` : `${side === 'buy' ? 'Buy' : 'Sell'} ${base.symbol}`}
         </Button>
       )}
       {msg && (
@@ -324,8 +452,12 @@ export function SpotOrderForm({
           </div>
         )}
         <p className="text-[10px] leading-snug text-muted-foreground">
-          {kind === 'limit' ? 'Limit orders rest on the QRDX order book and lock their funds until filled or cancelled. ' : 'Market orders swap through the better of the order book and the pools. '}
-          {GAS_NOTE}
+          {kind === 'limit'
+            ? 'Limit orders rest on the QRDX order book and lock their funds until filled or cancelled. '
+            : kind === 'stop'
+              ? 'Stop orders lock their funds until they fire or are cancelled. '
+              : 'Market orders swap through the better of the order book and the pools. '}
+          {account?.freeActions?.freeNow ? `No gas: trading goes in the free lane (${account.freeActions.remaining.toLocaleString('en-US')} free actions left).` : GAS_NOTE}
         </p>
       </div>
     </div>

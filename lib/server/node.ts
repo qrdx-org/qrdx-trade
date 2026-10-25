@@ -139,6 +139,10 @@ export interface NodePerpMarket {
   funding_rate: string | null
   funding_time: string | null
   next_funding_time: string | null
+  /** Nodes from 2026-10: the order grid, the liquidity vault, a deployer market's deployer. */
+  sz_decimals?: number | null
+  liquidity_vault?: string | null
+  deployer?: string | null
 }
 
 export interface NodePerpBook {
@@ -254,6 +258,8 @@ const RPC_TIMEOUT_MS = 6_000
 const NOT_FOUND = -32001
 
 class NotFound extends Error {}
+/** The node has no such method (JSON-RPC -32601): it predates it. */
+class MethodMissing extends ApiError {}
 
 let rpcId = 0
 
@@ -278,6 +284,7 @@ async function rpc<T>(cfg: ServerConfig, method: string, params: unknown[] = [])
   if (!body) throw new ApiError('node_unavailable', `QRDX node sent an invalid response for ${method}`)
   if (body.error) {
     if (body.error.code === NOT_FOUND) throw new NotFound(body.error.message)
+    if (body.error.code === -32601) throw new MethodMissing('node_unavailable', `${method}: ${body.error.message}`)
     if (body.error.code === -32602) throw new ApiError('bad_request', body.error.message)
     throw new ApiError('node_unavailable', `${method}: ${body.error.message}`)
   }
@@ -323,6 +330,18 @@ async function maybe<T>(cfg: ServerConfig, method: string, params: unknown[]): P
     throw err
   }
 }
+
+/** A read a node may predate: null when it answers "Method not found" (or not found). */
+async function optional<T>(cfg: ServerConfig, method: string, params: unknown[]): Promise<T | null> {
+  try {
+    return await rpc<T>(cfg, method, params)
+  } catch (err) {
+    if (err instanceof NotFound || isMissing(err)) return null
+    throw err
+  }
+}
+
+const isMissing = (err: unknown) => err instanceof MethodMissing
 
 async function rest<T>(cfg: ServerConfig, path: string): Promise<T> {
   const { nodeUrl } = cfg
@@ -490,6 +509,170 @@ export interface NodeMarketCandle {
   trades: number
 }
 
+
+// ─── Trading features (qrdx-node docs/TRADING_FEATURES.md) ─────────────────────
+// Nodes before the 2026-10 release answer these with "Method not found": see `features`.
+
+/** perp_getTriggers rows: perps triggers judge the mark price, spot ones the pair's last trade. */
+export interface NodeTrigger {
+  kind_of: 'perp' | 'spot'
+  order_id: string
+  /** A perp market id, or a spot pair (token0:token1). */
+  market: string
+  side: 'buy' | 'sell'
+  kind: string
+  trigger_price: string
+  /** "position" for a position's TP/SL, which closes whatever the position is when it fires. */
+  size: string
+  limit_price: string | null
+  reduce_only?: boolean
+  escrowed?: string
+  tif: string
+  max_makers: number
+  seq: number
+}
+
+/** perp_getTwaps rows. */
+export interface NodeTwap {
+  twap_id: string
+  perp: boolean
+  market: string
+  side: 'buy' | 'sell' | null
+  token_in: string | null
+  token_out: string | null
+  total: string
+  done: string
+  received: string
+  slices: number
+  slices_done: number
+  interval: string
+  next_time: string
+  reduce_only: boolean
+  max_slippage: string
+}
+
+/** perp_getFeeSchedule: the tiers, and with an address its 14-day volume, rates and referral. */
+export interface NodeFeeSchedule {
+  volume_days: number
+  tiers: { volume: string; taker: string; maker: string }[]
+  referral: { referee_discount: string; referrer_share: string; volume_cap: string; join_before_volume: string }
+  volume?: string
+  taker?: string
+  maker?: string
+  referrer?: string | null
+  referred_volume?: string | null
+  referral_code?: string | null
+}
+
+/** exchange_getFreeActions (docs/TOKENOMICS.md). */
+export interface NodeFreeActions {
+  address: string
+  budget: number
+  used: number
+  remaining: number
+  lane_open: boolean
+  free_now: boolean
+  why_not: string | null
+}
+
+/** history_* pages: newest first; pass next_cursor back as cursor. */
+export interface NodeHistoryPage<T> {
+  items: T[]
+  next_cursor: string | null
+}
+
+export interface NodeHistoryTrade {
+  block_height: number
+  block_time: number
+  market: string
+  venue: string
+  kind: string
+  price: string
+  amount: string
+  side: 'buy' | 'sell'
+  buyer: string
+  seller: string
+  maker: string
+  taker: string
+  maker_order_id: string | null
+  taker_order_id: string | null
+  tx_hash: string | null
+  fees: Record<string, string> | null
+  realized: Record<string, string> | null
+  /** With an address: its role (maker / taker), side, fee and realized PnL. */
+  role?: string
+  account_side?: string
+  fee?: string | null
+  account_realized?: string | null
+  cursor: string
+}
+
+export interface NodeHistoryOrder {
+  block_height: number
+  block_time: number
+  account: string
+  market: string
+  order_id: string
+  event: string
+  tx_hash: string | null
+  detail: Record<string, unknown> | null
+  cursor: string
+}
+
+export interface NodeHistoryFunding {
+  block_height: number
+  block_time: number
+  market: string
+  rate: string
+  premium: string
+  oracle_price: string
+  open_interest: string
+  funding_time: string
+  cursor: string
+}
+
+export interface NodeLeaderRow {
+  account: string
+  pnl: number
+  volume: number
+  trades: number
+}
+
+/** perp_getUserVaults / perp_getUserVault. */
+export interface NodeUserVault {
+  vault: string
+  leader: string
+  name: string
+  profit_share: string
+  created: string
+  managed: string | null
+  nav: string
+  total_shares: string
+  share_value: string | null
+  leader_shares: string
+  holders: number
+  withdrawable: string
+  lockup_seconds: string
+  positions: Record<string, { size: string; entry_price: string }>
+  holder?: { shares: string; cost: string; value: string; unlock_time?: string } | null
+}
+
+export interface NodeAgent {
+  agent: string
+  name: string
+  valid_until: string
+  max_notional_per_day?: string
+  placed_today?: string
+}
+
+/** What a node runs beyond the original exchange. */
+export interface NodeFeatures {
+  /** The 2026-10 release: triggers, modify, batch, TWAP, agents, vaults, history, QNS, the free lane. */
+  trading: boolean
+  /** The trading history database (QRDX_TRADING_HISTORY), node-local. */
+  history: boolean
+}
+
 // ─── Reads ─────────────────────────────────────────────────────────────────────
 
 /** A client for one network's node. */
@@ -559,6 +742,35 @@ export function createNodeClient(cfg: ServerConfig) {
     stakingParams: () => rpc<NodeStakingParams>(cfg, 'staking_getParams'),
     delegations: (address: string) => rpc<NodeDelegations>(cfg, 'staking_getDelegations', [address]),
     chainSpec: () => rpc<NodeChainSpec>(cfg, 'qrdx_chainSpec'),
+
+    // Trading features (docs/TRADING_FEATURES.md); null on a node that predates them.
+    features: async (): Promise<NodeFeatures> => {
+      const [fees, hist] = await Promise.all([
+        optional<NodeFeeSchedule>(cfg, 'perp_getFeeSchedule', []).catch(() => null),
+        optional<NodeLeaderRow[]>(cfg, 'history_getLeaderboard', ['day', 'volume', 1]).catch(() => null),
+      ])
+      return { trading: fees !== null, history: hist !== null }
+    },
+    triggers: (address: string) => optional<NodeTrigger[]>(cfg, 'perp_getTriggers', [address]),
+    twaps: (address: string) => optional<NodeTwap[]>(cfg, 'perp_getTwaps', [address]),
+    feeSchedule: (address?: string) => optional<NodeFeeSchedule>(cfg, 'perp_getFeeSchedule', address ? [address] : []),
+    freeActions: (address: string) => optional<NodeFreeActions>(cfg, 'exchange_getFreeActions', [address]),
+    agents: (address: string) => optional<NodeAgent[]>(cfg, 'exchange_getAgents', [address]),
+    subaccounts: (address: string) =>
+      optional<{ subaccount: string; index: number; name: string }[]>(cfg, 'exchange_getSubaccounts', [address]),
+    userVaults: (leader?: string) => optional<NodeUserVault[]>(cfg, 'perp_getUserVaults', leader ? [leader] : []),
+    userVault: (vault: string, holder?: string) => optional<NodeUserVault>(cfg, 'perp_getUserVault', holder ? [vault, holder] : [vault]),
+    historyTrades: (q: { address?: string; market?: string; limit?: number; cursor?: string | null }) =>
+      optional<NodeHistoryPage<NodeHistoryTrade>>(cfg, 'history_getTrades', [q.address ?? null, q.market ?? null, q.limit ?? 100, q.cursor ?? null]),
+    historyOrders: (q: { address?: string; market?: string; orderId?: string; limit?: number; cursor?: string | null }) =>
+      optional<NodeHistoryPage<NodeHistoryOrder>>(cfg, 'history_getOrders', [q.address ?? null, q.market ?? null, q.orderId ?? null, q.limit ?? 100, q.cursor ?? null]),
+    historyFunding: (market: string, limit = 100, cursor: string | null = null) =>
+      optional<NodeHistoryPage<NodeHistoryFunding>>(cfg, 'history_getFunding', [market, limit, cursor]),
+    leaderboard: (window: string, metric: string, limit: number) =>
+      optional<NodeLeaderRow[]>(cfg, 'history_getLeaderboard', [window, metric, limit]),
+    qnsResolve: (name: string) => optional<string | null>(cfg, 'qns_resolve', [name]),
+    qnsReverse: (address: string) => optional<string | null>(cfg, 'qns_reverse', [address]),
+    qnsPrice: (years: number) => optional<string>(cfg, 'qns_price', [years]),
 
     // Native NFTs (docs/NATIVE_TOKENS.md §8) and the EVM reads the NFT market needs.
     nftCollections: () => rpc<NodeNftCollection[]>(cfg, 'exchange_getNftCollections'),

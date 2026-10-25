@@ -10,9 +10,9 @@ import { TokenPicker } from '@/components/swap/SwapCard'
 import { TokenBadge } from '@/components/trade/TokenBadge'
 import { ConnectButton } from '@/components/wallet/ConnectButton'
 import { dec, isAmount } from '@/lib/decimal'
-import { fixed } from '@/lib/format'
 import { apiGet, useApi } from '@/lib/hooks/useApi'
-import { FEE_TIERS, POOL_TYPES, PoolType, canonicalInitialPrice } from '@/lib/launch'
+import { FEE_TIERS, PoolType, canonicalInitialPrice, poolTypes } from '@/lib/launch'
+import { useFeatures } from '@/lib/hooks/useFeatures'
 import type { ApiAsset } from '@/lib/types'
 import type { PoolRow } from '@/components/pools/PoolsList'
 import { useNet, useWallet } from '@/lib/wallet/WalletContext'
@@ -27,6 +27,7 @@ type AssetList = { assets: ApiAsset[]; tokens?: ApiAsset[] }
 export function CreatePool() {
   const w = useWallet()
   const { apiBase } = useNet()
+  const features = useFeatures()
   const params = useSearchParams()
   const list = useApi<AssetList>(`${apiBase}/assets?all=1`, 60_000)
   const all = useMemo(() => [...(list.data?.assets ?? []), ...(list.data?.tokens ?? [])].filter((a) => a.listed), [list.data])
@@ -47,7 +48,8 @@ export function CreatePool() {
   const B = find(b)
   const existing = useApi<{ pools: PoolRow[] }>(A && B && A.segment !== B.segment ? `${apiBase}/pools?base=${A.segment}&quote=${B.segment}` : null)
   const taken = (existing.data?.pools ?? []).some((p) => p.feeTier === feeTier)
-  const cost = POOL_TYPES.find((p) => p.type === poolType)!
+  const poolCosts = poolTypes(features.costs)
+  const cost = poolCosts.find((p) => p.type === poolType)!
 
   // Wait for the pool's receipt to learn its id.
   useEffect(() => {
@@ -67,6 +69,7 @@ export function CreatePool() {
     if (A.segment === B.segment) return 'Choose two different tokens.'
     if (taken) return 'A pool with this fee tier already exists for the pair.'
     if (!isAmount(price) || dec(price) <= 0n) return `Enter the starting price of 1 ${A.symbol} in ${B.symbol}.`
+    if (!cost.qrdx) return 'Reading what a pool costs on this network…'
     return null
   })()
 
@@ -154,7 +157,7 @@ export function CreatePool() {
 
         <div className="mt-4 text-xs text-muted-foreground">Pool cost</div>
         <div className="mt-1 space-y-1">
-          {POOL_TYPES.map((p) => (
+          {poolCosts.map((p) => (
             <label key={p.type} className={cn('flex cursor-pointer gap-2 rounded border p-2 text-xs', poolType === p.type && 'border-primary bg-accent/50')}>
               <input type="radio" checked={poolType === p.type} onChange={() => setPoolType(p.type)} />
               <span>
@@ -174,7 +177,7 @@ export function CreatePool() {
             </Button>
           ) : (
             <Button className="w-full" disabled={!!problem || busy || !!tx || !w.rightNetwork} onClick={submit}>
-              {busy ? 'Confirm in wallet…' : tx ? 'Waiting for the block…' : problem ?? `Create pool · ${fixed(cost.qrdx, 0)} QRDX`}
+              {busy ? 'Confirm in wallet…' : tx ? 'Waiting for the block…' : problem ?? `Create pool · ${Number(cost.qrdx).toLocaleString('en-US')} QRDX`}
             </Button>
           )}
         </div>

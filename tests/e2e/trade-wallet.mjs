@@ -2,7 +2,8 @@
  * End to end: the QRDX Wallet extension trading on this site against the local
  * node harness (qrdx-node's real exchange engine). Checks connect, network
  * switch, decoded approvals, two orders in one block window, an inverted-pair
- * order, cancel, a market swap, a perps deposit + long, a coin launch with a
+ * order, cancel, a market swap, a perps deposit + long, its TP/SL and a stop order
+ * (on a node with trigger orders), a coin launch with a
  * first buy on its curve, a token created alone whose market starts later, and
  * a new perp market created on testnet.
  *
@@ -239,6 +240,64 @@ check('long position opened', pos && Number(pos.size) === 0.1, pos && `size ${po
 await page.waitForTimeout(7000)
 await page.screenshot({ path: `${SHOTS}/e2e-perps.png` })
 
+// ── trigger orders (a node with the 2026-10 trading features) ───────────────
+if ((await api('/api/v1/features')).trading) {
+  console.log('Trigger orders: position TP/SL, a stop, cancel')
+  const triggers = async () => (await rpc('perp_getTriggers', [pq])) ?? []
+  const waitTriggers = async (n) => {
+    for (let i = 0; i < 20; i++) {
+      const t = await triggers()
+      if (t.length === n) return t
+      await page.waitForTimeout(2000)
+    }
+    return triggers()
+  }
+  const mark = Number((await api('/api/v1/perps/btc/usd')).markPrice)
+  const tp = String(Math.round(mark * 1.1))
+  const sl = String(Math.round(mark * 0.9))
+  await page.getByTitle("Set the position's take profit and stop loss").click()
+  await page.getByPlaceholder('above mark').fill(tp)
+  await page.getByPlaceholder('below mark').fill(sl)
+  ap = nextApproval()
+  await page.getByRole('button', { name: /^Set TP \/ SL$/ }).click()
+  approval = await ap
+  check(
+    'position TP/SL approval: both legs, closing the whole position',
+    await approval.getByText(new RegExp(`Take profit on BTC-USD-PERP: sell the whole position when the mark reaches ${Number(tp).toLocaleString('en-US')}`)).first().waitFor({ timeout: 15_000 }).then(() => true, () => false) &&
+      (await approval.getByText(new RegExp(`Stop loss on BTC-USD-PERP: sell the whole position when the mark reaches ${Number(sl).toLocaleString('en-US')}`)).count()) > 0
+  )
+  await approval.screenshot({ path: `${SHOTS}/approval-tpsl.png` })
+  await approval.getByRole('button', { name: /^Confirm/ }).click().catch(closedOk)
+  let t = await waitTriggers(2)
+  check('the position has its TP and SL on chain', t.filter((x) => x.size === 'position').length === 2, t.map((x) => `${x.kind}@${x.trigger_price}`).join(', '))
+
+  // A stop from the order form: short 0.01 when the mark falls 5 %.
+  await page.getByRole('button', { name: /^Stop$/ }).click()
+  await page.getByRole('button', { name: /^Short$/ }).click()
+  const stopAt = String(Math.round(mark * 0.95))
+  await page.locator('label:has-text("Trigger (mark price)") input').fill(stopAt)
+  await page.locator('label:has-text("Size") input').fill('0.01')
+  ap = nextApproval()
+  await page.getByRole('button', { name: /^Place stop: short BTC$/ }).click()
+  approval = await ap
+  check('stop approval is decoded', await approval.getByText(new RegExp(`^Stop loss on BTC-USD-PERP: sell 0\\.01 when the mark reaches ${Number(stopAt).toLocaleString('en-US')}`)).first().waitFor({ timeout: 15_000 }).then(() => true, () => false))
+  check('trading goes in the free lane', await approval.getByText(/^Free \(trading lane/).first().isVisible().catch(() => false))
+  await approval.getByRole('button', { name: /^Confirm/ }).click().catch(closedOk)
+  t = await waitTriggers(3)
+  check('the stop waits on chain', t.some((x) => x.size === '0.01' && x.kind === 'sl' && x.trigger_price === stopAt), t.map((x) => `${x.kind}@${x.trigger_price}/${x.size}`).join(', '))
+
+  // Cancel it from the TP / SL tab.
+  await page.getByRole('button', { name: /^TP \/ SL/ }).click()
+  await page.screenshot({ path: `${SHOTS}/e2e-triggers.png` })
+  const row = page.locator('tr', { hasText: '0.01' }).filter({ hasText: 'Stop' }).first()
+  ap = nextApproval()
+  await row.getByRole('button', { name: /^Cancel$/ }).click()
+  approval = await ap
+  await approval.getByRole('button', { name: /^Confirm/ }).click().catch(closedOk)
+  t = await waitTriggers(2)
+  check('the stop is cancelled; the position TP/SL stay', t.length === 2 && t.every((x) => x.size === 'position'))
+}
+
 // ── launch a coin ───────────────────────────────────────────────────────────
 console.log('Launch: token + pool in one block, then the curve')
 await page.goto(`${SITE}/launch`, { waitUntil: 'networkidle' })
@@ -255,7 +314,9 @@ check('deploy approval is decoded, and says it is mintable', await approval.getB
 ap = nextApproval()
 await approval.getByRole('button', { name: /^Confirm$/ }).click().catch(closedOk)
 approval = await ap
-check('pool approval names the not-yet-created token and the burn', await approval.getByText(/^Create pool 0x[0-9a-f]{6}(…|\.\.\.)[0-9a-f]{4}\/QRDX:/).first().waitFor({ timeout: 15_000 }).then(() => true, () => false) && await approval.getByText(/5,000 QRDX is burned/).first().isVisible())
+// What a subsidized pool burns is the network's (5,000 QRDX before the 2026-10 tokenomics, 10 after).
+const burn = Number((await api('/api/v1/features')).costs.poolBurnSubsidized).toLocaleString('en-US')
+check('pool approval names the not-yet-created token and the burn', await approval.getByText(/^Create pool 0x[0-9a-f]{6}(…|\.\.\.)[0-9a-f]{4}\/QRDX:/).first().waitFor({ timeout: 15_000 }).then(() => true, () => false) && await approval.getByText(new RegExp(`^${burn} QRDX is burned`)).first().isVisible())
 await approval.screenshot({ path: `${SHOTS}/approval-create-pool.png` })
 await approval.getByRole('button', { name: /^Confirm$/ }).click().catch(closedOk)
 const deposit = page.getByRole('button', { name: /^Deposit 900\.00M QFROG on the curve$/ })

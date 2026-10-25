@@ -15,7 +15,8 @@ import { useApi, useDebounced } from '@/lib/hooks/useApi'
 import { useAccount } from '@/components/trade/SpotTradeView'
 import type { ApiAsset } from '@/lib/types'
 import type { RoutedQuote } from '@/lib/server/routing'
-import { routeOps } from '@/lib/routing'
+import { MAX_PATH_HOPS, routeOps, routePathOp } from '@/lib/routing'
+import { useFeatures } from '@/lib/hooks/useFeatures'
 import { useNet, useWallet } from '@/lib/wallet/WalletContext'
 import { cn } from '@/lib/utils'
 
@@ -52,6 +53,9 @@ export function SwapCard() {
   const q = useApi<RoutedQuote>(quotePath, 10_000)
   const hops = q.data?.hops ?? []
   const multi = hops.length > 1
+  // One atomic SWAP through the path, where the node takes them.
+  const { trading } = useFeatures()
+  const atomic = multi && trading && hops.length <= MAX_PATH_HOPS
 
   const balance = (a: ApiAsset | null) => (a?.address && account.data?.balances.find((b) => b.asset.address === a.address)?.balance) || '0'
   const avail = balance(fromAsset)
@@ -69,7 +73,12 @@ export function SwapCard() {
 
   const deadline = () => Math.floor(Date.now() / 1000) + 10 * 60
   // For the minimum shown; the operations signed get their deadline when they are built.
-  const plan = q.data && multi && Number(slippage) > 0 ? routeOps(q.data.hops, amount, Number(slippage), 0) : null
+  const plan =
+    q.data && multi && Number(slippage) > 0
+      ? atomic
+        ? routePathOp(q.data.hops, amount, Number(slippage), 0)
+        : routeOps(q.data.hops, amount, Number(slippage), 0)
+      : null
   const minOut = plan ? plan.minOut : q.data ? lessSlippage(q.data.amountOut, Number(slippage)) : null
 
   const submit = async () => {
@@ -77,6 +86,14 @@ export function SwapCard() {
     setBusy(true)
     setMsg(null)
     try {
+      if (atomic) {
+        const { op, minOut: least } = routePathOp(q.data.hops, amount, Number(slippage), deadline())
+        const via = q.data.hops.slice(0, -1).map((h) => h.to.symbol).join(', ')
+        await w.sendExchange({ ...op, gasLimit: 1_000_000, label: `Swap ${amount} ${fromAsset.symbol} → ≥ ${round(least, 8)} ${toAsset.symbol} through ${via}` })
+        setAmount('')
+        setMsg({ ok: true, text: `Submitted as one swap through ${via}: all of it or none. Track it in Portfolio.` })
+        return
+      }
       if (multi) {
         const { ops, minOut: least } = routeOps(q.data.hops, amount, Number(slippage), deadline())
         const via = q.data.hops.slice(0, -1).map((h) => h.to.symbol).join(', ')
@@ -157,7 +174,12 @@ export function SwapCard() {
               {fmtSize(q.data.amountOut)} vs {fmtSize(q.data.directAmountOut)} {toAsset?.symbol} swapping directly.
             </p>
           )}
-          {multi && (
+          {atomic && (
+            <p className="leading-snug text-muted-foreground">
+              One swap through {hops.length} markets: it delivers at least the minimum, or nothing happens and you keep your {fromAsset?.symbol}.
+            </p>
+          )}
+          {multi && !atomic && (
             <p className="leading-snug text-muted-foreground">
               {hops.length} swaps, one approval. Each refuses to fill below its own minimum; if a later one does, you keep the {hops.slice(0, -1).map((h) => h.to.symbol).join(' / ')} the earlier ones
               bought. Up to {slippage} % of each in-between token can be left over.
