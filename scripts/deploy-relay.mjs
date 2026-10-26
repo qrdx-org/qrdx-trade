@@ -11,9 +11,9 @@
  *
  * Runs only where it should:
  *   - skipped when QRDX_SKIP_RELAY_DEPLOY=1;
- *   - in a Cloudflare Pages build, only on the production branch
- *     (CF_PAGES_BRANCH === QRDX_RELAY_BRANCH, default "main"): previews never
- *     replace the live relay;
+ *   - in a Cloudflare Workers Builds (or Pages) build, only on the production
+ *     branch (WORKERS_CI_BRANCH / CF_PAGES_BRANCH === QRDX_RELAY_BRANCH, default
+ *     "main"): previews never replace the live relay;
  *   - skipped, with a note, when there are no Cloudflare credentials
  *     (no CLOUDFLARE_API_TOKEN and no `wrangler login`), so local builds work.
  * When it does run and the deploy fails, the build fails: a site that expects a
@@ -31,8 +31,10 @@ if (env.QRDX_SKIP_RELAY_DEPLOY === '1') {
 }
 
 const productionBranch = env.QRDX_RELAY_BRANCH || 'main'
-if (env.CF_PAGES === '1' && env.CF_PAGES_BRANCH && env.CF_PAGES_BRANCH !== productionBranch) {
-  log(`skipped: Pages preview build of "${env.CF_PAGES_BRANCH}" (the relay deploys from "${productionBranch}")`)
+// Workers Builds sets WORKERS_CI / WORKERS_CI_BRANCH; Pages set CF_PAGES / CF_PAGES_BRANCH.
+const ciBranch = env.WORKERS_CI === '1' ? env.WORKERS_CI_BRANCH : env.CF_PAGES === '1' ? env.CF_PAGES_BRANCH : undefined
+if (ciBranch && ciBranch !== productionBranch) {
+  log(`skipped: preview build of "${ciBranch}" (the relay deploys from "${productionBranch}")`)
   process.exit(0)
 }
 

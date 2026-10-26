@@ -1,8 +1,6 @@
 import { ApiError, handler, json, nowSec, options } from '@/lib/server/http'
 import { netFromVersion } from '@/lib/server/net'
 
-export const runtime = 'edge'
-
 /**
  * One address's delegations (shares and their value in each pool, warming-up amounts),
  * the payouts owed to it, and the QRDX it can delegate. Delegation spends the post-quantum

@@ -7,7 +7,6 @@ const nextConfig = {
   experimental: {
     optimizePackageImports: ['lucide-react'],
   },
-  // Ensure proper server-side rendering for Workers
   outputFileTracingRoot: process.cwd(),
   images: {
     remotePatterns: [
@@ -22,3 +21,9 @@ const nextConfig = {
 }
 
 export default nextConfig
+
+// `next dev` with the Worker's bindings (wrangler.jsonc), as the deployed Worker has them.
+if (process.env.NODE_ENV === 'development') {
+  const { initOpenNextCloudflareForDev } = await import('@opennextjs/cloudflare')
+  initOpenNextCloudflareForDev()
+}

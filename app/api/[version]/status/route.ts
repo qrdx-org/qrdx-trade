@@ -2,8 +2,6 @@ import { cached } from '@/lib/server/cache'
 import { handler, json, nowSec, options } from '@/lib/server/http'
 import { netFromVersion } from '@/lib/server/net'
 
-export const runtime = 'edge'
-
 /** Node health for the status bar: chain height, last block, and how long the node took to answer. */
 export const GET = handler(async (_req, { params }: { params: Promise<{ version: string }> }) => {
   const { version } = await params

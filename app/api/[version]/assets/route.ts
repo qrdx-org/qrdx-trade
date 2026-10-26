@@ -4,8 +4,6 @@ import { apiAsset } from '@/lib/server/markets'
 import { tokenIndex, unverifiedRef, verifiedRef } from '@/lib/server/resolve'
 import { netFromVersion } from '@/lib/server/net'
 
-export const runtime = 'edge'
-
 export const GET = handler(async (req, { params }: { params: Promise<{ version: string }> }) => {
   const net = netFromVersion((await params).version)
   const all = new URL(req.url).searchParams.get('all') === '1'

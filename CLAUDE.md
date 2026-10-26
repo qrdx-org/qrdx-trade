@@ -111,7 +111,7 @@ Copy `.env.example` to `.env.local`. The site serves mainnet (`/api/v1`) and tes
 
 ### Next.js Configuration
 
-- Server-rendered (API routes and pair pages run on the edge runtime for Cloudflare)
+- Server-rendered on a Cloudflare Worker through the OpenNext adapter (`@opennextjs/cloudflare`, `wrangler.jsonc`, `open-next.config.ts`). Routes run on the Node.js runtime with `nodejs_compat`: do not add `export const runtime = 'edge'` (the adapter does not support it)
 - Package import optimizations for lucide-react
 - Server Components HMR caching enabled
 
@@ -134,17 +134,12 @@ pnpm build
 pnpm build:nobun
 ```
 
-Output: `out/` directory (static files)
+### Deployment: Cloudflare Workers
 
-### Deployment Options
-
-1. **Static Hosting** (Vercel, Netlify, Cloudflare Pages)
-   - Simply deploy the `out/` folder
-   - No server required
-
-2. **Custom Server**
-   - Use `pnpm start` after build
-   - Requires Node.js runtime
+- `pnpm preview`: build the Worker (`.open-next/`) and run it locally in workerd.
+- `pnpm deploy`: build it, deploy the relay Worker (`scripts/deploy-relay.mjs`), then deploy the site Worker (`wrangler.jsonc`, route `trade.qrdx.org/*`).
+- `pnpm deploy:preview`: build and upload a version without deploying it.
+- `next`, `@opennextjs/cloudflare` and `wrangler` are pinned to versions that work together (the adapter states which Next releases it supports); upgrade them together.
 
 ## Key Implementation Details
 
@@ -200,3 +195,13 @@ For questions or issues:
 - Check documentation at https://docs.qrdx.org
 - Open an issue on GitHub
 - Join the Discord community
+
+<!-- BEGIN:nextjs-agent-rules -->
+
+# This is NOT the Next.js you know
+
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
+
+This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
+
+<!-- END:nextjs-agent-rules -->

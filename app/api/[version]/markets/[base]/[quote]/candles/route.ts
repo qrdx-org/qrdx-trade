@@ -3,8 +3,6 @@ import { spotCandles, spotCandlesUsd } from '@/lib/server/markets'
 import { isInterval } from '@/lib/server/reference'
 import { netFromVersion } from '@/lib/server/net'
 
-export const runtime = 'edge'
-
 export const GET = handler(async (req, { params }: { params: Promise<{ version: string; base: string; quote: string }> }) => {
   const { version, base, quote } = await params
   const net = netFromVersion(version)

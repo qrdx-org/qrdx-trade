@@ -1,8 +1,6 @@
 import { Suspense } from 'react'
 import { CollectionView } from '@/components/nfts/CollectionView'
 
-export const runtime = 'edge'
-
 export default async function NftCollectionPage({ params }: { params: Promise<{ collection: string }> }) {
   const { collection } = await params
   return (

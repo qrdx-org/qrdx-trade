@@ -1,8 +1,6 @@
 import { ApiError, handler, json, nowSec, options } from '@/lib/server/http'
 import { netFromVersion } from '@/lib/server/net'
 
-export const runtime = 'edge'
-
 /** A perp market deployer, by address or namespace: its bond, what is unbonding, and its markets (null: none). */
 export const GET = handler(async (_req, { params }: { params: Promise<{ version: string; who: string }> }) => {
   const { version, who } = await params

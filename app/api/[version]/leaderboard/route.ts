@@ -3,8 +3,6 @@ import { handler, json, options } from '@/lib/server/http'
 import { netFromVersion } from '@/lib/server/net'
 import { leaderboard } from '@/lib/server/trading'
 
-export const runtime = 'edge'
-
 /** Perps accounts ranked by realized PnL net of fees, or by volume, over a window. */
 export const GET = handler(async (req, { params }: { params: Promise<{ version: string }> }) => {
   const net = netFromVersion((await params).version)

@@ -1,11 +1,30 @@
 {
+  // QRDX Trade as a Cloudflare Worker, built by the OpenNext adapter (@opennextjs/cloudflare):
+  // `pnpm deploy` builds .open-next/ and deploys it. The relay (QRDX Connect, market history,
+  // profiles, the NFT market registry) is its own Worker: relay/wrangler.jsonc.
+  "$schema": "node_modules/wrangler/config-schema.json",
   "name": "qrdx-trade",
-  "pages_build_output_dir": ".vercel/output/static",
-  "compatibility_date": "2024-12-01",
-  "compatibility_flags": ["nodejs_compat"],
-  // The market history service lives in the relay worker (relay/wrangler.jsonc). A Pages
-  // function cannot fetch() a worker routed on its own zone (Cloudflare error 1042), so it
-  // reaches it through this binding; lib/server/history.ts falls back to QRDX_HISTORY_URL.
-  "services": [{ "binding": "HISTORY_SERVICE", "service": "qrdx-relay" }]
+  "main": ".open-next/worker.js",
+  "compatibility_date": "2026-09-01",
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  // Wrangler's default keeps function names with an `__name` helper, which then leaks into
+  // the inline scripts Next renders (the theme script) and throws in the browser.
+  "keep_names": false,
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  },
+  // The relay Worker is routed on this zone too, and a Worker cannot fetch() another routed on
+  // its own zone (Cloudflare error 1042): server code reaches it through this binding
+  // (lib/server/relay-service.ts), and falls back to QRDX_HISTORY_URL / QRDX_PROFILES_URL.
+  "services": [
+    { "binding": "HISTORY_SERVICE", "service": "qrdx-relay" },
+    // OpenNext's caches revalidate through the Worker itself.
+    { "binding": "WORKER_SELF_REFERENCE", "service": "qrdx-trade" }
+  ],
+  // A route, not a Custom Domain: the relay's more specific routes on trade.qrdx.org
+  // (/api/relay/*, /api/history/*, /api/profiles/*) must keep winning, and a Custom Domain
+  // would take precedence over every route on the hostname.
+  "routes": [{ "pattern": "trade.qrdx.org/*", "zone_name": "qrdx.org" }],
+  "observability": { "enabled": true }
 }
-

@@ -3,8 +3,6 @@ import { defaultQuote } from '@/lib/server/markets'
 import { netFromVersion } from '@/lib/server/net'
 import { resolveSegment } from '@/lib/server/resolve'
 
-export const runtime = 'edge'
-
 /** The pair `/trade/{base}` opens: a live market's quote for this base, else USDC. */
 export const GET = handler(async (_req, { params }: { params: Promise<{ version: string; base: string }> }) => {
   const { version, base } = await params

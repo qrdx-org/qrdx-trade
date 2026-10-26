@@ -2,8 +2,6 @@ import { cached } from '@/lib/server/cache'
 import { ApiError, handler, json, nowSec, options } from '@/lib/server/http'
 import { netFromVersion } from '@/lib/server/net'
 
-export const runtime = 'edge'
-
 /**
  * The unique-ticker auction (TICKER_CLAIM): what a ticker costs now, falling to its floor
  * after a sale doubles it, and the tickers reserved for verified assets.

@@ -2,8 +2,6 @@ import { ApiError, handler, json, options } from '@/lib/server/http'
 import { netFromVersion } from '@/lib/server/net'
 import { routeQuote } from '@/lib/server/routing'
 
-export const runtime = 'edge'
-
 /** The best route from one token to another through up to three markets (lib/server/routing.ts). */
 export const GET = handler(async (req, { params }: { params: Promise<{ version: string }> }) => {
   const net = netFromVersion((await params).version)

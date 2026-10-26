@@ -73,8 +73,10 @@ account: `curl -X POST localhost:3007/faucet -d '{"address":"0xPQ…"}'`.
 | `node tests/e2e/trade-wallet.mjs` | wallet extension + site + local node, end to end (see the file header) |
 | `node tests/e2e/trade-phone.mjs` | phone wallet + relay + site + local node, end to end (see the file header) |
 | `pnpm relay:dev` / `pnpm relay:deploy` | the site's Worker on its own: QRDX Connect relay and market history recorder (Cloudflare Worker + Durable Objects + cron) |
-| `pnpm build:worker` | Pages build (next-on-pages), then deploys that Worker when Cloudflare credentials are present (docs/CONNECT.md) |
-| `pnpm deploy` | the above, then `wrangler pages deploy` |
+| `pnpm preview` | the site as a Cloudflare Worker (OpenNext build), run locally in workerd |
+| `pnpm build:worker` | the Worker build (`.open-next/`), then deploys the relay Worker when Cloudflare credentials are present (docs/CONNECT.md) |
+| `pnpm deploy` | the above, then deploys the site Worker (`wrangler.jsonc`) |
+| `pnpm deploy:preview` | builds and uploads a version of the site Worker without deploying it (no relay deploy) |
 
 ## Configuration
 

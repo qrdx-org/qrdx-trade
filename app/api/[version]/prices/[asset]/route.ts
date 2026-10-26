@@ -4,8 +4,6 @@ import { netFromVersion } from '@/lib/server/net'
 import { resolveSegment } from '@/lib/server/resolve'
 import { usdQuote } from '@/lib/server/usd'
 
-export const runtime = 'edge'
-
 /** One asset's USD price (index or pool route). 404 when nothing prices it. */
 export const GET = handler(async (_req, { params }: { params: Promise<{ version: string; asset: string }> }) => {
   const { version, asset } = await params

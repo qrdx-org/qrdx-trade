@@ -2,17 +2,20 @@
  * The relay worker (relay/: market history and public profiles), reached from
  * the site's server code.
  *
- * On Cloudflare it is the HISTORY_SERVICE binding (wrangler.jsonc): a Pages
- * function cannot fetch() a worker routed on its own zone. Elsewhere (local
- * development) there is no binding and the URL is fetched directly.
+ * On Cloudflare it is the HISTORY_SERVICE binding (wrangler.jsonc): a Worker
+ * cannot fetch() another routed on its own zone. Elsewhere (unit tests, a plain
+ * `next start`) there is no binding and the URL is fetched directly.
  */
 
 type Fetcher = { fetch: (req: Request) => Promise<Response> }
 
 function binding(): Fetcher | null {
-  // next-on-pages keeps the request's bindings here (what its getRequestContext reads;
-  // importing that pulls in `server-only`, which the unit tests cannot load).
-  const ctx = (globalThis as Record<symbol, { env?: Record<string, unknown> } | undefined>)[Symbol.for('__cloudflare-request-context__')]
+  // The OpenNext adapter keeps the Worker's env here (what its getCloudflareContext reads;
+  // importing that here would tie the unit tests to the adapter). `next dev` has the bindings
+  // too (next.config.mjs), but this one points at a local relay session that is rarely
+  // running: development fetches the relay's URL, as before.
+  if (process.env.NODE_ENV === 'development') return null
+  const ctx = (globalThis as Record<symbol, { env?: Record<string, unknown> } | undefined>)[Symbol.for('__cloudflare-context__')]
   const svc = ctx?.env?.HISTORY_SERVICE as Fetcher | undefined
   return svc && typeof svc.fetch === 'function' ? svc : null
 }

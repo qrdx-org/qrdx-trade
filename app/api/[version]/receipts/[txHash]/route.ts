@@ -1,8 +1,6 @@
 import { ApiError, handler, json, options } from '@/lib/server/http'
 import { netFromVersion } from '@/lib/server/net'
 
-export const runtime = 'edge'
-
 export const GET = handler(async (_req, { params }: { params: Promise<{ version: string; txHash: string }> }) => {
   const { version, txHash } = await params
   const net = netFromVersion(version)

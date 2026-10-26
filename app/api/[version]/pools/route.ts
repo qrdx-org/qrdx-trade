@@ -2,8 +2,6 @@ import { ApiError, handler, json, options } from '@/lib/server/http'
 import { pools } from '@/lib/server/accounts'
 import { netFromVersion } from '@/lib/server/net'
 
-export const runtime = 'edge'
-
 export const GET = handler(async (req, { params }: { params: Promise<{ version: string }> }) => {
   const net = netFromVersion((await params).version)
   const url = new URL(req.url)

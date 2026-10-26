@@ -114,25 +114,24 @@ The relay is its own small Worker (`relay/wrangler.jsonc`), routed under the
 trade site at `trade.qrdx.org/api/relay/*`. The same Worker also runs the
 market history recorder (ARCHITECTURE.md §12): a once-a-minute cron and
 `trade.qrdx.org/api/history/*`, with the networks it records in its `NETWORKS`
-variable. It cannot be a Pages / edge
-function like the API: the phone and the laptop must meet in shared state, and
-edge functions are stateless isolates (two requests rarely share one).
-Cloudflare's shared state for this is a Durable Object, and only a Worker can
-define one; Pages can bind to a Durable Object but cannot contain it.
+variable. It is not part of the site's
+Worker: the phone and the laptop must meet in shared state, which on Cloudflare
+is a Durable Object, and the site's Worker is redeployed far more often than the
+relay's state should be touched. The site reaches it through a service binding.
 
-It deploys with the site: `pnpm build:worker` builds the Pages output, then
+It deploys with the site: `pnpm build:worker` builds the site's Worker, then
 runs `scripts/deploy-relay.mjs`, which deploys the relay when
 
 - Cloudflare credentials are present (`CLOUDFLARE_API_TOKEN`, or a
   `wrangler login`); without them it prints a note and the build carries on;
-- and, in a Cloudflare Pages build, the branch is the production branch
+- and, in a Cloudflare Workers Builds (or Pages) build, the branch is the production branch
   (`QRDX_RELAY_BRANCH`, default `main`), so previews never replace the live
   relay. `pnpm deploy:preview` skips it too.
 
 `QRDX_SKIP_RELAY_DEPLOY=1` turns it off. When it runs and fails, the build
-fails. For Pages builds from Git, add `CLOUDFLARE_API_TOKEN` (permissions:
-Workers Scripts Edit, Workers Routes Edit on `qrdx.org`) as an encrypted
-variable in the Pages project's build settings. `pnpm relay:deploy` deploys
+fails. For builds from Git (Workers Builds), add `CLOUDFLARE_API_TOKEN` (permissions:
+Workers Scripts Edit, Workers Routes Edit on `qrdx.org`) as an encrypted build
+variable of the `qrdx-trade` Worker. `pnpm relay:deploy` deploys
 the relay alone.
 
 Locally, `pnpm relay:dev` runs the real Durable Object in workerd on

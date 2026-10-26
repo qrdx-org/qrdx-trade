@@ -2,8 +2,6 @@ import { cached } from '@/lib/server/cache'
 import { handler, json, nowSec, options } from '@/lib/server/http'
 import { netFromVersion } from '@/lib/server/net'
 
-export const runtime = 'edge'
-
 /**
  * Staking on the network (qrdx-node docs/STAKING.md): every validator with its delegation
  * pool, the staking parameters, and the epoch clock (slot length, slots an epoch, the

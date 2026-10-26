@@ -2,8 +2,6 @@ import { ApiError, handler, json, options } from '@/lib/server/http'
 import { netFromVersion } from '@/lib/server/net'
 import { vault } from '@/lib/server/trading'
 
-export const runtime = 'edge'
-
 /** One vault: NAV, shares, positions; with ?holder= that account's shares, cost and value. */
 export const GET = handler(async (req, { params }: { params: Promise<{ version: string; vault: string }> }) => {
   const { version, vault: address } = await params

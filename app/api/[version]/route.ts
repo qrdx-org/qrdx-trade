@@ -1,8 +1,6 @@
 import { handler, json, options } from '@/lib/server/http'
 import { netFromVersion } from '@/lib/server/net'
 
-export const runtime = 'edge'
-
 export const GET = handler(async (_req, { params }: { params: Promise<{ version: string }> }) => {
   const { version } = await params
   const cfg = netFromVersion(version).cfg

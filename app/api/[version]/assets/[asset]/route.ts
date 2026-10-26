@@ -4,8 +4,6 @@ import { indexTicker } from '@/lib/server/reference'
 import { resolveSegment, tokenIndex } from '@/lib/server/resolve'
 import { netFromVersion } from '@/lib/server/net'
 
-export const runtime = 'edge'
-
 export const GET = handler(async (_req, { params }: { params: Promise<{ version: string; asset: string }> }) => {
   const { version, asset } = await params
   const net = netFromVersion(version)

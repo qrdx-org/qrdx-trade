@@ -3,8 +3,6 @@ import { handler, json, options } from '@/lib/server/http'
 import { netFromVersion } from '@/lib/server/net'
 import { vaults } from '@/lib/server/trading'
 
-export const runtime = 'edge'
-
 /** User vaults (copy trading) and markets' liquidity vaults, largest first. */
 export const GET = handler(async (_req, { params }: { params: Promise<{ version: string }> }) => {
   const net = netFromVersion((await params).version)

@@ -2,8 +2,6 @@ import { handler, json, options } from '@/lib/server/http'
 import { netFromVersion } from '@/lib/server/net'
 import { accountControl } from '@/lib/server/trading'
 
-export const runtime = 'edge'
-
 /** Who may trade for an account (agents), its sub-accounts and vaults, its fee tier and referral. */
 export const GET = handler(async (_req, { params }: { params: Promise<{ version: string; address: string }> }) => {
   const { version, address } = await params

@@ -5,8 +5,6 @@ import { nftMarket } from '@/lib/server/nfts'
 import { relayPost } from '@/lib/server/relay-service'
 import { isMarketCode, MARKET_CODE_HASH } from '@/lib/nft-market-code'
 
-export const runtime = 'edge'
-
 /** The network's NFT market contract (null: trading is closed), and the code it must have. */
 export const GET = handler(async (_req, { params }: { params: Promise<{ version: string }> }) => {
   const net = netFromVersion((await params).version)

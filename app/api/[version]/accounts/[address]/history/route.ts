@@ -2,8 +2,6 @@ import { handler, json, options } from '@/lib/server/http'
 import { netFromVersion } from '@/lib/server/net'
 import { accountHistory } from '@/lib/server/trading'
 
-export const runtime = 'edge'
-
 /** An account's trades or order events from the node's trading history, newest first. */
 export const GET = handler(async (req, { params }: { params: Promise<{ version: string; address: string }> }) => {
   const { version, address } = await params

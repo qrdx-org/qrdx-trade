@@ -2,8 +2,6 @@ import { ApiError, handler, json, nowSec, options } from '@/lib/server/http'
 import { netFromVersion } from '@/lib/server/net'
 import { oracleCheck } from '@/lib/server/perp-oracle'
 
-export const runtime = 'edge'
-
 /**
  * Before creating a perp market: does it exist already, and can validators price
  * its base? `GET /perps/check?base=SOL` (docs/API.md "Perpetuals").

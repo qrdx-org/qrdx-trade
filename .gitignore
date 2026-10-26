@@ -47,3 +47,6 @@ __pycache__/
 
 # wrangler local state (pnpm relay:dev)
 .wrangler/
+
+# OpenNext build output (pnpm build:worker)
+.open-next/

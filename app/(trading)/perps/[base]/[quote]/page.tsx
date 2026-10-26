@@ -1,8 +1,6 @@
 import type { Metadata } from 'next'
 import { PerpTradeView } from '@/components/trade/PerpTradeView'
 
-export const runtime = 'edge'
-
 interface Props {
   params: Promise<{ base: string; quote: string }>
 }

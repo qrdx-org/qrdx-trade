@@ -12,7 +12,7 @@ Wallet.
      │  reads: /api/v1/*                               window.qrdx / EIP-6963
      │  writes: provider.request(qrdx_sendExchangeTransaction) ──▶ approval window
      ▼                                                   │ signs with ML-DSA-65
- trade.qrdx.org/api/v1  (Next.js route handlers, edge)    │
+ trade.qrdx.org/api/v1  (Next.js route handlers, Worker) │
      │  exchange_* / perp_* JSON-RPC, /get_blocks          ▼
      ├──────────────────────────────────────────────▶  QRDX node  ◀── exchange_sendTransaction
      │  index prices, reference candles
@@ -391,8 +391,8 @@ tests/e2e/trade-phone.mjs               phone wallet (web app) + relay + site + 
 ```
 
 `lib/assets.ts`, `lib/decimal.ts`, `lib/pairs.ts`, `lib/orders.ts` and `lib/launch.ts` are pure
-and shared by the API and the UI. Everything under `lib/server` is fetch-only so
-it runs on the Cloudflare edge runtime.
+and shared by the API and the UI. Everything under `lib/server` is fetch-only; the site runs as a Cloudflare
+Worker through the OpenNext adapter (`wrangler.jsonc`, `open-next.config.ts`).
 
 ## 7. Node gaps (reference only; not changed here)
 
@@ -622,7 +622,7 @@ after it. 24 h stats compare the price now with the price at or before 24 h
 ago (or the first recorded, for a younger pool).
 
 On Cloudflare the site reaches the worker through the `HISTORY_SERVICE`
-service binding (`wrangler.jsonc`): a Pages function cannot `fetch()` a worker
+service binding (`wrangler.jsonc`): a Worker cannot `fetch()` another Worker
 routed on its own zone (error 1042). Without the binding (local development)
 it uses `QRDX_HISTORY_URL`. Failures are logged once per isolate.
 

@@ -1,8 +1,6 @@
 import type { Metadata } from 'next'
 import { SpotTradeView } from '@/components/trade/SpotTradeView'
 
-export const runtime = 'edge'
-
 interface Props {
   params: Promise<{ base: string; quote: string }>
 }

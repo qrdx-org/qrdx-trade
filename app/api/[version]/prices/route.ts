@@ -4,8 +4,6 @@ import { netFromVersion } from '@/lib/server/net'
 import { refForAddress, resolveSegment, tokenIndex } from '@/lib/server/resolve'
 import { usdQuote } from '@/lib/server/usd'
 
-export const runtime = 'edge'
-
 /**
  * USD prices: verified assets from public exchanges (index), anything else through
  * the network's pools to one of them (route). ?assets= takes slugs or token addresses.
