@@ -1,10 +1,11 @@
 {
-  // QRDX Trade as a Cloudflare Worker, built by the OpenNext adapter (@opennextjs/cloudflare):
-  // `pnpm deploy` builds .open-next/ and deploys it. The relay (QRDX Connect, market history,
-  // profiles, the NFT market registry) is its own Worker: relay/wrangler.jsonc.
+  // QRDX Trade as one Cloudflare Worker (worker.ts): the Next.js app, built by the OpenNext
+  // adapter (@opennextjs/cloudflare) into .open-next/, and the site's stateful services from
+  // relay/ (QRDX Connect relay, market history, profiles, the NFT market registry) under
+  // /api/relay, /api/history and /api/profiles. `pnpm deploy` builds and deploys it.
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "qrdx-trade",
-  "main": ".open-next/worker.js",
+  "main": "worker.ts",
   "compatibility_date": "2026-09-01",
   "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
   // Wrangler's default keeps function names with an `__name` helper, which then leaks into
@@ -14,17 +15,22 @@
     "directory": ".open-next/assets",
     "binding": "ASSETS"
   },
-  // The relay Worker is routed on this zone too, and a Worker cannot fetch() another routed on
-  // its own zone (Cloudflare error 1042): server code reaches it through this binding
-  // (lib/server/relay-service.ts), and falls back to QRDX_HISTORY_URL / QRDX_PROFILES_URL.
-  "services": [
-    { "binding": "HISTORY_SERVICE", "service": "qrdx-relay" },
-    // OpenNext's caches revalidate through the Worker itself.
-    { "binding": "WORKER_SELF_REFERENCE", "service": "qrdx-trade" }
-  ],
-  // A route, not a Custom Domain: the relay's more specific routes on trade.qrdx.org
-  // (/api/relay/*, /api/history/*, /api/profiles/*) must keep winning, and a Custom Domain
-  // would take precedence over every route on the hostname.
+  "durable_objects": {
+    "bindings": [
+      { "name": "RELAY", "class_name": "RelaySession" },
+      { "name": "HISTORY", "class_name": "MarketHistory" },
+      { "name": "PROFILES", "class_name": "Profiles" }
+    ]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["RelaySession", "MarketHistory", "Profiles"] }],
+  // Record every network's pools once a minute (market history).
+  "triggers": { "crons": ["* * * * *"] },
+  "vars": {
+    "NETWORKS": "{\"mainnet\":\"https://rpc.qrdx.org\",\"testnet\":\"https://test.qrdx.org/rpc\"}"
+  },
+  // The app's server code calls the services in this same Worker through this binding (a Worker
+  // cannot fetch() its own routes over the network); OpenNext's caches use it too.
+  "services": [{ "binding": "WORKER_SELF_REFERENCE", "service": "qrdx-trade" }],
   "routes": [{ "pattern": "trade.qrdx.org/*", "zone_name": "qrdx.org" }],
   "observability": { "enabled": true }
 }

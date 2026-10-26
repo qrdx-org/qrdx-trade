@@ -1,7 +1,8 @@
 {
-  // The trade site's stateful services: the QRDX Connect relay (docs/CONNECT.md),
-  // market history (docs/ARCHITECTURE.md §12) and public profiles (docs/PROFILES.md). Deployed by pnpm build:worker / relay:deploy.
-  "name": "qrdx-relay",
+  // LOCAL DEVELOPMENT ONLY (pnpm relay:dev): the site's stateful services on their own, for
+  // `next dev` to use. In production they run inside the site's Worker (../worker.ts,
+  // ../wrangler.jsonc); this file is never deployed.
+  "name": "qrdx-relay-dev",
   "main": "src/worker.ts",
   "compatibility_date": "2025-11-01",
   "durable_objects": {
@@ -21,12 +22,5 @@
   "vars": {
     "NETWORKS": "{\"mainnet\":\"https://rpc.qrdx.org\",\"testnet\":\"https://test.qrdx.org/rpc\"}"
   },
-  // Served under the trade site, so the API lives at trade.qrdx.org/api/relay
-  // (the qrdx.org zone must be on the account that deploys this).
-  "routes": [
-    { "pattern": "trade.qrdx.org/api/relay/*", "zone_name": "qrdx.org" },
-    { "pattern": "trade.qrdx.org/api/history/*", "zone_name": "qrdx.org" },
-    { "pattern": "trade.qrdx.org/api/profiles/*", "zone_name": "qrdx.org" }
-  ],
   "observability": { "enabled": true }
 }

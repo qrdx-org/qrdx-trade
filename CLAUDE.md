@@ -111,7 +111,7 @@ Copy `.env.example` to `.env.local`. The site serves mainnet (`/api/v1`) and tes
 
 ### Next.js Configuration
 
-- Server-rendered on a Cloudflare Worker through the OpenNext adapter (`@opennextjs/cloudflare`, `wrangler.jsonc`, `open-next.config.ts`). Routes run on the Node.js runtime with `nodejs_compat`: do not add `export const runtime = 'edge'` (the adapter does not support it)
+- Server-rendered on one Cloudflare Worker (`worker.ts`) through the OpenNext adapter (`@opennextjs/cloudflare`, `wrangler.jsonc`, `open-next.config.ts`). Routes run on the Node.js runtime with `nodejs_compat`: do not add `export const runtime = 'edge'` (the adapter does not support it)
 - Package import optimizations for lucide-react
 - Server Components HMR caching enabled
 
@@ -137,7 +137,7 @@ pnpm build:nobun
 ### Deployment: Cloudflare Workers
 
 - `pnpm preview`: build the Worker (`.open-next/`) and run it locally in workerd.
-- `pnpm deploy`: build it, deploy the relay Worker (`scripts/deploy-relay.mjs`), then deploy the site Worker (`wrangler.jsonc`, route `trade.qrdx.org/*`).
+- `pnpm deploy`: build and deploy the one Worker (`wrangler.jsonc`, route `trade.qrdx.org/*`). Its entry, `worker.ts`, serves `/api/relay`, `/api/history` and `/api/profiles` from `relay/src` (Durable Objects + a once-a-minute cron) and everything else from the Next.js app.
 - `pnpm deploy:preview`: build and upload a version without deploying it.
 - `next`, `@opennextjs/cloudflare` and `wrangler` are pinned to versions that work together (the adapter states which Next releases it supports); upgrade them together.
 

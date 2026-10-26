@@ -621,10 +621,10 @@ the other side of each step valued at the mean of the pool price before and
 after it. 24 h stats compare the price now with the price at or before 24 h
 ago (or the first recorded, for a younger pool).
 
-On Cloudflare the site reaches the worker through the `HISTORY_SERVICE`
-service binding (`wrangler.jsonc`): a Worker cannot `fetch()` another Worker
-routed on its own zone (error 1042). Without the binding (local development)
-it uses `QRDX_HISTORY_URL`. Failures are logged once per isolate.
+The recorder runs in the site's own Worker (`worker.ts`). The app's server code
+reaches it through the `WORKER_SELF_REFERENCE` binding (`wrangler.jsonc`): a
+Worker cannot `fetch()` its own routes over the network. Without the binding
+(`next dev`) it uses `QRDX_HISTORY_URL`. Failures are logged once per isolate.
 
 When a pair has no trades, no recorded history and no public price, its chart
 shows the pool's current price as one labelled point rather than nothing.

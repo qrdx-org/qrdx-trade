@@ -14,9 +14,9 @@ whatever their image.
 
 ## Where it lives
 
-The relay worker (`relay/`, `qrdx-relay`) stores profiles in one SQLite Durable
-Object per network (`relay/src/profiles-do.ts`), served at
-`trade.qrdx.org/api/profiles/*`. The networks are the worker's `NETWORKS` var
+The site's Worker (`worker.ts`, with the services in `relay/`) stores profiles in
+one SQLite Durable Object per network (`relay/src/profiles-do.ts`), served at
+`trade.qrdx.org/api/profiles/*`. The networks are the Worker's `NETWORKS` var
 (mainnet and testnet), which also gives the RPC used to look up token creators.
 
 | Module | What |

@@ -1,10 +1,11 @@
 /**
- * The relay worker (relay/: market history and public profiles), reached from
- * the site's server code.
+ * The site's stateful services (relay/: market history, public profiles, the NFT
+ * market registry), reached from the site's server code.
  *
- * On Cloudflare it is the HISTORY_SERVICE binding (wrangler.jsonc): a Worker
- * cannot fetch() another routed on its own zone. Elsewhere (unit tests, a plain
- * `next start`) there is no binding and the URL is fetched directly.
+ * On Cloudflare they run in this same Worker (worker.ts), reached through the
+ * WORKER_SELF_REFERENCE binding (wrangler.jsonc): a Worker cannot fetch() its own
+ * routes over the network. Elsewhere (`next dev`, unit tests) there is no binding
+ * and the URL is fetched directly.
  */
 
 type Fetcher = { fetch: (req: Request) => Promise<Response> }
@@ -12,11 +13,11 @@ type Fetcher = { fetch: (req: Request) => Promise<Response> }
 function binding(): Fetcher | null {
   // The OpenNext adapter keeps the Worker's env here (what its getCloudflareContext reads;
   // importing that here would tie the unit tests to the adapter). `next dev` has the bindings
-  // too (next.config.mjs), but this one points at a local relay session that is rarely
-  // running: development fetches the relay's URL, as before.
+  // too (next.config.mjs), but the Next dev server does not serve the services: development
+  // fetches their URLs (production, or QRDX_HISTORY_URL / QRDX_PROFILES_URL).
   if (process.env.NODE_ENV === 'development') return null
   const ctx = (globalThis as Record<symbol, { env?: Record<string, unknown> } | undefined>)[Symbol.for('__cloudflare-context__')]
-  const svc = ctx?.env?.HISTORY_SERVICE as Fetcher | undefined
+  const svc = ctx?.env?.WORKER_SELF_REFERENCE as Fetcher | undefined
   return svc && typeof svc.fetch === 'function' ? svc : null
 }
 
