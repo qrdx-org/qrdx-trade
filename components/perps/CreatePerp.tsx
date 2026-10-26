@@ -12,6 +12,8 @@ import { apiGet, useApi, useDebounced } from '@/lib/hooks/useApi'
 import type { PerpMarket } from '@/lib/types'
 import { useNet, useWallet } from '@/lib/wallet/WalletContext'
 import { ExplorerLink } from '@/components/trade/ExplorerLink'
+import { DeployerPanel } from '@/components/perps/DeployerPanel'
+import { useFeatures } from '@/lib/hooks/useFeatures'
 import { cn } from '@/lib/utils'
 
 interface Check {
@@ -38,6 +40,11 @@ type Stage = 'signing' | 'block' | 'created' | 'priced' | 'failed'
 export function CreatePerp() {
   const { slot, setSlot, apiBase, network } = useNet()
   const w = useWallet()
+  const features = useFeatures()
+  // Nodes from 2026-10 list validator-priced markets by governance (unless PERP_OPEN_LISTING),
+  // and seed each new market's book with liquidity from its creator.
+  const governed = features.trading && features.costs.perpOpenListing === false
+  const seed = features.trading && Number(features.costs.perpMinLiquidity ?? 0) > 0 ? String(features.costs.perpMinLiquidity) : null
   const perps = useApi<{ perps: PerpMarket[] }>(`${apiBase}/perps`, 10_000)
   const [base, setBase] = useState('')
   const [lev, setLev] = useState(10)
@@ -73,7 +80,7 @@ export function CreatePerp() {
     try {
       const { txHash } = await w.sendExchange({
         op: 'CREATE_MARKET',
-        params: { base_token: c.base, max_leverage: String(lev) },
+        params: { base_token: c.base, max_leverage: String(lev), ...(seed ? { liquidity: seed } : {}) },
         label: `Create ${c.marketId} (up to ${lev}×)`,
         market: c.marketId,
       })
@@ -144,6 +151,10 @@ export function CreatePerp() {
               Switch to testnet
             </Button>
           </div>
+        ) : governed ? (
+          <TradeGate action="list a market">
+            <DeployerPanel />
+          </TradeGate>
         ) : created && stage ? (
           <Progress created={created} stage={stage} error={error} lev={lev} onReset={() => (setCreated(null), setStage(null), setBase(''))} />
         ) : (
@@ -218,7 +229,10 @@ export function CreatePerp() {
                     <Row k="Quoted in">{c?.quote ?? 'USD'}, settled in perps collateral</Row>
                     <Row k="Trading fees">0.02% maker · 0.05% taker</Row>
                     <Row k="Funding">Between longs and shorts, capped at ±1% per interval</Row>
-                    <Row k="Cost to create">Gas only, about 0.0001 QRDX</Row>
+                    <Row k="Cost to create">
+                      {features.trading && features.costs.perpListingFee ? `${features.costs.perpListingFee} QRDX listing fee (burned)` : 'Gas only, about 0.0001 QRDX'}
+                      {seed ? `, and ${compact(seed)} of your perps collateral seeds its book` : ''}
+                    </Row>
                   </dl>
                 </Step>
 

@@ -24,3 +24,13 @@ export async function relayGet<T>(url: string, what: string, timeoutMs = 6_000):
   if (!res.ok) throw new Error(`${what} ${svc ? '(binding) ' : ''}HTTP ${res.status}`)
   return (await res.json()) as T
 }
+
+/** POST JSON to the relay; its answer, or an error carrying the relay's message. */
+export async function relayPost<T>(url: string, body: unknown, what: string, timeoutMs = 15_000): Promise<T> {
+  const svc = binding()
+  const req = new Request(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body), signal: AbortSignal.timeout(timeoutMs) })
+  const res = await (svc ? svc.fetch(req) : fetch(req))
+  const out = (await res.json().catch(() => null)) as (T & { error?: string }) | null
+  if (!res.ok) throw new Error(out?.error ?? `${what} HTTP ${res.status}`)
+  return out as T
+}

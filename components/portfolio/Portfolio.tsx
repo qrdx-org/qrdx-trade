@@ -13,6 +13,9 @@ import { TokenBadge } from '@/components/trade/TokenBadge'
 import { ConnectButton } from '@/components/wallet/ConnectButton'
 import { PnlChart, RANGES, RangeId, rangePoints } from '@/components/portfolio/PnlChart'
 import { ExportMenu } from '@/components/portfolio/ExportMenu'
+import { AccountTools } from '@/components/portfolio/AccountTools'
+import { OrderHistoryTable, TradeHistoryTable } from '@/components/portfolio/HistoryTables'
+import { useFeatures } from '@/lib/hooks/useFeatures'
 import { compact, fixed, size as fmtSize, timeAgo, tone } from '@/lib/format'
 import { useApi } from '@/lib/hooks/useApi'
 import type { AccountResponse, ApiAsset, IndexPrice, PnlMarket, PnlResponse } from '@/lib/types'
@@ -35,14 +38,15 @@ export function Portfolio() {
   const { apiBase } = useNet()
   // ?address= shows any account, read only; otherwise the connected wallet's.
   const param = useSearchParams().get('address')
-  const watched = param && /^0xPQ[0-9a-fA-F]{64}$/.test(param) && param !== w.trader ? param : null
-  const address = watched ?? w.trader
+  const watched = param && /^0x(PQ[0-9a-fA-F]{64}|(SUBA|UVLT)[0-9a-fA-F]{36})$/.test(param) && param !== w.tradingAccount ? param : null
+  const address = watched ?? w.tradingAccount
   const own = useAccount()
   const other = useApi<AccountResponse>(watched ? `${apiBase}/accounts/${watched}` : null, 15_000)
   const account = watched ? other : own
   const a = account.data
   const pnl = useApi<PnlResponse>(address ? `${apiBase}/accounts/${address}/pnl` : null, 30_000)
   const [range, setRange] = useState<RangeId>('all')
+  const features = useFeatures()
 
   const held = useMemo(() => (a?.balances ?? []).filter((b) => Number(b.balance) > 0 || Number(b.inOrders) > 0), [a])
   const collateral = a?.perp?.collateral_token || null
@@ -235,6 +239,8 @@ export function Portfolio() {
 
       {pnl.data && pnl.data.markets.length > 0 && <MarketsPnl markets={pnl.data.markets} />}
 
+      {!watched && <AccountTools account={a} />}
+
       <section className="mt-4 h-[460px] overflow-hidden rounded-xl border bg-card">
         <AccountPanel
           tabs={
@@ -242,6 +248,7 @@ export function Portfolio() {
               ? [
                   { id: 'balances', label: 'Balances', render: () => <BalancesTable account={a} />, public: true },
                   { id: 'lp', label: 'Liquidity', render: () => <LpTable account={a} />, public: true },
+                  ...(features.history ? [{ id: 'trades', label: 'Trade history', render: () => <TradeHistoryTable address={address} />, public: true }] : []),
                 ]
               : [
                   { id: 'balances', label: 'Balances', render: () => <BalancesTable account={a} /> },
@@ -249,6 +256,12 @@ export function Portfolio() {
                   { id: 'lp', label: 'Liquidity', render: () => <LpTable account={a} /> },
                   { id: 'positions', label: 'Perp positions', render: () => <PositionsTable account={a} /> },
                   { id: 'porders', label: 'Perp orders', render: () => <PerpOrdersTable account={a} /> },
+                  ...(features.history
+                    ? [
+                        { id: 'trades', label: 'Trade history', render: () => <TradeHistoryTable address={address} /> },
+                        { id: 'ohist', label: 'Order history', render: () => <OrderHistoryTable address={address} /> },
+                      ]
+                    : []),
                 ]
           }
         />

@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ConnectButton } from '@/components/wallet/ConnectButton'
 import { S, dec, div, isAmount, lessSlippage, mul, round, str } from '@/lib/decimal'
-import { perpTriggerKind, spotLimitParams, spotTriggerParams } from '@/lib/orders'
+import { perpTriggerKind, spotLimitParams, spotTriggerParams, twapPlan } from '@/lib/orders'
 import { useFeatures } from '@/lib/hooks/useFeatures'
 import { fixed, percent, price as fmtPrice, size as fmtSize } from '@/lib/format'
 import { useApi, useDebounced } from '@/lib/hooks/useApi'
@@ -14,7 +14,7 @@ import { useNet, useWallet } from '@/lib/wallet/WalletContext'
 import { cn } from '@/lib/utils'
 
 type Side = 'buy' | 'sell'
-type Kind = 'limit' | 'market' | 'stop'
+type Kind = 'limit' | 'market' | 'stop' | 'twap'
 type Tif = 'gtc' | 'alo' | 'ioc' | 'fok'
 const TIFS: { id: Tif; label: string; title: string }[] = [
   { id: 'gtc', label: 'GTC', title: 'Good till cancelled: what does not fill rests on the book' },
@@ -45,7 +45,10 @@ export function SpotOrderForm({
   const { trading } = useFeatures()
   const [side, setSide] = useState<Side>('buy')
   const [kindState, setKind] = useState<Kind>('limit')
-  const kind: Kind = !trading && kindState === 'stop' ? 'limit' : kindState
+  const kind: Kind = !trading && (kindState === 'stop' || kindState === 'twap') ? 'limit' : kindState
+  const [minutes, setMinutes] = useState('30')
+  const twapMinutes = Number(minutes)
+  const plan = kind === 'twap' && twapMinutes >= 1 ? twapPlan(Math.round(twapMinutes * 60)) : null
   const [tif, setTif] = useState<Tif>('gtc')
   const [hidden, setHidden] = useState(false)
   const [display, setDisplay] = useState('')
@@ -100,7 +103,7 @@ export function SpotOrderForm({
   const quotePath =
     kind === 'market' && isAmount(swapIn) && dec(swapIn) > 0n && base.address && quote.address
       ? `${apiBase}/quote?from=${side === 'buy' ? quote.segment : base.segment}&to=${side === 'buy' ? base.segment : quote.segment}` +
-        `&amount=${swapIn}&venue=auto${w.trader ? `&sender=${w.trader}` : ''}`
+        `&amount=${swapIn}&venue=auto${w.tradingAccount ? `&sender=${w.tradingAccount}` : ''}`
       : null
   const q = useApi<SwapQuote>(quotePath, 10_000)
 
@@ -129,6 +132,13 @@ export function SpotOrderForm({
       if (w.trader && account && dec(need) > dec(avail)) return `Not enough ${availSym}.`
       return null
     }
+    if (kind === 'twap') {
+      const decimals = side === 'buy' ? quote.decimals : base.decimals
+      if (!isAmount(amountIn, decimals) || dec(amountIn) <= 0n) return `Enter an amount (up to ${decimals} decimals).`
+      if (w.trader && account && dec(amountIn) > dec(avail)) return `Not enough ${availSym}.`
+      if (!(twapMinutes >= 1 && twapMinutes <= 1440)) return 'A TWAP runs 1 minute to 24 hours.'
+      return null
+    }
     if (kind === 'limit') {
       if (resting && display && (!isAmount(display) || dec(display) <= 0n || dec(display) >= dec(size || '0'))) return 'An iceberg shows less than its size.'
       if (attach) {
@@ -155,7 +165,7 @@ export function SpotOrderForm({
   const setPct = (pct: number) => {
     const a = dec(avail)
     const part = (a * BigInt(pct)) / 100n
-    if (kind === 'market') return setAmountIn(round(str(part), side === 'buy' ? quote.decimals : base.decimals, 'down'))
+    if (kind === 'market' || kind === 'twap') return setAmountIn(round(str(part), side === 'buy' ? quote.decimals : base.decimals, 'down'))
     if (side === 'sell') return setSize(round(str(part), base.decimals, 'down'))
     const at = kind === 'stop' ? stopLimit || trigger : price
     // A buy stop without a limit escrows up to 10 % over its trigger.
@@ -168,7 +178,16 @@ export function SpotOrderForm({
     setBusy(true)
     setMsg(null)
     try {
-      if (kind === 'stop') {
+      if (kind === 'twap') {
+        const [tin, tout] = side === 'buy' ? [quote, base] : [base, quote]
+        await w.sendExchange({
+          op: 'TWAP_ORDER',
+          params: { token_in: tin.address, token_out: tout.address, amount_in: amountIn, duration: Math.round(twapMinutes * 60), slices: plan!.slices },
+          gasLimit: plan!.gas + 20_000,
+          label: `TWAP: ${amountIn} ${tin.symbol} → ${tout.symbol} over ${twapMinutes} min`,
+          market: market.id,
+        })
+      } else if (kind === 'stop') {
         await w.sendExchange({
           op: 'PLACE_ORDER',
           params: spotTriggerParams(market, side, stopKind!, trigger, size, stopLimit || undefined),
@@ -259,13 +278,13 @@ export function SpotOrderForm({
       </div>
 
       <div className="flex items-center gap-4 border-b text-[13px]">
-        {(trading ? (['limit', 'market', 'stop'] as const) : (['limit', 'market'] as const)).map((k) => (
+        {(trading ? (['limit', 'market', 'stop', 'twap'] as const) : (['limit', 'market'] as const)).map((k) => (
           <button
             key={k}
             onClick={() => setKind(k)}
             className={cn('relative pb-2 font-medium transition-colors', kind === k ? 'text-foreground' : 'text-muted-foreground hover:text-foreground')}
           >
-            {k === 'limit' ? 'Limit' : k === 'market' ? 'Market' : 'Stop'}
+            {k === 'limit' ? 'Limit' : k === 'market' ? 'Market' : k === 'stop' ? 'Stop' : 'TWAP'}
             {kind === k && <span className="absolute inset-x-0 -bottom-px h-0.5 rounded-full bg-foreground" />}
           </button>
         ))}
@@ -362,6 +381,18 @@ export function SpotOrderForm({
             </div>
           )}
         </>
+      ) : kind === 'twap' ? (
+        <>
+          <Field label={side === 'buy' ? 'Spend' : 'Sell'} unit={side === 'buy' ? quote.symbol : base.symbol}>
+            <Input value={amountIn} onChange={(e) => setAmountIn(e.target.value.trim())} inputMode="decimal" placeholder="0.00" className={INPUT} />
+          </Field>
+          <Field label="Over" unit="min">
+            <Input value={minutes} onChange={(e) => setMinutes(e.target.value.replace(/[^0-9.]/g, ''))} inputMode="decimal" className={INPUT} />
+          </Field>
+          <p className="text-[11px] text-muted-foreground">
+            {plan ? `${plan.slices} slices, one every ${Math.round((twapMinutes * 60) / plan.slices)} s, each through the best venue at most 3 % from its price. The amount is locked now; what is not spent comes back if you stop it.` : 'Swaps the amount in equal slices over the time.'}
+          </p>
+        </>
       ) : (
         <Field label={side === 'buy' ? 'Spend' : 'Sell'} unit={side === 'buy' ? quote.symbol : base.symbol}>
           <Input value={amountIn} onChange={(e) => setAmountIn(e.target.value.trim())} inputMode="decimal" placeholder="0.00" className={INPUT} />
@@ -382,7 +413,9 @@ export function SpotOrderForm({
       </div>
 
       <div className="space-y-1.5 rounded-lg border bg-muted/30 p-2.5 text-xs">
-        {kind !== 'market' ? (
+        {kind === 'twap' ? (
+          <Line k="Slices" v={plan ? `${plan.slices} × ${amountIn && isAmount(amountIn) ? fmtSize(str(div(dec(amountIn), dec(String(plan.slices))))) : '—'} ${side === 'buy' ? quote.symbol : base.symbol}` : '—'} />
+        ) : kind !== 'market' ? (
           <>
             <Line k="Total" v={limitTotal ? `${kind === 'stop' && !stopLimit ? '≈ ' : ''}${fixed(limitTotal, Math.min(8, quote.decimals))} ${quote.symbol}` : '—'} />
             <Line k={kind === 'stop' ? 'Waits for' : 'Rests on'} v={kind === 'stop' ? 'its trigger, funds locked' : hidden ? 'QRDX order book, hidden' : 'QRDX order book'} />
@@ -426,7 +459,7 @@ export function SpotOrderForm({
             accent === 'bid' ? 'bg-bid hover:bg-bid/90 shadow-lg shadow-bid/20' : 'bg-ask hover:bg-ask/90 shadow-lg shadow-ask/20'
           )}
         >
-          {busy ? 'Confirm in wallet…' : problem && problem !== 'Getting a quote…' ? problem : kind === 'stop' ? `Place ${stopKind === 'stop_loss' ? 'stop' : 'take profit'}: ${side} ${base.symbol}` : `${side === 'buy' ? 'Buy' : 'Sell'} ${base.symbol}`}
+          {busy ? 'Confirm in wallet…' : problem && problem !== 'Getting a quote…' ? problem : kind === 'stop' ? `Place ${stopKind === 'stop_loss' ? 'stop' : 'take profit'}: ${side} ${base.symbol}` : `${kind === 'twap' ? 'TWAP ' : ''}${side === 'buy' ? 'Buy' : 'Sell'} ${base.symbol}`}
         </Button>
       )}
       {msg && (
@@ -456,6 +489,8 @@ export function SpotOrderForm({
             ? 'Limit orders rest on the QRDX order book and lock their funds until filled or cancelled. '
             : kind === 'stop'
               ? 'Stop orders lock their funds until they fire or are cancelled. '
+              : kind === 'twap'
+                ? 'A TWAP locks its amount and swaps it slice by slice. '
               : 'Market orders swap through the better of the order book and the pools. '}
           {account?.freeActions?.freeNow ? `No gas: trading goes in the free lane (${account.freeActions.remaining.toLocaleString('en-US')} free actions left).` : GAS_NOTE}
         </p>

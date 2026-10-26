@@ -22,6 +22,7 @@ export const GET = handler(async (req, { params }: { params: Promise<{ version: 
           mintAuthority: t.mint_authority,
           freezeAuthority: t.freeze_authority,
           createdHeight: t.created_height,
+          ticker: t.ticker ?? null,
         }))
     : undefined
   return json({ assets, tokens, nodeOk: idx.nodeOk, source: 'node', asOf: nowSec() }, 15)

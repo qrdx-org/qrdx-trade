@@ -13,6 +13,7 @@ import { isAuthorityAddress } from '@/lib/launch'
 import type { AccountResponse, ApiAsset } from '@/lib/types'
 import { onPendingChange } from '@/lib/wallet/pending'
 import { useNet, useWallet } from '@/lib/wallet/WalletContext'
+import { useFeatures } from '@/lib/hooks/useFeatures'
 import { cn } from '@/lib/utils'
 
 interface TokenRow extends ApiAsset {
@@ -21,6 +22,8 @@ interface TokenRow extends ApiAsset {
   creator: string
   mintAuthority: string | null
   freezeAuthority: string | null
+  /** Its unique ticker (TICKER_CLAIM), on a node from 2026-10. */
+  ticker?: string | null
 }
 
 /**
@@ -68,6 +71,12 @@ export function MyTokens() {
 
 function TokenCard({ t, balance }: { t: TokenRow & { canMint: boolean }; balance: string | null }) {
   const w = useWallet()
+  const { apiBase } = useNet()
+  const { trading } = useFeatures()
+  const mineAsCreator = [w.account?.pqAddress, w.account?.address, w.account?.pqAccountId].some((a) => !!a && a.toLowerCase() === t.creator.toLowerCase())
+  const tickerOk = /^[A-Z0-9]{1,12}$/.test(t.symbol.toUpperCase())
+  const auction = useApi<{ price: string; floor: string; reserved: string[] }>(trading && mineAsCreator && !t.ticker && tickerOk ? `${apiBase}/tickers` : null, 30_000)
+  const reserved = !!auction.data?.reserved.includes(t.symbol.toUpperCase())
   const [open, setOpen] = useState<'mint' | 'renounce' | null>(null)
   const [amount, setAmount] = useState('')
   const [to, setTo] = useState('')
@@ -116,6 +125,14 @@ function TokenCard({ t, balance }: { t: TokenRow & { canMint: boolean }; balance
         </span>
         <span className="text-muted-foreground">You hold</span>
         <span className="text-right">{balance === null ? '—' : compact(balance)}</span>
+        {trading && (
+          <>
+            <span className="text-muted-foreground">Ticker</span>
+            <span className={cn('text-right', t.ticker ? 'text-bid' : 'text-muted-foreground')} title="A unique ticker: no other token can hold this symbol as its ticker">
+              {t.ticker ? `${t.ticker} (unique)` : 'none'}
+            </span>
+          </>
+        )}
         <span className="text-muted-foreground">Minting</span>
         <span className={cn('text-right', t.mintAuthority ? 'text-warn' : 'text-bid')}>
           {t.mintAuthority ? (t.canMint ? 'you' : shortAddress(t.mintAuthority, 4)) : 'fixed supply'}
@@ -136,6 +153,22 @@ function TokenCard({ t, balance }: { t: TokenRow & { canMint: boolean }; balance
         <Button size="sm" variant="outline" className="h-7 text-xs" asChild>
           <Link href={`/launch?token=${t.address}`}>Start market</Link>
         </Button>
+        {auction.data && !t.ticker && !reserved && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 text-xs"
+            disabled={busy}
+            title="Buy this token's symbol as its unique ticker at the auction's price (burned). The price falls over time and doubles after each sale."
+            onClick={() => {
+              // Allow 1 % of drift before the block; the node refuses above max_price.
+              const cap = (Number(auction.data!.price) * 1.01).toFixed(6)
+              void send('TICKER_CLAIM', { token_address: t.address, max_price: cap }, `Claim ${t.symbol.toUpperCase()} as ${t.name}'s ticker`)
+            }}
+          >
+            Claim ticker {t.symbol.toUpperCase()} · {compact(auction.data.price)} QRDX
+          </Button>
+        )}
         <Button size="sm" variant="outline" className="h-7 text-xs" asChild>
           <Link href={`/pools/new?token=${t.address}`}>Pool</Link>
         </Button>

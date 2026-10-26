@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { AlertTriangle, ArrowLeftRight, BarChart3, Droplets, Gauge, Image as ImageIcon, Landmark, Menu, PieChart, Rocket, Search, X } from 'lucide-react'
+import { AlertTriangle, ArrowLeftRight, BarChart3, Droplets, Gauge, Image as ImageIcon, Landmark, Menu, PieChart, Rocket, Search, Trophy, Vault, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Wordmark } from '@/components/chrome/Logo'
 import { ThemeToggle } from '@/components/theme-toggle'
@@ -20,7 +20,9 @@ const LINKS = [
   { href: '/pools', label: 'Pools', icon: Droplets },
   { href: '/launch', label: 'Launch', icon: Rocket },
   { href: '/nfts', label: 'NFTs', icon: ImageIcon },
+  { href: '/vaults', label: 'Vaults', icon: Vault },
   { href: '/stake', label: 'Stake', icon: Landmark },
+  { href: '/leaderboard', label: 'Leaders', icon: Trophy },
   { href: '/portfolio', label: 'Portfolio', icon: PieChart },
 ]
 

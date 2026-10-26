@@ -239,6 +239,22 @@ Operations of nodes from 2026-10 (qrdx-node docs/TRADING_FEATURES.md), offered o
 | TWAP | `TWAP_ORDER` / `TWAP_CANCEL` | `market_id`, `side`, `size`, `duration`, `slices`, `reduce_only` / `twap_id`; gas prepaid per slice (`twapPlan`) |
 | Isolated margin | `PERP_ISOLATED_MARGIN` | `market_id`, `amount` (negative removes) |
 
+**Trading account and one-click trading** (`lib/wallet/WalletContext.tsx`). `trader` is the wallet
+account's own address (staking, launches, NFTs and EVM calls are always its own). `tradingAccount` is
+what the trading screens read and trade: `trader`, or a sub-account or vault it leads, chosen above the
+order forms or in Portfolio. Trading operations and perps deposits are then sent with `sender` that
+account, and the wallet signs as `signer` (the node checks it may). One-click trading (`lib/agent.ts`)
+keeps an ML-DSA key in this browser's storage per network and account, approved once by the wallet as
+an agent for 7 days; operations an agent may sign (`AGENT_SCOPE`) are then signed here
+(`lib/exchange-sign.ts`, the wallet's bytes, tested against the node's) and sent to the node's RPC
+directly, in the free lane where the account has free actions. Turning it off has the agent revoke
+itself. An agent can trade the account's funds but never move them out.
+
+**NFT market contract** (`lib/server/nfts.ts nftMarket`). The configured address, else the one the
+relay's registry holds (`relay/src/profiles-do.ts`, `POST /api/{v}/nfts/market`), in either case only
+while its code on chain is the market's: a network reset leaves the market read-only rather than
+pointed at nothing, and a new deployment from the NFTs page opens trading without a site redeploy.
+
 Perp prices and sizes sit on the market's grid (`szDecimals`: 5 significant figures, whole
 lots; `lib/perps.ts gridPrice`): the form says when an input is off it, and computed prices (a
 market order's limit, a chart level) are rounded onto it.

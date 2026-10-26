@@ -13,6 +13,7 @@ import { OrderBookPanel } from '@/components/trade/OrderBookPanel'
 import { PerpOrderForm } from '@/components/trade/PerpOrderForm'
 import { PerpOrdersTable, PositionsTable } from '@/components/trade/PerpTables'
 import { TriggersTable, TwapsTable } from '@/components/trade/TriggerTables'
+import { TradingAccountBar } from '@/components/trade/TradingAccount'
 import { PriceChart } from '@/components/trade/PriceChart'
 import { TerminalSkeleton, useAccount } from '@/components/trade/SpotTradeView'
 import { TokenBadge } from '@/components/trade/TokenBadge'
@@ -236,6 +237,7 @@ export function PerpTradeView({ base, quote }: { base: string; quote: string }) 
         <Panel className="lg:row-span-2">
           <div className="flex min-h-0 flex-1 flex-col lg:overflow-y-auto">
             <TradeGate>
+              <TradingAccountBar />
               <PerpOrderForm market={m} book={book.data} account={account.data} pickedPrice={picked} pickedTrigger={pickedTrigger} />
             </TradeGate>
           </div>

@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { AccountPanel, BalancesTable, SpotOrdersTable } from '@/components/trade/AccountPanel'
 import { TriggersTable, TwapsTable } from '@/components/trade/TriggerTables'
+import { TradingAccountBar } from '@/components/trade/TradingAccount'
 import { useFeatures } from '@/lib/hooks/useFeatures'
 import { MarketSelector } from '@/components/trade/MarketSelector'
 import { PairError, UnverifiedBanner } from '@/components/trade/MarketStatus'
@@ -27,17 +28,19 @@ import { explorerLink } from '@/lib/config'
 import { cn } from '@/lib/utils'
 
 /**
- * The connected account: re-read when the node says its spot or perps state changed (a
- * block filled an order, a swap settled), and polled slowly as a fallback.
+ * The trading account (the wallet's own, or a sub-account or vault it trades as): re-read when
+ * the node says its spot or perps state changed (a block filled an order, a swap settled), and
+ * polled slowly as a fallback.
  */
 export function useAccount(): ReturnType<typeof useApi<AccountResponse>> {
   const { apiBase, network } = useNet()
   const w = useWallet()
+  const a = w.tradingAccount
   const live = useStreamLive(network.nodeUrl)
-  const acct = useApi<AccountResponse>(w.trader ? `${apiBase}/accounts/${w.trader}` : null, live ? 20_000 : 3_000)
+  const acct = useApi<AccountResponse>(a ? `${apiBase}/accounts/${a}` : null, live ? 20_000 : 3_000)
   const { refresh } = acct
   useEffect(() => onPendingChange(refresh), [refresh])
-  useNodeStream(network.nodeUrl, [w.trader && `spot_account:${w.trader}`, w.trader && `perp_account:${w.trader}`], refresh, 750)
+  useNodeStream(network.nodeUrl, [a && `spot_account:${a}`, a && `perp_account:${a}`], refresh, 750)
   return acct
 }
 
@@ -246,6 +249,7 @@ export function SpotTradeView({ base, quote }: { base: string; quote: string }) 
         <Panel className="lg:row-span-2">
           <div className="flex min-h-0 flex-1 flex-col lg:overflow-y-auto">
             <TradeGate>
+              <TradingAccountBar />
               <SpotOrderForm market={m} book={book.data} account={account.data} pickedPrice={picked} pickedTrigger={pickedTrigger} />
             </TradeGate>
           </div>

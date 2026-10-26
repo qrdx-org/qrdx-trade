@@ -16,6 +16,8 @@ import { cached } from './cache'
 import { ApiError } from './http'
 import type { Net } from './net'
 import type { NodeNft, NodeNftCollection } from './node'
+import { relayGet } from './relay-service'
+import { isMarketCode } from '../nft-market-code'
 
 const MAX_ITEMS = 2000
 const REORG_DEPTH = 64
@@ -72,9 +74,27 @@ interface LogState {
 }
 const logState = new Map<string, LogState>()
 
+/**
+ * The network's NFT market contract: the configured one (lib/config.ts, the env), else the one
+ * registered with the relay by whoever deployed it (relay/src/profiles-do.ts), whichever has
+ * the market's code on chain now. A configured address a network reset left without code is
+ * ignored, so the market goes read-only rather than pointing at nothing. Null: none.
+ */
+export function nftMarket(net: Net): Promise<string | null> {
+  return cached(net.key('nft-market'), 30_000, async () => {
+    const registered = await relayGet<{ address: string | null }>(`${net.cfg.profilesUrl}/v1/${net.cfg.id}/nft-market`, 'nft market registry')
+      .then((r) => r.address)
+      .catch(() => null)
+    for (const candidate of [marketAddress(net.slot), registered]) {
+      if (candidate && isMarketCode(await net.node.code(candidate).catch(() => null))) return candidate.toLowerCase()
+    }
+    return null
+  })
+}
+
 /** Every market event so far, read incrementally (the last REORG_DEPTH blocks are re-read). */
 export async function marketEvents(net: Net): Promise<MarketEvent[]> {
-  const market = marketAddress(net.slot)
+  const market = await nftMarket(net)
   if (!market) return []
   return cached(net.key(`nft-events:${market}`), 2_000, async () => {
     const key = net.key(market)
@@ -150,7 +170,7 @@ async function approvals(net: Net, market: string, items: { collection: string; 
 
 /** NFTs with their listing, if any, and whether it is live. */
 async function withListings(net: Net, nfts: NodeNft[], listings: Map<string, ActiveListing>): Promise<NftItem[]> {
-  const market = marketAddress(net.slot)
+  const market = await nftMarket(net)
   const listed = nfts.map((n) => listings.get(listingKey(n.collection, n.token_id)) ?? null)
   const approved = market ? await approvals(net, market, nfts.filter((_, i) => listed[i])) : []
   // The approval answer for each listed NFT, by its position among the listed ones.
@@ -211,7 +231,7 @@ export async function marketOverview(net: Net) {
   const [list, events] = await Promise.all([collections(net), marketEvents(net)])
   const listings = activeListings(events)
   return {
-    market: marketAddress(net.slot),
+    market: await nftMarket(net),
     collections: list.map((c) => ({ ...c, stats: stats(null, events, c.collection, listings) })),
     sales: await sales(net, events),
   }
@@ -226,7 +246,7 @@ export async function collectionPage(net: Net, address: string) {
   const listings = activeListings(events)
   const items = await withListings(net, nfts, listings)
   return {
-    market: marketAddress(net.slot),
+    market: await nftMarket(net),
     collection: c,
     items,
     truncated: c.minted > MAX_ITEMS,
@@ -247,7 +267,7 @@ export async function itemPage(net: Net, address: string, tokenId: string) {
     .filter((e) => e.collection.toLowerCase() === c.collection.toLowerCase() && e.tokenId === tokenId)
     .sort((a, b) => b.block - a.block || b.index - a.index)
   return {
-    market: marketAddress(net.slot),
+    market: await nftMarket(net),
     collection: c,
     item,
     history: await Promise.all(
@@ -260,7 +280,7 @@ export async function itemPage(net: Net, address: string, tokenId: string) {
 export async function accountNfts(net: Net, owner: string) {
   if (!/^0x(PQ[0-9a-fA-F]{64}|[0-9a-fA-F]{40})$/.test(owner)) throw new ApiError('bad_request', `Not an address: ${owner}`)
   const [nfts, events] = await Promise.all([net.node.nftsOf(owner, null, 500), marketEvents(net)])
-  const market = marketAddress(net.slot)
+  const market = await nftMarket(net)
   const items = await withListings(net, nfts, activeListings(events))
   const approved = market ? await approvals(net, market, nfts) : nfts.map(() => false)
   const ownerId = accountId(owner)

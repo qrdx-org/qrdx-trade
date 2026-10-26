@@ -8,6 +8,13 @@
  *   GET  /api/profiles/v1/{network}/{kind}s/{address}/proof  the signed message, for anyone to check
  *   POST /api/profiles/v1/{network}/{kind}s                  { message, signature, publicKey? }
  *   GET  /api/profiles/v1/{network}/image/{kind}/{address}   the profile image, proxied
+ *   GET  /api/profiles/v1/{network}/nft-market               the NFT market contract registered here
+ *   POST /api/profiles/v1/{network}/nft-market               { address }: register a deployment
+ *
+ * The NFT market registry lets anyone who deploys contracts/QRDXNFTMarket.sol open NFT trading
+ * on a network without the site being redeployed. An address is accepted only if its code on
+ * chain is the market's (lib/nft-market-code.ts), and replaces the registered one only once
+ * that one has no such code any more (a network reset): the first live deployment stands.
  *
  * A removal is kept as a tombstone with its time, so an older signed claim can
  * never be replayed over it.
@@ -30,6 +37,7 @@ import {
   parseProfileMessage,
 } from './profile-claim'
 import { verifySigner } from './profile-verify'
+import { marketCodeAt } from '../../lib/nft-market-code'
 import { json, type Env } from './worker'
 
 const MAX_IMAGE_BYTES = 2 * 1024 * 1024
@@ -56,6 +64,21 @@ export class Profiles extends DurableObject<Env> {
          kind TEXT NOT NULL, subject TEXT NOT NULL, signer TEXT NOT NULL, data TEXT,
          issued_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, proof TEXT NOT NULL,
          PRIMARY KEY (kind, subject))`
+    )
+    this.sql.exec('CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at INTEGER NOT NULL)')
+  }
+
+  async getSetting(key: string): Promise<string | null> {
+    const row = this.sql.exec<{ value: string }>('SELECT value FROM settings WHERE key = ?', key).toArray()[0]
+    return row?.value ?? null
+  }
+
+  async setSetting(key: string, value: string): Promise<void> {
+    this.sql.exec(
+      'INSERT INTO settings (key, value, updated_at) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at',
+      key,
+      value,
+      Math.floor(Date.now() / 1000)
     )
   }
 
@@ -156,6 +179,8 @@ export async function profilesFetch(req: Request, env: Env): Promise<Response> {
 
 async function route(req: Request, env: Env): Promise<Response> {
   const url = new URL(req.url)
+  const market = /^.*\/profiles\/v1\/([^/]+)\/nft-market\/?$/.exec(url.pathname)
+  if (market) return nftMarket(req, env, market[1])
   const m = /^(.*\/profiles)\/v1\/([^/]+)\/(accounts|tokens|image)(?:\/([^/]+))?(?:\/([^/]+))?(?:\/(proof))?\/?$/.exec(url.pathname)
   if (!m) return json({ error: 'not found' }, 404)
   const [, prefix, network, section, a, b, proof] = m
@@ -219,6 +244,27 @@ async function submit(req: Request, env: Env, network: string, rpc: string, kind
   const res = await env.PROFILES.get(env.PROFILES.idFromName(network)).put(claim, proof)
   if ('conflict' in res) throw new ProfileError('a newer profile is already published for this address; sign again', 409)
   return res.row ? { ok: true, profile: publicView(base, network, res.row) } : { ok: true, removed: true }
+}
+
+async function nftMarket(req: Request, env: Env, network: string): Promise<Response> {
+  const rpc = networks(env)[network]
+  if (!NETWORK_NAME.test(network) || !rpc) return json({ error: `unknown network ${network}` }, 404)
+  const stub = env.PROFILES.get(env.PROFILES.idFromName(network))
+  const current = await stub.getSetting('nft-market')
+  if (req.method === 'GET') return json({ address: current }, 200, 30)
+  if (req.method !== 'POST') return json({ error: 'method not allowed' }, 405)
+  const body = (await req.json().catch(() => null)) as { address?: unknown } | null
+  const address = typeof body?.address === 'string' ? body.address.trim().toLowerCase() : ''
+  if (!EVM_ADDRESS.test(address)) throw new ProfileError('body must be { address: "0x…" }')
+  if (current === address) return json({ ok: true, address })
+  const check = (a: string) =>
+    marketCodeAt(rpc, a).catch(() => {
+      throw new ProfileError('the QRDX node is unreachable; try again', 503)
+    })
+  if (!(await check(address))) throw new ProfileError(`${address} is not the NFT market contract (its code differs from contracts/QRDXNFTMarket.sol)`)
+  if (current && (await check(current))) throw new ProfileError(`${network} already has a live NFT market at ${current}`, 409)
+  await stub.setSetting('nft-market', address)
+  return json({ ok: true, address })
 }
 
 /** The owner's image, fetched by the relay: visitors never contact the owner's host. */

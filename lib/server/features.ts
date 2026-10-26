@@ -17,6 +17,14 @@ export interface ProtocolCosts {
   perpListingFee: string | null
   /** The exchange's gas price floor outside the free lane, wei (EXCHANGE_MIN_GAS_PRICE_WEI). */
   exchangeMinGasPriceWei: string | null
+  /** Anyone may list a validator-priced perp market (PERP_OPEN_LISTING); else governance lists them. */
+  perpOpenListing: boolean | null
+  /** Perps collateral a new market seeds its liquidity vault with, at least (PERP_MARKET_MIN_LIQUIDITY). */
+  perpMinLiquidity: string | null
+  /** QRDX a deployer bonds to list its own markets (DEPLOYER_MIN_BOND). */
+  deployerMinBond: string | null
+  /** Seconds without an oracle update before a market's oracle is stale (PERP_ORACLE_STALE_SECONDS). */
+  oracleStaleSeconds: number | null
 }
 
 export interface FeaturesResponse extends NodeFeatures {
@@ -41,6 +49,10 @@ export async function features(net: Net): Promise<FeaturesResponse> {
         poolStakeStandard: f.trading ? '25' : '10000',
         perpListingFee: param('PERP_MARKET_LISTING_FEE'),
         exchangeMinGasPriceWei: param('EXCHANGE_MIN_GAS_PRICE_WEI'),
+        perpOpenListing: param('PERP_OPEN_LISTING') === null ? null : param('PERP_OPEN_LISTING') !== '0',
+        perpMinLiquidity: param('PERP_MARKET_MIN_LIQUIDITY'),
+        deployerMinBond: param('DEPLOYER_MIN_BOND'),
+        oracleStaleSeconds: param('PERP_ORACLE_STALE_SECONDS') === null ? null : Number(param('PERP_ORACLE_STALE_SECONDS')),
       },
       source: 'node' as const,
       asOf: nowSec(),

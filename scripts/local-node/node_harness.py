@@ -347,7 +347,9 @@ METHODS = {
                                   "gasUsedRatio": [0.0], "reward": [["0x0"]]},
     "eth_getLogs": lambda *_: [],
     "exchange_gasPrice": lambda: 10 ** 9,
-    "exchange_getNonce": lambda addr: mgr.get_nonce(views.account_key(mgr.clearinghouse, addr) or addr),
+    # (With a signer: that signer's lane for the account, as the node's exchange_getNonce.)
+    "exchange_getNonce": lambda addr, signer=None: mgr.get_nonce(
+        (lambda key: f"{key}|{signer}" if signer and signer != key else key)(views.account_key(mgr.clearinghouse, addr) or addr)),
     "exchange_getTokenBalance": lambda token, addr: str(bal(addr, token)),
     "exchange_getTokenAccount": lambda token, addr: {"token_address": token, "address": addr,
                                                      "balance": str(bal(addr, token)), "frozen": False},
@@ -403,6 +405,19 @@ METHODS.update({
     "market_getCandles": lambda market, interval="1m", limit=200, end=None:
         views.market_candles(mgr, market, interval, limit, end),
 })
+
+
+def _chain_spec():
+    """The parameters this engine runs with, as qrdx_chainSpec reports them (no genesis or
+    forks: the harness has none)."""
+    from qrdx import constants
+    params = getattr(constants, "_NETWORK_PARAMS", {})
+    return {"network": "local", "chain_id": CHAIN_ID, "dev": True,
+            "params": {k: (str(v) if isinstance(v, D) else v) for k, v in dict(params).items()},
+            "node_version": getattr(constants, "NODE_VERSION", "harness")}
+
+
+METHODS["qrdx_chainSpec"] = _chain_spec
 
 
 def _serve_node_rpc_modules():

@@ -47,3 +47,8 @@ export async function cached<T>(key: string, ttlMs: number, load: () => Promise<
 export function peek<T>(key: string): T | undefined {
   return (store.get(key) as Entry<T> | undefined)?.value
 }
+
+/** Drop a cached value, so the next read loads it again. */
+export function forget(key: string): void {
+  store.delete(key)
+}

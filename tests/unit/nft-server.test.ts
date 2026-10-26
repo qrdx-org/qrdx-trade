@@ -3,7 +3,7 @@
  * owns the NFT and the market may move it; floor, volume and sales come from the market's logs.
  */
 import { beforeAll, describe, expect, it, vi } from 'vitest'
-import { accountId, EVENTS } from '@/lib/nft-market'
+import { accountId, EVENTS, MARKET_ARTIFACT } from '@/lib/nft-market'
 
 const MARKET = '0x' + '4d'.repeat(20)
 const COLL = '0x' + 'cc'.repeat(20)
@@ -16,6 +16,8 @@ const log = (topics: string[], data: string[], block: number) => ({
 const listed = (id: number, wei: bigint, block: number, seller = SELLER) => log([EVENTS.Listed, w(COLL), w(id.toString(16)), w(accountId(seller))], ['0', wei.toString(16)], block)
 const sold = (id: number, wei: bigint, block: number) => log([EVENTS.Sold, w(COLL), w(id.toString(16)), w(accountId(BUYER))], [accountId(SELLER), '0', wei.toString(16), accountId(SELLER), '0'], block)
 
+const codeAt: Record<string, string> = { [MARKET]: MARKET_ARTIFACT.deployedBytecode }
+
 // NFT 1: listed for 2 QRDX, the market approved: live. NFT 2: listed, then given away: stale.
 // NFT 3: listed at 1, sold: not listed. NFT 4: listed but the market not approved: stale.
 const owners: Record<string, string> = { '1': SELLER, '2': BUYER, '3': BUYER, '4': '0x' + 'e4'.repeat(20) }
@@ -26,6 +28,8 @@ const node = {
   nftsOf: async () => [nftRow('1')],
   history: async () => ({ transactions: [], next_cursor: null }),
   token: async () => null,
+  // The market's own runtime code at its address (lib/server/nfts.ts checks it on chain).
+  code: async (a: string) => (codeAt[a.toLowerCase()] ?? '0x'),
   logs: async () => [listed(1, 2n * 10n ** 18n, 10), listed(2, 5n * 10n ** 18n, 11), listed(3, 10n ** 18n, 12), sold(3, 10n ** 18n, 13), listed(4, 3n * 10n ** 18n, 14, owners['4'])],
   batch: async (calls: { method: string; params: unknown[] }[]) =>
     calls.map((c) =>
@@ -50,6 +54,16 @@ beforeAll(async () => {
 })
 
 describe('NFT market reads', () => {
+  it('trades through the configured market only while it has the market\u2019s code', async () => {
+    expect(await mod.nftMarket(net)).toBe(MARKET)
+    const saved = codeAt[MARKET]
+    codeAt[MARKET] = '0x' // a network reset: nothing at the address any more
+    expect(await mod.nftMarket(net)).toBeNull()
+    codeAt[MARKET] = '0x6080' // some other contract
+    expect(await mod.nftMarket(net)).toBeNull()
+    codeAt[MARKET] = saved
+  })
+
   it('marks listings live or stale from ownership and approval', async () => {
     const page = await mod.collectionPage(net, COLL)
     const by = Object.fromEntries(page.items.map((i) => [i.token_id, i.listing]))

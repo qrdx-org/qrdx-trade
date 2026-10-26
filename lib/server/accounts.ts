@@ -15,14 +15,16 @@ import { refForAddress, resolveSegment, tokenIndex } from './resolve'
 import { mapLimit } from './util'
 
 const PQ_ADDRESS_RE = /^0xPQ[0-9a-fA-F]{64}$/
+/** A sub-account (0xSUBA…) or a user vault (0xUVLT…): accounts no key signs for directly. */
+const PROTOCOL_ACCOUNT_RE = /^0x(SUBA|UVLT)[0-9a-fA-F]{36}$/
 /** Tokens checked per account read, newest first (plus verified, requested, and in-use ones). */
 const MAX_SCANNED_TOKENS = 300
 const BALANCE_CONCURRENCY = 16
 
 export function checkTraderAddress(address: string): void {
   // Exchange operations are signed by the PQ key; accounts are keyed by the 0xPQ address.
-  if (!PQ_ADDRESS_RE.test(address) && !isTokenAddress(address)) {
-    throw new ApiError('bad_request', 'Expected a 0xPQ… address (or a 0x… account)')
+  if (!PQ_ADDRESS_RE.test(address) && !PROTOCOL_ACCOUNT_RE.test(address) && !isTokenAddress(address)) {
+    throw new ApiError('bad_request', 'Expected a 0xPQ… address (or a 0x… account, a 0xSUBA… sub-account or a 0xUVLT… vault)')
   }
 }
 

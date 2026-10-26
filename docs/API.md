@@ -546,14 +546,23 @@ One address's stake (pass the `0xPQ` address):
 QRDX's native NFTs (qrdx-node docs/NATIVE_TOKENS.md §8) and the fixed-price market on top of them,
 `contracts/QRDXNFTMarket.sol`: a sale moves the NFT, the payment (QRDX or a native token) and the
 collection's royalty in one EVM transaction, and nothing is escrowed. The market contract per network is
-`nftMarket` in lib/config.ts, which `NEXT_PUBLIC_QRDX_MAIN_NFT_MARKET` / `NEXT_PUBLIC_QRDX_TEST_NFT_MARKET`
-override. None is deployed since testnet's regenesis of 2026-10-25. `market` is `null` where none is
-configured, and the reads below still list collections and NFTs.
+`nftMarket` in lib/config.ts (`NEXT_PUBLIC_QRDX_MAIN_NFT_MARKET` / `NEXT_PUBLIC_QRDX_TEST_NFT_MARKET` override
+it), else the deployment registered with the relay (below), and in either case only while its code on chain is
+`QRDXNFTMarket`'s (`lib/nft-market-code.ts`): an address a network reset left empty is ignored. None is
+deployed on testnet since its regenesis of 2026-10-25. `market` is `null` where there is none, and the reads
+below still list collections and NFTs.
 
 A listing comes from the contract's logs. It is **live** while its seller still owns the NFT and the market
 may move it (an operator approval for the collection, or the NFT's own approval); otherwise it is **stale**:
 buying it would revert, and anyone may clear it with `delist`. Prices are in the currency's base units
 (`price`) and in its display units (`priceDisplay`).
+
+### `GET /api/v1/nfts/market`, `POST /api/v1/nfts/market`
+
+`GET`: `{ market, codeHash }`, the market in use (or `null`) and the keccak256 of the runtime code a market
+must have. `POST { address }` registers a deployment as the network's market, for everyone and without
+redeploying the site: accepted only if the address has that code on chain, and only while the network has
+no live market. The NFTs page deploys the contract from the connected account and registers it.
 
 ### `GET /api/v1/nfts`
 
@@ -610,8 +619,58 @@ What this network's node runs and what the protocol charges on it, cached for a 
   them only where it is true.
 - `history`: the node keeps the trading history database (`history_*`).
 - `costs`: QRDX a pool costs to create (burned for a subsidized one, staked for a standard one;
-  constants of the node release), the perp listing fee and the exchange's gas price floor (chain
-  spec; `null` where the node does not report them).
+  constants of the node release), and from the chain spec (`null` where the node does not report
+  them): the perp listing fee, the exchange's gas price floor, whether anyone may list a
+  validator-priced perp market (`perpOpenListing`; else governance does, and anyone else lists a
+  deployer market), the liquidity a new market seeds its book with (`perpMinLiquidity`), a
+  deployer's minimum bond (`deployerMinBond`) and when an oracle goes stale (`oracleStaleSeconds`).
+
+## Trading features
+
+On a node with them (`/features` `trading`, or `history` for the history reads); each answers
+`501 not_implemented` on one without.
+
+### `GET /api/v1/accounts/{address}/control`
+
+Who may trade for an account and what it pays: `{ agents: [{ agent, name, valid_until,
+max_notional_per_day?, placed_today? }], subaccounts: [{ subaccount, index, name }], vaults: [<vault>],
+fees: <perp_getFeeSchedule for the address> }`. `vaults` are those it leads.
+
+### `GET /api/v1/accounts/{address}/history?kind=trades|orders&market=&limit=100&cursor=`
+
+The account's trades (with its role, side, fee and realized PnL) or order events (placed, modified,
+cancelled, triggered, filled…) from the node's trading history, newest first: `{ kind, items,
+nextCursor }`; pass `nextCursor` back as `cursor`.
+
+### `GET /api/v1/leaderboard?window=day|week|month|all&metric=pnl|volume&limit=50`
+
+Perps accounts ranked by realized PnL net of fees, or by volume: `{ rows: [{ account, pnl, volume,
+trades }] }`.
+
+### `GET /api/v1/vaults`, `GET /api/v1/vaults/{vault}[?holder=0xPQ…]`
+
+User vaults (copy trading) and markets' liquidity vaults, largest first: `{ vault, leader, name,
+profitShare, created, marketMakerFor, nav, totalShares, shareValue, leaderShares, holders,
+withdrawable, lockupSeconds, positions, holding }`. With `holder`, `holding` is its `{ shares, cost,
+value, unlock }`. Join with `VAULT_DEPOSIT {vault, amount}`, leave with `VAULT_WITHDRAW {vault,
+shares}`; the leader trades the vault by signing for it (`sender` the vault).
+
+### `GET /api/v1/deployers/{address-or-namespace}`
+
+A perp market deployer: `{ deployer: { address, dex, bond, unbonding, unlock, markets } | null }`.
+
+### `GET /api/v1/tickers`
+
+The unique-ticker auction (`TICKER_CLAIM`): `{ price, floor, openingPrice, auctionSeconds, lastSale,
+claimed, reserved }`. `/assets?all=1` rows carry each token's `ticker`.
+
+### Acting for another account, and one-click trading
+
+Accounts `0xSUBA…` (sub-accounts) and `0xUVLT…` (vaults) are read like any (`/accounts/{address}`). To
+trade as one, send `qrdx_sendExchangeTransaction` / `qrdx_sendExchangeBatch` with `sender` the account:
+the wallet signs as `signer`, and its approval names the account. One-click trading signs in the
+browser with an agent key the wallet approved (`AGENT_APPROVE`), sending to the node directly
+(`lib/agent.ts`).
 
 ### `GET /api/v1/status`
 

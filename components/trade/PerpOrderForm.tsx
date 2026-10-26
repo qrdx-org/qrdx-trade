@@ -106,6 +106,9 @@ export function PerpOrderForm({
   const position = perp?.positions[market.id]
   const effective = current?.leverage ?? (position && Number(position.size) !== 0 ? position.leverage : null)
   useEffect(() => {
+    if (market.deployer) setMode('isolated')
+  }, [market.deployer])
+  useEffect(() => {
     if (current) {
       setLev(current.leverage)
       setMode(current.mode)
@@ -294,7 +297,8 @@ export function PerpOrderForm({
           onChange={(e) => setMode(e.target.value as 'cross' | 'isolated')}
           className="h-8 rounded-md border bg-background px-2 font-medium"
         >
-          <option value="cross">Cross</option>
+          {/* A deployer market takes isolated margin only (its oracle must reach no one's cross collateral). */}
+          {!market.deployer && <option value="cross">Cross</option>}
           <option value="isolated">Isolated</option>
         </select>
         <input

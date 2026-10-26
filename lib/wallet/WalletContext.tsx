@@ -23,6 +23,7 @@ import {
   providerErrorMessage,
 } from './provider'
 import { addPending } from './pending'
+import { agentSend, createAgent, inAgentScope, loadAgent, saveAgent, type StoredAgent } from '../agent'
 import { RemoteProvider, RemoteState } from './remote'
 
 export type WalletStatus = 'detecting' | 'missing' | 'disconnected' | 'connecting' | 'connected'
@@ -51,8 +52,19 @@ interface WalletState {
   phone: RemoteState | null
   accounts: QrdxAccount[]
   account: QrdxAccount | null
-  /** The address exchange state is keyed by. */
+  /** The wallet account's own address: what it signs as, and holds its QRDX, stakes and NFTs. */
   trader: string | null
+  /**
+   * The account the trading screens show and trade: `trader`, or a sub-account or vault of it
+   * chosen with `setActingAs` (the wallet signs for it as `signer`).
+   */
+  tradingAccount: string | null
+  actingAs: string | null
+  setActingAs: (account: string | null) => void
+  /** One-click trading: a key in this browser the wallet approved as an agent (lib/agent.ts). */
+  oneClick: StoredAgent | null
+  enableOneClick: () => Promise<void>
+  disableOneClick: () => Promise<void>
   chain: QrdxChainInfo | null
   /** The wallet is on the network the site is showing. */
   rightNetwork: boolean
@@ -101,6 +113,17 @@ interface NetState {
   /** Show the other network; with a wallet connected, this asks the wallet to switch. */
   setSlot: (slot: Slot) => Promise<void>
 }
+
+/**
+ * What is sent as the chosen trading account (a sub-account or vault): trading, and moving
+ * perps collateral in and out of it. Everything else (staking, launches, NFTs, transfers) is the
+ * wallet account's own.
+ */
+const ACT_AS_OPS = new Set([
+  'PLACE_ORDER', 'CANCEL_ORDER', 'MODIFY_ORDER', 'SWAP', 'PERP_SET_LEVERAGE', 'PERP_ORDER', 'PERP_CANCEL',
+  'PERP_TRIGGER', 'PERP_MODIFY', 'CANCEL_ALL', 'TWAP_ORDER', 'TWAP_CANCEL', 'PERP_ISOLATED_MARGIN',
+  'SCHEDULE_CANCEL', 'PERP_DEPOSIT', 'PERP_WITHDRAW', 'BATCH',
+])
 
 const WalletCtx = createContext<WalletState | null>(null)
 const NetCtx = createContext<NetState | null>(null)
@@ -177,7 +200,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => setPreferred(readPreference()), [])
 
-  const use = useCallback((w: DiscoveredProvider | null, kind: Connection | null) => {
+  const adopt = useCallback((w: DiscoveredProvider | null, kind: Connection | null) => {
     walletRef.current = w
     setWallet(w)
     setConnection(kind)
@@ -211,7 +234,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       const remote = remembered === 'remote' ? RemoteProvider.restore((st) => setPhone(st)) : null
       if (remote) {
         const w = { info: { uuid: 'qrdx-connect', name: 'QRDX Wallet (phone)', icon: '', rdns: 'org.qrdx.connect' }, provider: remote }
-        use(w, 'remote')
+        adopt(w, 'remote')
         const cached = RemoteProvider.cached()
         const cachedAccounts = asAccounts(cached.accounts)
         if (cachedAccounts.length) {
@@ -224,7 +247,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         readState(w, false).catch(() => undefined)
         return
       }
-      use(ext, ext ? 'extension' : null)
+      adopt(ext, ext ? 'extension' : null)
       if (!ext) return setStatus('missing')
       setStatus('disconnected')
       if (remembered) await readState(ext, false).catch(() => setStatus('disconnected'))
@@ -232,7 +255,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     return () => {
       cancelled = true
     }
-  }, [readState, use])
+  }, [readState, adopt])
 
   // Follow the wallet: account switches, network switches, disconnects.
   useEffect(() => {
@@ -246,7 +269,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       if ((p as RemoteProvider).isRemote) {
         linkStore.clear()
         setPhone(null)
-        use(extensionRef.current, extensionRef.current ? 'extension' : null)
+        adopt(extensionRef.current, extensionRef.current ? 'extension' : null)
         setStatus(extensionRef.current ? 'disconnected' : 'missing')
       } else setStatus('disconnected')
     }
@@ -258,7 +281,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       p.removeListener?.('chainChanged', refresh)
       p.removeListener?.('disconnect', onDisconnect)
     }
-  }, [wallet, readState, use])
+  }, [wallet, readState, adopt])
 
   // A phone connection reconnects as soon as this tab is visible again.
   useEffect(() => {
@@ -289,14 +312,14 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     if (!w) return
     setError(null)
     setStatus('connecting')
-    use(w, 'extension')
+    adopt(w, 'extension')
     try {
       await readState(w, true)
     } catch (e) {
       setError(providerErrorMessage(e))
       setStatus('disconnected')
     }
-  }, [readState, use])
+  }, [readState, adopt])
 
   const connectPhone = useCallback(async () => {
     setError(null)
@@ -312,7 +335,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       await readState(w, true)
       if (pairingRef.current !== remote) return
       linkStore.set('remote')
-      use(w, 'remote')
+      adopt(w, 'remote')
     } catch (e) {
       if (pairingRef.current !== remote) return
       setError(providerErrorMessage(e))
@@ -325,7 +348,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         setPairing(null)
       }
     }
-  }, [readState, use])
+  }, [readState, adopt])
 
   const cancelPairing = useCallback(() => {
     const remote = pairingRef.current
@@ -343,7 +366,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     if ((w?.provider as RemoteProvider | undefined)?.isRemote) {
       await (w!.provider as RemoteProvider).disconnect().catch(() => undefined)
       setPhone(null)
-      use(extensionRef.current, extensionRef.current ? 'extension' : null)
+      adopt(extensionRef.current, extensionRef.current ? 'extension' : null)
       setStatus(extensionRef.current ? 'disconnected' : 'missing')
       return
     }
@@ -351,7 +374,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     await w?.provider
       .request({ method: 'wallet_revokePermissions', params: [{ eth_accounts: {} }] })
       .catch(() => undefined)
-  }, [use])
+  }, [adopt])
 
   const switchWalletTo = useCallback(
     async (target: NetworkConfig) => {
@@ -390,15 +413,55 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
   const trader = account?.pqAddress ?? null
   const rightNetwork = !!chain && chain.chainId === network.chainId
 
+  // The account the trading screens act for (a sub-account or a vault the trader leads).
+  const actKey = trader ? `qrdx-trade:acting:${slot}:${trader.toLowerCase()}` : null
+  const [actingAs, setActingState] = useState<string | null>(null)
+  useEffect(() => {
+    let v: string | null = null
+    try {
+      v = actKey ? localStorage.getItem(actKey) : null
+    } catch {
+      /* none remembered */
+    }
+    setActingState(v && /^0x(SUBA|UVLT)[0-9a-fA-F]{36}$/.test(v) ? v : null)
+  }, [actKey])
+  const setActingAs = useCallback(
+    (a: string | null) => {
+      setActingState(a)
+      try {
+        if (actKey && a) localStorage.setItem(actKey, a)
+        else if (actKey) localStorage.removeItem(actKey)
+      } catch {
+        /* for this page only */
+      }
+    },
+    [actKey]
+  )
+  const tradingAccount = actingAs ?? trader
+
+  // One-click trading's key for this account on this network.
+  const [oneClick, setOneClick] = useState<StoredAgent | null>(null)
+  useEffect(() => {
+    setOneClick(trader ? loadAgent(slot, trader) : null)
+  }, [trader, slot])
+  const oneClickLive = (a: StoredAgent | null): a is StoredAgent => !!a && a.approved && a.validUntil > Date.now() / 1000 + 60
+
   const sendExchange = useCallback(
     async (req: ExchangeRequest) => {
       const w = walletRef.current
       if (!w || !trader) throw new Error('Connect the QRDX Wallet first.')
       if (!rightNetwork) throw new Error(`Switch the wallet to ${network.name}.`)
+      const sender = actingAs && ACT_AS_OPS.has(req.op) ? actingAs : undefined
+      // One-click trading signs what an agent may sign, here, without a wallet prompt.
+      if (oneClickLive(oneClick) && inAgentScope(req.op, req.params)) {
+        const res = await agentSend({ rpcUrl: network.rpcUrl, chainId: network.chainId, agent: oneClick, sender: sender ?? trader, op: req.op, params: req.params, gasLimit: req.gasLimit })
+        addPending(trader, slot, { txHash: res.txHash, op: req.op, label: req.label, market: req.market })
+        return res
+      }
       try {
         const res = await w.provider.request<{ txHash: string; nonce?: number }>({
           method: 'qrdx_sendExchangeTransaction',
-          params: [{ op: req.op, params: req.params, gasLimit: req.gasLimit, from: account?.address }],
+          params: [{ op: req.op, params: req.params, gasLimit: req.gasLimit, from: account?.address, ...(sender ? { sender } : {}) }],
         })
         addPending(trader, slot, { txHash: res.txHash, op: req.op, label: req.label, market: req.market })
         return res
@@ -406,8 +469,58 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         throw new Error(providerErrorMessage(e))
       }
     },
-    [trader, account, rightNetwork, network.name, slot]
+    [trader, account, rightNetwork, network, slot, actingAs, oneClick]
   )
+
+  const enableOneClick = useCallback(async () => {
+    if (!trader) throw new Error('Connect the QRDX Wallet first.')
+    const { stored } = createAgent()
+    // Kept before the wallet approves it, so a reload in between does not lose the key.
+    saveAgent(slot, trader, stored)
+    setOneClick(stored)
+    try {
+      await sendExchange({
+        op: 'AGENT_APPROVE',
+        params: { agent: stored.address, valid_until: stored.validUntil, name: 'QRDX Trade one-click' },
+        label: 'Turn on one-click trading',
+      })
+    } catch (e) {
+      saveAgent(slot, trader, null)
+      setOneClick(null)
+      throw e
+    }
+    // Live once a block has applied the approval.
+    for (let i = 0; i < 60; i++) {
+      await new Promise((r) => setTimeout(r, 1000))
+      const agents = await fetch(network.rpcUrl, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'exchange_getAgents', params: [trader] }),
+      })
+        .then((r) => r.json())
+        .then((b: { result?: { agent: string }[] }) => b.result ?? [])
+        .catch(() => [])
+      if (agents.some((a) => a.agent.toLowerCase() === stored.address.toLowerCase())) {
+        const live = { ...stored, approved: true }
+        saveAgent(slot, trader, live)
+        setOneClick(live)
+        return
+      }
+    }
+    throw new Error('The approval has not reached a block yet; one-click trading turns on when it does.')
+  }, [trader, slot, network.rpcUrl, sendExchange])
+
+  const disableOneClick = useCallback(async () => {
+    if (!trader || !oneClick) return
+    const agent = oneClick
+    saveAgent(slot, trader, null)
+    setOneClick(null)
+    // The agent gives up its own approval on chain (no wallet prompt); an expired one has lapsed already.
+    if (oneClickLive(agent)) {
+      const res = await agentSend({ rpcUrl: network.rpcUrl, chainId: network.chainId, agent, sender: trader, op: 'AGENT_REVOKE', params: { agent: agent.address } }).catch(() => null)
+      if (res) addPending(trader, slot, { txHash: res.txHash, op: 'AGENT_REVOKE', label: 'Turn off one-click trading' })
+    }
+  }, [trader, slot, network, oneClick])
 
   const sendEvm = useCallback(
     async (req: EvmRequest) => {
@@ -439,11 +552,20 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       const w = walletRef.current
       if (!w || !trader) throw new Error('Connect the QRDX Wallet first.')
       if (!rightNetwork) throw new Error(`Switch the wallet to ${network.name}.`)
+      const sender = actingAs && req.ops.every((o) => ACT_AS_OPS.has(o.op)) ? actingAs : undefined
+      if (actingAs && !sender) throw new Error('Switch the trading account back to your own for this.')
+      const batch = { actions: req.ops.map((o) => ({ op: o.op, params: o.params })) }
+      if (oneClickLive(oneClick) && req.ops.length <= 20 && inAgentScope('BATCH', batch)) {
+        const gasLimit = Math.min(10_000 + req.ops.reduce((n, o) => n + (o.gasLimit ?? 1_000_000), 0), 20_000_000)
+        const r = await agentSend({ rpcUrl: network.rpcUrl, chainId: network.chainId, agent: oneClick, sender: sender ?? trader, op: 'BATCH', params: batch, gasLimit })
+        addPending(trader, slot, { txHash: r.txHash, op: 'BATCH', label: req.label, market: req.market })
+        return { txHashes: [r.txHash] }
+      }
       let res: { txHashes: string[] }
       try {
         res = await w.provider.request<{ txHashes: string[] }>({
           method: 'qrdx_sendExchangeBatch',
-          params: [{ ops: req.ops, label: req.label, from: account?.address }],
+          params: [{ ops: req.ops, label: req.label, from: account?.address, ...(sender ? { sender } : {}) }],
         })
       } catch (e) {
         // Older wallets: one approval per operation, in order.
@@ -451,7 +573,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         const txHashes: string[] = []
         for (const [i, o] of req.ops.entries()) {
           const r = await w.provider
-            .request<{ txHash: string; nonce?: number }>({ method: 'qrdx_sendExchangeTransaction', params: [{ op: o.op, params: o.params, gasLimit: o.gasLimit, from: account?.address }] })
+            .request<{ txHash: string; nonce?: number }>({ method: 'qrdx_sendExchangeTransaction', params: [{ op: o.op, params: o.params, gasLimit: o.gasLimit, from: account?.address, ...(sender ? { sender } : {}) }] })
             .catch((err) => {
               throw new Error(i ? `Steps 1–${i} were sent; step ${i + 1} failed: ${providerErrorMessage(err)}` : providerErrorMessage(err))
             })
@@ -464,7 +586,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       else res.txHashes.forEach((txHash, i) => addPending(trader, slot, { txHash, op: req.ops[i]?.op ?? 'SWAP', label: `${req.label} (${i + 1} of ${req.ops.length})`, market: req.market }))
       return res
     },
-    [trader, account, rightNetwork, network.name, slot]
+    [trader, account, rightNetwork, network, slot, actingAs, oneClick]
   )
 
   const walletValue = useMemo<WalletState>(
@@ -478,6 +600,12 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       accounts,
       account,
       trader,
+      tradingAccount,
+      actingAs,
+      setActingAs,
+      oneClick,
+      enableOneClick,
+      disableOneClick,
       chain,
       rightNetwork,
       error,
@@ -490,7 +618,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       sendEvm,
       sendExchangeBatch,
     }),
-    [status, wallet, extension, connection, pairing, phone, accounts, account, trader, chain, rightNetwork, error, connect, connectPhone, cancelPairing, disconnect, switchNetwork, sendExchange, sendEvm, sendExchangeBatch]
+    [status, wallet, extension, connection, pairing, phone, accounts, account, trader, tradingAccount, actingAs, setActingAs, oneClick, enableOneClick, disableOneClick, chain, rightNetwork, error, connect, connectPhone, cancelPairing, disconnect, switchNetwork, sendExchange, sendEvm, sendExchangeBatch]
   )
   const netValue = useMemo<NetState>(
     () => ({ slot, network, apiBase: apiBaseFor(slot), setSlot }),

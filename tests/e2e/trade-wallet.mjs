@@ -2,8 +2,9 @@
  * End to end: the QRDX Wallet extension trading on this site against the local
  * node harness (qrdx-node's real exchange engine). Checks connect, network
  * switch, decoded approvals, two orders in one block window, an inverted-pair
- * order, cancel, a market swap, a perps deposit + long, its TP/SL and a stop order
- * (on a node with trigger orders), a coin launch with a
+ * order, cancel, a market swap, a perps deposit + long, its TP/SL and a stop order,
+ * one-click trading, a sub-account and a vault (on a node with the 2026-10 trading
+ * features), a coin launch with a
  * first buy on its curve, a token created alone whose market starts later, and
  * a new perp market created on testnet.
  *
@@ -296,6 +297,91 @@ if ((await api('/api/v1/features')).trading) {
   await approval.getByRole('button', { name: /^Confirm/ }).click().catch(closedOk)
   t = await waitTriggers(2)
   check('the stop is cancelled; the position TP/SL stay', t.length === 2 && t.every((x) => x.size === 'position'))
+}
+
+// ── one-click trading, a sub-account and a vault (the 2026-10 trading features) ──
+if ((await api('/api/v1/features')).trading) {
+  const poll = async (fn, ok, tries = 30) => {
+    let v
+    for (let i = 0; i < tries; i++) {
+      v = await fn()
+      if (ok(v)) return v
+      await page.waitForTimeout(2000)
+    }
+    return v
+  }
+
+  console.log('One-click trading')
+  ap = nextApproval()
+  await page.getByRole('button', { name: /^One-click trading$/ }).click()
+  approval = await ap
+  check('the agent approval says what it may do', await approval.getByText(/^Let "QRDX Trade one-click" .* trade for this account$/).first().waitFor({ timeout: 15_000 }).then(() => true, () => false))
+  await approval.getByRole('button', { name: /^Confirm/ }).click().catch(closedOk)
+  check('one-click turns on once a block applies the approval', await page.getByRole('button', { name: /One-click on/ }).waitFor({ timeout: 60_000 }).then(() => true, () => false))
+  let prompted = false
+  const watch = (p) => p.url().includes('approval=') && (prompted = true)
+  ctx.on('page', watch)
+  await page.getByRole('button', { name: /^Limit$/ }).click()
+  await page.getByRole('button', { name: /^Long$/ }).click()
+  const restAt = String(Math.round(Number((await api('/api/v1/perps/btc/usd')).markPrice) * 0.8))
+  await page.locator('label:has-text("Price") input').first().fill(restAt)
+  await page.locator('label:has-text("Size") input').fill('0.01')
+  await page.getByRole('button', { name: /^Long BTC$/ }).click()
+  const rested = await poll(async () => ((await rpc('perp_getAccount', [pq])) ?? {}).orders ?? [], (o) => o.some((x) => x.price === restAt))
+  ctx.off('page', watch)
+  check('an order signed in the browser, with no wallet window', rested.some((x) => x.price === restAt) && !prompted, `@ ${restAt}`)
+  await page.getByRole('button', { name: /One-click on/ }).click()
+  const agents = await poll(() => rpc('exchange_getAgents', [pq]), (a) => Array.isArray(a) && a.length === 0)
+  check('turning it off revokes the key on chain', Array.isArray(agents) && agents.length === 0)
+
+  console.log('Sub-account')
+  await page.goto(`${SITE}/portfolio`, { waitUntil: 'networkidle' })
+  await page.getByPlaceholder('Name (optional)').fill('bot')
+  ap = nextApproval()
+  await page.getByRole('button', { name: /^Create$/ }).click()
+  approval = await ap
+  check('sub-account approval is decoded', await approval.getByText(/^Create sub-account "bot"/).first().waitFor({ timeout: 15_000 }).then(() => true, () => false))
+  await approval.getByRole('button', { name: /^Confirm/ }).click().catch(closedOk)
+  const subs = await poll(() => rpc('exchange_getSubaccounts', [pq]), (x) => Array.isArray(x) && x.length === 1)
+  const sub = subs?.[0]?.subaccount
+  check('the sub-account exists', !!sub, sub)
+  await page.getByRole('button', { name: /^Trade as$/ }).waitFor({ timeout: 40_000 })
+  await page.locator('select[aria-label="Sub-account"]').selectOption(sub)
+  await page.locator('select[aria-label="Asset"]').selectOption('QRDX')
+  await page.getByPlaceholder('Amount').first().fill('2000')
+  ap = nextApproval()
+  await page.getByRole('button', { name: /^Move to it$/ }).click()
+  approval = await ap
+  await approval.getByRole('button', { name: /^Confirm/ }).click().catch(closedOk)
+  await page.waitForTimeout(9000)
+  await page.getByRole('button', { name: /^Trade as$/ }).click()
+  await page.goto(`${SITE}/perps/btc/usd`, { waitUntil: 'networkidle' })
+  check('the order form says which account trades', await page.getByText(/^Trading as a sub-account/).first().waitFor({ timeout: 15_000 }).then(() => true, () => false))
+  await page.getByPlaceholder(/Amount \(/).fill('500')
+  ap = nextApproval()
+  await page.getByRole('button', { name: /^Deposit$/ }).click()
+  approval = await ap
+  check('the approval names the account it acts for', await approval.getByText(new RegExp(`${sub}.*your sub-account`)).first().waitFor({ timeout: 15_000 }).then(() => true, () => false))
+  await approval.getByRole('button', { name: /^Confirm/ }).click().catch(closedOk)
+  const subPerp = await poll(() => rpc('perp_getAccount', [sub]), (a) => a && Number(a.collateral) >= 500)
+  check('the sub-account deposited from its own balance, signed by the master', subPerp && Number(subPerp.collateral) >= 500, subPerp && `collateral ${subPerp.collateral}`)
+  await page.screenshot({ path: `${SHOTS}/e2e-subaccount.png` })
+
+  console.log('Vault')
+  await page.goto(`${SITE}/portfolio`, { waitUntil: 'networkidle' })
+  await page.getByRole('button', { name: /^Trading as it$/ }).click()
+  await page.goto(`${SITE}/vaults`, { waitUntil: 'networkidle' })
+  await page.locator('label:has-text("Name") input').fill('Quant')
+  ap = nextApproval()
+  await page.getByRole('button', { name: /^Start the vault$/ }).click()
+  approval = await ap
+  check('vault approval is decoded', await approval.getByText(/^Start the vault "Quant" with 100 collateral/).first().waitFor({ timeout: 15_000 }).then(() => true, () => false))
+  await approval.getByRole('button', { name: /^Confirm/ }).click().catch(closedOk)
+  const vaults = await poll(() => rpc('perp_getUserVaults', [pq]), (v) => Array.isArray(v) && v.some((x) => x.name === 'Quant'))
+  check('the vault exists, led by this account', Array.isArray(vaults) && vaults.some((x) => x.name === 'Quant'))
+  await page.reload({ waitUntil: 'networkidle' })
+  check('the vaults page lists it', await page.getByRole('link', { name: 'Quant' }).waitFor({ timeout: 30_000 }).then(() => true, () => false))
+  await page.screenshot({ path: `${SHOTS}/e2e-vaults.png` })
 }
 
 // ── launch a coin ───────────────────────────────────────────────────────────

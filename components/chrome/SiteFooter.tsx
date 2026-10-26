@@ -11,6 +11,8 @@ const COLUMNS: { title: string; links: { label: string; href: string }[] }[] = [
       { label: 'Swap', href: '/swap' },
       { label: 'Liquidity pools', href: '/pools' },
       { label: 'Launch a coin', href: '/launch' },
+      { label: 'Vaults', href: '/vaults' },
+      { label: 'Leaderboard', href: '/leaderboard' },
       { label: 'Portfolio', href: '/portfolio' },
     ],
   },

@@ -521,7 +521,9 @@ export async function perpMarkets(net: Net): Promise<{ markets: PerpMarket[]; no
   return { markets: await Promise.all(list.map((m) => perpSummary(net, m, idx))), nodeOk: true }
 }
 
-async function findPerp(net: Net, baseSeg: string, quoteSeg: string): Promise<NodePerpMarket> {
+async function findPerp(net: Net, baseSegRaw: string, quoteSeg: string): Promise<NodePerpMarket> {
+  // A deployer market's base is `dex:ASSET`; its path segment may arrive percent-encoded.
+  const baseSeg = decodeURIComponent(baseSegRaw)
   const list = await perpList(net)
   const m = list.find(
     (x) => x.base.toLowerCase() === baseSeg.toLowerCase() && x.quote.toLowerCase() === quoteSeg.toLowerCase()

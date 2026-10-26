@@ -19,6 +19,15 @@ export function useFeatures(): Features & { known: boolean } {
         known: false,
         trading: false,
         history: false,
-        costs: { poolBurnSubsidized: '', poolStakeStandard: '', perpListingFee: null, exchangeMinGasPriceWei: null },
+        costs: {
+          poolBurnSubsidized: '',
+          poolStakeStandard: '',
+          perpListingFee: null,
+          exchangeMinGasPriceWei: null,
+          perpOpenListing: null,
+          perpMinLiquidity: null,
+          deployerMinBond: null,
+          oracleStaleSeconds: null,
+        },
       }
 }

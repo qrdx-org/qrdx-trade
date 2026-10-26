@@ -5,6 +5,8 @@ export type ErrorCode =
   | 'not_found'
   | 'ambiguous_symbol'
   | 'node_unavailable'
+  /** The network's node predates the feature. */
+  | 'not_implemented'
   | 'internal'
 
 const STATUS: Record<ErrorCode, number> = {
@@ -12,6 +14,7 @@ const STATUS: Record<ErrorCode, number> = {
   not_found: 404,
   ambiguous_symbol: 404,
   node_unavailable: 502,
+  not_implemented: 501,
   internal: 500,
 }
 

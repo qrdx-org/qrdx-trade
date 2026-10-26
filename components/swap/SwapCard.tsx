@@ -47,7 +47,7 @@ export function SwapCard() {
   const debounced = useDebounced(amount, 350)
   const quotePath =
     isAmount(debounced) && dec(debounced) > 0n && from !== to
-      ? `${apiBase}/quote/route?from=${from}&to=${to}&amount=${debounced}${w.trader ? `&sender=${w.trader}` : ''}`
+      ? `${apiBase}/quote/route?from=${from}&to=${to}&amount=${debounced}${w.tradingAccount ? `&sender=${w.tradingAccount}` : ''}`
       : null
   // The best route through up to three markets (lib/server/routing.ts); usually the pair itself.
   const q = useApi<RoutedQuote>(quotePath, 10_000)

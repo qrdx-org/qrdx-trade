@@ -23,6 +23,8 @@ export interface NodeToken {
   freeze_authority: string | null
   creator: string
   created_height: number
+  /** Nodes from 2026-10: the unique ticker the token holds (TICKER_CLAIM), or null. */
+  ticker?: string | null
 }
 
 export interface NodePool {
@@ -654,7 +656,8 @@ export interface NodeUserVault {
   withdrawable: string
   lockup_seconds: string
   positions: Record<string, { size: string; entry_price: string }>
-  holder?: { shares: string; cost: string; value: string; unlock_time?: string } | null
+  /** With a holder: its shares, what they cost, what they are worth now, and when they unlock. */
+  holding?: { shares: string; cost: string; value: string; unlock: string }
 }
 
 export interface NodeAgent {
@@ -771,6 +774,16 @@ export function createNodeClient(cfg: ServerConfig) {
     qnsResolve: (name: string) => optional<string | null>(cfg, 'qns_resolve', [name]),
     qnsReverse: (address: string) => optional<string | null>(cfg, 'qns_reverse', [address]),
     qnsPrice: (years: number) => optional<string>(cfg, 'qns_price', [years]),
+    /** A market deployer by address or namespace: its bond, unbonding, and markets (null: none). */
+    deployer: (who: string) =>
+      optional<{ address: string; dex: string; bond: string; unbonding: string; unlock: string | null; markets: string[] }>(cfg, 'perp_getDeployer', [who]),
+    /** The ticker auction's price now (QRDX), its floor and its last sale (docs/HYPERLIQUID_PARITY.md 11). */
+    tickerAuction: () =>
+      optional<{ price: string; floor: string; opening_price: string; auction_seconds: number; last_sale: { price: string; time: string } | null; tickers: number; reserved: string[] }>(
+        cfg,
+        'exchange_getTickerAuction',
+        []
+      ),
 
     // Native NFTs (docs/NATIVE_TOKENS.md §8) and the EVM reads the NFT market needs.
     nftCollections: () => rpc<NodeNftCollection[]>(cfg, 'exchange_getNftCollections'),
