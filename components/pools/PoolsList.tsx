@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { Droplets } from 'lucide-react'
 import { PairBadge } from '@/components/trade/TokenBadge'
 import { compact, fixed, price as fmtPrice } from '@/lib/format'
 import { useNodeStream } from '@/lib/hooks/useNodeStream'
@@ -49,7 +50,8 @@ export function PoolsList() {
           </Link>
         </div>
       </section>
-      <div className="mx-auto mt-8 max-w-6xl overflow-x-auto rounded-xl border bg-card px-0 sm:mx-4 xl:mx-auto">
+      <div className="mx-auto mt-8 max-w-6xl px-4 pb-10">
+      <div className="overflow-x-auto rounded-xl border bg-card">
         <table className="num w-full text-sm">
           <thead className="text-[11px] uppercase tracking-wide text-muted-foreground">
             <tr className="text-right">
@@ -69,7 +71,22 @@ export function PoolsList() {
             )}
             {data?.pools.length === 0 && (
               <tr>
-                <td colSpan={6} className="p-6 text-center text-muted-foreground">No pools yet.</td>
+                <td colSpan={6} className="px-6 py-14 text-center">
+                  <Droplets className="mx-auto h-6 w-6 text-muted-foreground" aria-hidden />
+                  <p className="mt-3 text-sm font-medium text-foreground">No pools on {network.name} yet</p>
+                  <p className="mx-auto mt-1 max-w-md text-[13px] leading-relaxed text-muted-foreground">
+                    A pool prices two tokens against each other and fills swaps alongside the order book. Open the first one by choosing a pair, a fee
+                    tier and a starting price.
+                  </p>
+                  <div className="mt-5 flex flex-wrap justify-center gap-2">
+                    <Link href="/pools/new" className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90">
+                      Create a pool
+                    </Link>
+                    <Link href="/launch" className="rounded-lg border px-4 py-2 text-sm font-medium transition-colors hover:border-foreground/30">
+                      Launch a coin
+                    </Link>
+                  </div>
+                </td>
               </tr>
             )}
             {data?.pools.map((p) => {
@@ -101,6 +118,7 @@ export function PoolsList() {
             })}
           </tbody>
         </table>
+      </div>
       </div>
     </main>
   )

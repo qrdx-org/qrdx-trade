@@ -531,10 +531,10 @@ after every token address so QRDX pairs are quoted in QRDX, and its side settles
 in account balances (the API reads it with `eth_getBalance`). The verified `qrdx`
 asset is native QRDX on every network (`native: true` in `lib/assets.ts`) and the
 default quote for launches. Testnet USDC is
-`0x801ae63d236d7a4ea69868a9d7be5d27a09e5580` (18 decimals), pinned in
-`lib/assets.ts`; USD prices route through its pools. (The testnet reset of
-2026-10-12 removed the earlier USDC and the "Wrapped QRDX" token, and with them
-the `wqrdx` asset.)
+`0xa0ad4f35bf2d518a62ebb7e39a32a8f791703362` (18 decimals), pinned in
+`lib/assets.ts`; USD prices route through its pools. (Each testnet genesis mints
+a new USDC: the address changes with every reset, most recently with the
+node 3.0.0 genesis of 2026-11.)
 
 **Perps collateral** is whatever the node settles perps in (`collateral_token`:
 native QRDX, a token, or none). Margin counts only what is deposited into the
@@ -657,24 +657,49 @@ A token with no pool path to an anchor has no USD price; the API returns
 index price, which needs a QRDX pool against an anchored asset (BTC, ETH,
 USDC, …) on that network.
 
-## 13. Creating perpetual markets (testnet)
+## 13. Listing token perpetuals (testnet)
 
-`/perps/new` creates a perp market with `CREATE_MARKET` (`base_token`,
-`max_leverage`). The node lets anyone create one; the site offers it on the
-test network only (on mainnet the page offers to switch), and links to it from
-the perps header, the market search and `/perps` when no market exists yet.
+`/perps/new` lists a perpetual on a token that already trades on the chain with
+`CREATE_MARKET {token, liquidity, max_leverage}` (node 3.0.0; the earlier
+`base_token` listings and bonded deployer markets are gone). The site offers it
+on the test network only (on mainnet the page offers to switch), and links to it
+from the perps header, the market search and `/perps` when no market exists yet.
 
-- **Quote.** Validators vote prices only for markets quoted in the node's
-  `PERP_QUOTE` (USD), so the form never sets `quote_token`; the market is
-  `{BASE}-USD-PERP`.
-- **Will it trade?** A market trades once the validator committee votes its
-  oracle price, which validators running the `exchanges` feed take from public
-  USD spot prices of the base (`qrdx-node validator/price_feed.py`; a "qBTC"
-  base is priced as BTC). `GET /api/{v}/perps/check?base=SOL` asks the same
-  public endpoints (Coinbase, Kraken) and reports whether the market exists, so
-  the form can warn before anything is signed. It previews the validators'
-  input; it is not the oracle.
-- **Leverage.** `max_leverage` 1 to 20 (default 20). Initial margin is
-  1 ÷ leverage and maintenance half of that, both set by the node.
-- **After signing** the page follows the receipt, then the market's first
-  oracle price, and links to the new market.
+- **Identity.** The market is `{token address}-USD-PERP`, one per token, and
+  never the settlement asset itself. The API serves it at
+  `/perps/{address-or-slug}/usd`; its `symbol` is the token's symbol and
+  unverified tokens are labelled as such, since anyone can reuse a symbol.
+- **Price.** The node prices it from the token's own pools (`oracleSource:
+  "spot"`): the deepest path to the settlement asset, direct or through QRDX,
+  averaged over `SPOT_ORACLE_TWAP_SECONDS`. No vote and no key sets it. Below
+  `SPOT_ORACLE_MIN_DEPTH` of depth the price stops updating and the market takes
+  only reducing orders; open interest is capped at `SPOT_OI_DEPTH_BPS` of depth.
+  `GET /api/{v}/perps/check?token=` reports whether the market exists and which
+  pools would price it, so the form can refuse before anything is signed.
+- **Leverage and margin.** `max_leverage` 1 to `PERP_SPOT_MAX_LEVERAGE`; token
+  perpetuals take isolated margin only, so the order form hides cross.
+- **Seed liquidity.** The lister seeds the market's liquidity vault with at
+  least `PERP_MARKET_MIN_LIQUIDITY` of collateral, locked for
+  `PERP_MARKET_LIQUIDITY_LOCKUP_SECONDS`, and pays `PERP_MARKET_LISTING_FEE`.
+  When the perps account is short, the form bundles a `PERP_DEPOSIT` in the same
+  batch.
+- **Validator-priced markets** (BTC, ETH, SOL: `oracleSource: "validators"`)
+  come from genesis (`PERP_GENESIS_MARKETS`) or a governance listing; the form
+  does not create them.
+- **After signing** the page follows the receipt and links to the new market.
+
+## 14. The fee reserve and deferred execution (node 3.0.0)
+
+- **Fee reserve.** With `two_block_deferral` active the node refuses a
+  transaction that would leave its sender with less than `FEE_RESERVE_QRDX` of
+  native QRDX, unless the transaction sets `params.spend_reserve`. The site
+  never sets it: `lib/reserve.ts` `spendable()` takes the reserve off every
+  "available" and Max amount of native QRDX (swap, spot orders, perps deposits,
+  staking, listings), and `explainNodeError()` turns the node's refusal into a
+  sentence. `/features` reports the reserve as `costs.feeReserveQrdx`.
+- **Binary transactions in blocks.** Blocks carry exchange transactions as
+  base64 wire bytes (`binary_exchange_txs`). `lib/server/exchange-wire.ts`
+  decodes them for the indexer; receipts are still read from the node.
+- **Multi-hop swaps.** One `SWAP` with a `path` settles every hop; its receipt
+  lists `hops`, and the indexer records one trade per hop on that hop's market
+  (`tradesFromSwap`).

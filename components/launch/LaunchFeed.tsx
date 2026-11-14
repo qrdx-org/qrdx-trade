@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useMemo, useState } from 'react'
-import { Lock, ShieldCheck, Snowflake } from 'lucide-react'
+import { Lock, Rocket, ShieldCheck, Snowflake } from 'lucide-react'
 import { TokenBadge } from '@/components/trade/TokenBadge'
 import { shortAddress } from '@/lib/assets'
 import { compact, percent, price as fmtPrice, tone } from '@/lib/format'
@@ -53,7 +53,22 @@ export function LaunchFeed({ refreshKey }: { refreshKey?: number }) {
         it before you buy.
       </p>
       {error && !data && <p className="mt-6 text-sm text-muted-foreground">Launches unavailable: the {network.name} node did not answer.</p>}
-      {data && rows.length === 0 && <p className="mt-6 text-sm text-muted-foreground">No community coins yet. Be the first.</p>}
+      {data && rows.length === 0 && (
+        <div className="mt-6 rounded-xl border border-dashed px-6 py-14 text-center">
+          <Rocket className="mx-auto h-6 w-6 text-muted-foreground" aria-hidden />
+          <p className="mt-3 text-sm font-medium">No coin has launched on {network.name} yet</p>
+          <p className="mx-auto mt-1 max-w-md text-[13px] leading-relaxed text-muted-foreground">
+            The first one appears here as soon as its block lands, with its price, market cap and how far along its launch curve it is.
+          </p>
+        </div>
+      )}
+      {!data && !error && (
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3" aria-busy>
+          {Array.from({ length: 3 }, (_, i) => (
+            <div key={i} className="h-36 animate-pulse rounded-xl border bg-muted/30" />
+          ))}
+        </div>
+      )}
       <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {rows.map((l) => (
           <LaunchCard key={l.token.segment} l={l} height={data?.height ?? null} />

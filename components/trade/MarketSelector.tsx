@@ -63,9 +63,10 @@ export function MarketSelector({ label, sub, children }: { label: string; sub?: 
   )
 }
 
-type Tab = 'favorites' | 'spot' | 'perps' | 'new'
+type Tab = 'favorites' | 'all' | 'spot' | 'perps' | 'new'
 const TABS: { id: Tab; label: string }[] = [
   { id: 'favorites', label: 'Favorites' },
+  { id: 'all', label: 'All' },
   { id: 'spot', label: 'Spot' },
   { id: 'perps', label: 'Perps' },
   { id: 'new', label: 'Community' },
@@ -78,7 +79,7 @@ export function MarketList({ onPick, dense = true, autoFocus }: { onPick?: () =>
   useNodeStream(network.nodeUrl, ['tickers'], refresh, 5_000)
   const fav = useFavorites()
   const [q, setQ] = useState('')
-  const [tab, setTab] = useState<Tab>('spot')
+  const [tab, setTab] = useState<Tab>('all')
   const [cursor, setCursor] = useState(0)
 
   const all = useMemo(() => {
@@ -99,14 +100,18 @@ export function MarketList({ onPick, dense = true, autoFocus }: { onPick?: () =>
       key: m.id,
       path: m.path,
       kind: 'perp' as const,
-      name: `${m.base}-${m.quote}`,
-      sub: `Perpetual · up to ${m.maxLeverage ? Number(m.maxLeverage) : '—'}×`,
-      search: [m.id, m.base, m.quote],
-      badge: <TokenBadge asset={m.baseAsset ?? { symbol: m.base, color: '#64748b', verified: true }} size="md" />,
+      name: `${m.symbol}-${m.quote}`,
+      sub:
+        m.oracleSource === 'spot' && !m.baseAsset?.verified
+          ? `Unverified · ${m.token?.slice(0, 10)}…`
+          : `Perpetual · up to ${m.maxLeverage ? Number(m.maxLeverage) : '—'}×`,
+      search: [m.id, m.symbol, m.base, m.quote, m.baseAsset?.name ?? ''],
+      badge: <TokenBadge asset={m.baseAsset ?? { symbol: m.symbol, color: '#64748b', verified: true }} size="md" />,
       last: m.markPrice,
       change: m.change24h,
       volume: m.volume24h,
-      verified: true,
+      // A token perp is its token: an unverified one can carry any symbol.
+      verified: m.oracleSource !== 'spot' || !!m.baseAsset?.verified,
     }))
     return { spot, perps }
   }, [data])
@@ -120,7 +125,9 @@ export function MarketList({ onPick, dense = true, autoFocus }: { onPick?: () =>
           ? [...all.spot, ...all.perps].filter((r) => fav.has(r.path))
           : tab === 'new'
             ? all.spot.filter((r) => !r.verified)
-            : all.spot
+            : tab === 'spot'
+              ? all.spot
+              : [...all.spot, ...all.perps]
     return pool
       .filter((r) => !needle || r.search.some((s) => s.toLowerCase().includes(needle)))
       .sort((a, b) => Number(b.verified) - Number(a.verified) || Number(b.volume ?? 0) - Number(a.volume ?? 0))
@@ -177,7 +184,7 @@ export function MarketList({ onPick, dense = true, autoFocus }: { onPick?: () =>
       {tab === 'perps' && slot === 'test' && (
         <button onClick={() => go('/perps/new')} className="flex items-center gap-2 border-b px-4 py-2.5 text-left text-sm hover:bg-accent">
           <Plus className="h-4 w-4 text-muted-foreground" />
-          Create a perpetual market
+          List a token perpetual
           <span className="ml-auto rounded-sm bg-warn/15 px-1.5 text-[10px] font-semibold uppercase tracking-wide text-warn">Testnet</span>
         </button>
       )}
@@ -197,7 +204,27 @@ export function MarketList({ onPick, dense = true, autoFocus }: { onPick?: () =>
         {error && !data && <Empty>Markets unavailable.</Empty>}
         {data && !data.nodeOk && <Empty>The QRDX node is unreachable.</Empty>}
         {data && data.nodeOk && rows.length === 0 && (
-          <Empty>{tab === 'favorites' ? 'Star a market to keep it here.' : q ? 'Nothing matches.' : 'No markets yet.'}</Empty>
+          <Empty>
+            {tab === 'favorites' ? (
+              'Star a market to keep it here.'
+            ) : q ? (
+              'Nothing matches.'
+            ) : tab === 'perps' ? (
+              'No perpetuals yet.'
+            ) : (
+              <>
+                {tab === 'new' ? 'No community coins' : tab === 'spot' ? 'No spot markets' : 'No markets'} on {network.name} yet.
+                <span className="mt-3 flex justify-center gap-2">
+                  <button onClick={() => go('/launch')} className="rounded-md border px-3 py-1.5 text-xs font-medium text-foreground hover:bg-accent">
+                    Launch a coin
+                  </button>
+                  <button onClick={() => go('/pools/new')} className="rounded-md border px-3 py-1.5 text-xs font-medium text-foreground hover:bg-accent">
+                    Create a pool
+                  </button>
+                </span>
+              </>
+            )}
+          </Empty>
         )}
         {rows.map((r, i) => (
           <div
@@ -221,7 +248,10 @@ export function MarketList({ onPick, dense = true, autoFocus }: { onPick?: () =>
             <span className="flex min-w-0 items-center gap-2.5">
               {r.badge}
               <span className="min-w-0">
-                <span className="block font-medium">{r.name}</span>
+                <span className="flex items-center gap-1.5 font-medium">
+                  {r.name}
+                  {r.kind === 'perp' && tab !== 'perps' && <span className="rounded-sm bg-muted px-1 text-[9px] font-semibold uppercase tracking-wide text-muted-foreground">Perp</span>}
+                </span>
                 <span className={cn('block truncate text-[11px]', r.verified ? 'text-muted-foreground' : 'text-warn')}>{r.sub}</span>
               </span>
             </span>

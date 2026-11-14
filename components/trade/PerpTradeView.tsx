@@ -68,10 +68,11 @@ export function PerpTradeView({ base, quote }: { base: string; quote: string }) 
   const positions = Object.values(account.data?.perp?.positions ?? {}).filter((p) => Number(p.size) !== 0).length
 
   const bookPanel = (
-    <OrderBookPanel book={book.data} error={book.error} baseSymbol={m.base} quoteSymbol={m.quote} onPick={setPicked} mark={m.markPrice} />
+    <OrderBookPanel book={book.data} error={book.error} baseSymbol={m.symbol} quoteSymbol={m.quote} onPick={setPicked} mark={m.markPrice} />
   )
-  const tradesPanel = <TradesPanel data={trades.data} error={trades.error} baseSymbol={m.base} quoteSymbol={m.quote} />
+  const tradesPanel = <TradesPanel data={trades.data} error={trades.error} baseSymbol={m.symbol} quoteSymbol={m.quote} />
 
+  const spot = m.oracleSource === 'spot'
   const stats: HeaderStat[] = [
     {
       label: 'Oracle',
@@ -81,12 +82,13 @@ export function PerpTradeView({ base, quote }: { base: string; quote: string }) 
           {oracleAge !== null && oracleAge > 120 ? <span className="ml-1 text-warn">({oracleAge}s old)</span> : null}
         </>
       ),
-      title: 'Stake-weighted median of validator votes',
+      title: spot ? "Time-weighted price of the token's own pools" : 'Stake-weighted median of validator votes',
     },
+    ...(spot && m.spotDepth ? [{ label: 'Spot depth', value: `${compact(m.spotDepth)}`, title: 'Liquidity near the price in the pools that price this market. It caps open interest.' }] : []),
     { label: 'Index', value: m.indexPrice ? fmtPrice(m.indexPrice, ref) : '—', title: m.indexSource ? `${m.indexSource} reference` : undefined },
     { label: '24h change', value: percent(m.change24h), className: tone(m.change24h) },
     { label: `24h volume (${m.quote})`, value: compact(m.volume24h) },
-    { label: 'Open interest', value: m.openInterest ? `${fixed(m.openInterest, 3)} ${m.base}` : '—' },
+    { label: 'Open interest', value: m.openInterest ? `${fixed(m.openInterest, 3)} ${m.symbol}` : '—' },
     {
       label: 'Funding / countdown',
       value: (
@@ -102,11 +104,11 @@ export function PerpTradeView({ base, quote }: { base: string; quote: string }) 
     <div className="flex min-h-full flex-col gap-1 bg-canvas lg:h-full lg:p-1">
       <MarketHeader
         path={m.path}
-        alertLabel={`${m.base}-${m.quote}`}
+        alertLabel={`${m.symbol}-${m.quote}`}
         alertUnit={m.quote}
         selector={
-          <MarketSelector label={`${m.base}-${m.quote}`} sub={`Perpetual · up to ${m.maxLeverage ? Number(m.maxLeverage) : '—'}×`}>
-            <TokenBadge asset={m.baseAsset ?? { symbol: m.base, color: '#64748b', verified: true }} size="lg" />
+          <MarketSelector label={`${m.symbol}-${m.quote}`} sub={`Perpetual · up to ${m.maxLeverage ? Number(m.maxLeverage) : '—'}×`}>
+            <TokenBadge asset={m.baseAsset ?? { symbol: m.symbol, color: '#64748b', verified: true }} size="lg" />
           </MarketSelector>
         }
         price={fmtPrice(m.markPrice, ref)}
@@ -132,12 +134,22 @@ export function PerpTradeView({ base, quote }: { base: string; quote: string }) 
           <code className="font-mono">QRDX_PERP_COLLATERAL_TOKEN</code>). Every order needs collateral, so this market cannot trade until it is set.
         </Notice>
       )}
-      {!m.oraclePrice && (
+      {m.settledPrice ? (
         <Notice>
-          No oracle price yet: validators have not voted a {m.base} price, so the market refuses new positions. It opens once the committee
-          prices it.
+          This market is settled at {fmtPrice(m.settledPrice, ref)}. It takes no new orders; open positions close at that price.
         </Notice>
-      )}
+      ) : !m.oraclePrice ? (
+        <Notice>
+          {spot
+            ? `No oracle price yet: the market reads ${m.symbol}'s pools and has no reading it accepts, so it refuses new positions. It opens once the pools have the depth and price history.`
+            : `No oracle price yet: validators have not voted a ${m.symbol} price, so the market refuses new positions. It opens once the committee prices it.`}
+        </Notice>
+      ) : spot && oracleAge !== null && oracleAge > 300 ? (
+        <Notice>
+          The {m.symbol} pools are too thin to price this market right now, so its oracle has stopped updating. Until they recover it takes
+          only orders that reduce a position.
+        </Notice>
+      ) : null}
 
       <div className="flex border-b bg-card text-sm lg:hidden">
         {(['chart', 'book', 'trades'] as const).map((t) => (
@@ -156,7 +168,7 @@ export function PerpTradeView({ base, quote }: { base: string; quote: string }) 
         <Panel className={cn('min-h-[420px] lg:min-h-0', mobileTab !== 'chart' && 'hidden lg:flex')}>
           <PriceChart
             basePath={api}
-            watermark={`${m.base}-PERP`}
+            watermark={`${m.symbol}-PERP`}
             drawing={{
               id: `${slot}:${m.path}`,
               usePrice: setPicked,
@@ -192,7 +204,7 @@ export function PerpTradeView({ base, quote }: { base: string; quote: string }) 
                     }
                   })()
                 : {}),
-              alert: { path: m.path, label: `${m.base}-${m.quote}`, slot },
+              alert: { path: m.path, label: `${m.symbol}-${m.quote}`, slot },
               unit: m.quote,
               levels: [
                 ...(account.data?.perp?.orders ?? [])

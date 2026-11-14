@@ -7,6 +7,7 @@
  * keeps tracking. Kept per network: a testnet order never shows on mainnet.
  */
 
+import { explainNodeError } from '../reserve'
 import { useCallback, useEffect, useState } from 'react'
 import { type Slot, apiBase, slotNetwork } from '../config'
 import { useNodeStream } from '../hooks/useNodeStream'
@@ -101,7 +102,7 @@ export function usePendingTxs(address: string | null, slot: Slot, intervalMs = 2
         if (!res || !res.ok) return
         const r = (await res.json()) as Receipt
         t.status = r.success ? 'success' : 'failed'
-        t.error = r.error || undefined
+        t.error = r.error ? explainNodeError(r.error) : undefined
         t.blockHeight = r.block_height
         t.result = r.data
         changed = true

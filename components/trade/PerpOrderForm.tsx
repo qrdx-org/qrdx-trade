@@ -60,7 +60,7 @@ export function PerpOrderForm({
   pickedTrigger?: { price: string; at: number } | null
 }) {
   const w = useWallet()
-  const { trading } = useFeatures()
+  const { trading, costs } = useFeatures()
   const perp = account?.perp ?? null
   const current = perp?.leverage[market.id]
   const [side, setSide] = useState<Side>('buy')
@@ -106,8 +106,8 @@ export function PerpOrderForm({
   const position = perp?.positions[market.id]
   const effective = current?.leverage ?? (position && Number(position.size) !== 0 ? position.leverage : null)
   useEffect(() => {
-    if (market.deployer) setMode('isolated')
-  }, [market.deployer])
+    if (market.oracleSource === 'spot') setMode('isolated')
+  }, [market.oracleSource])
   useEffect(() => {
     if (current) {
       setLev(current.leverage)
@@ -132,7 +132,7 @@ export function PerpOrderForm({
   const margin = notional && isAmount(leverage) && dec(leverage) > 0n ? str(div(dec(notional), dec(leverage))) : null
 
   // Margin beyond the free collateral can be deposited from the wallet with the order.
-  const inWallet = walletCollateral(account)
+  const inWallet = walletCollateral(account, costs.feeReserveQrdx)
   const topUp = perp && !reduceOnly ? collateralShortfall(margin, perp.withdrawable) : null
   const canTopUp = !!topUp && inWallet !== null && dec(inWallet) >= dec(topUp)
 
@@ -212,7 +212,7 @@ export function PerpOrderForm({
           ...(reduceOnly ? { reduce_only: true } : {}),
         },
         gasLimit: triggerGas() + 60_000,
-        label: `${stopKind === 'sl' ? 'Stop' : 'Take profit'}: ${dir.toLowerCase()} ${size} ${market.base} when the mark reaches ${trigger}${stopLimit ? `, limit ${stopLimit}` : ''}`,
+        label: `${stopKind === 'sl' ? 'Stop' : 'Take profit'}: ${dir.toLowerCase()} ${size} ${market.symbol} when the mark reaches ${trigger}${stopLimit ? `, limit ${stopLimit}` : ''}`,
         market: market.id,
       }
     }
@@ -228,7 +228,7 @@ export function PerpOrderForm({
           ...(reduceOnly ? { reduce_only: true } : {}),
         },
         gasLimit: plan!.gas + 20_000,
-        label: `TWAP: ${dir.toLowerCase()} ${size} ${market.base} over ${twapMinutes} min`,
+        label: `TWAP: ${dir.toLowerCase()} ${size} ${market.symbol} over ${twapMinutes} min`,
         market: market.id,
       }
     }
@@ -249,7 +249,7 @@ export function PerpOrderForm({
       // Each attached TP/SL prepays a trigger's matching; the order matches with what is left.
       ...(legs.length ? { gasLimit: 1_000_000 + legs.length * triggerGas() } : {}),
       label:
-        `${dir} ${size} ${market.base} ${kind === 'market' ? 'market' : `@ ${execPrice}`}${reduceOnly ? ' (reduce-only)' : ''}` +
+        `${dir} ${size} ${market.symbol} ${kind === 'market' ? 'market' : `@ ${execPrice}`}${reduceOnly ? ' (reduce-only)' : ''}` +
         (legs.length ? ` · ${legs.map((k) => `${k.toUpperCase()} ${k === 'tp' ? tp : sl}`).join(' / ')}` : ''),
       market: market.id,
     }
@@ -297,8 +297,8 @@ export function PerpOrderForm({
           onChange={(e) => setMode(e.target.value as 'cross' | 'isolated')}
           className="h-8 rounded-md border bg-background px-2 font-medium"
         >
-          {/* A deployer market takes isolated margin only (its oracle must reach no one's cross collateral). */}
-          {!market.deployer && <option value="cross">Cross</option>}
+          {/* A token perp takes isolated margin only (its spot oracle must reach no one's cross collateral). */}
+          {market.oracleSource !== 'spot' && <option value="cross">Cross</option>}
           <option value="isolated">Isolated</option>
         </select>
         <input
@@ -413,7 +413,7 @@ export function PerpOrderForm({
       <label className="block">
         <span className="mb-1.5 flex justify-between text-xs text-muted-foreground">
           <span>Size</span>
-          <span>{market.base}</span>
+          <span>{market.symbol}</span>
         </span>
         <Input value={size} onChange={(e) => setSize(e.target.value.trim())} inputMode="decimal" placeholder="0.00" className="num h-10 text-right text-sm font-medium" />
       </label>
@@ -487,8 +487,8 @@ export function PerpOrderForm({
             ? 'Confirm in wallet…'
             : (problem ??
               (kind === 'stop'
-                ? `Place ${stopKind === 'sl' ? 'stop' : 'take profit'}: ${side === 'buy' ? 'long' : 'short'} ${market.base}`
-                : `${canTopUp ? `Deposit ${fixed(topUp!, 2)} ${unit} and ` : ''}${kind === 'twap' ? 'TWAP ' : ''}${side === 'buy' ? (canTopUp || kind === 'twap' ? 'long' : 'Long') : canTopUp || kind === 'twap' ? 'short' : 'Short'} ${market.base}`))}
+                ? `Place ${stopKind === 'sl' ? 'stop' : 'take profit'}: ${side === 'buy' ? 'long' : 'short'} ${market.symbol}`
+                : `${canTopUp ? `Deposit ${fixed(topUp!, 2)} ${unit} and ` : ''}${kind === 'twap' ? 'TWAP ' : ''}${side === 'buy' ? (canTopUp || kind === 'twap' ? 'long' : 'Long') : canTopUp || kind === 'twap' ? 'short' : 'Short'} ${market.symbol}`))}
         </Button>
       )}
       {msg && <p className={cn('rounded-md px-2.5 py-2 text-xs', msg.ok ? 'bg-bid/10 text-bid' : 'bg-ask/10 text-ask')}>{msg.text}</p>}
@@ -500,8 +500,9 @@ export function PerpOrderForm({
 
 function CollateralBox({ account, unit }: { account: AccountResponse | null; unit: string }) {
   const w = useWallet()
+  const { costs } = useFeatures()
   const perp = account?.perp
-  const inWallet = walletCollateral(account)
+  const inWallet = walletCollateral(account, costs.feeReserveQrdx)
   const [amount, setAmount] = useState('')
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)

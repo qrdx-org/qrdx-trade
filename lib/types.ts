@@ -109,8 +109,19 @@ export interface PerpMarket {
   szDecimals: number | null
   /** The market's liquidity vault (a user vault the protocol quotes on its book), if it has one. */
   liquidityVault: string | null
-  /** A deployer market's deployer (docs/HYPERLIQUID_PARITY.md), which runs its oracle. */
-  deployer: string | null
+  /** What to call the base: the asset's symbol, or a token perp's ticker or token symbol (a name proves nothing: see `token`). */
+  symbol: string
+  /** What prices it: the validators' votes, or (a token perp) its token's own spot pools. */
+  oracleSource: 'validators' | 'spot'
+  /** A token perp's token (an address, or "QRDX"); null on a validator-priced market. */
+  token: string | null
+  /** A token perp's oracle path: the pools last read, and their depth in the settlement asset. */
+  spotPools: string[] | null
+  spotDepth: string | null
+  /** Other venues' perp price, as validators vote it. */
+  externalPerpPrice: string | null
+  /** Set once the market was delisted: the price every position closed at. */
+  settledPrice: string | null
   change24h: string | null
   volume24h: string | null
   indexPrice: string | null

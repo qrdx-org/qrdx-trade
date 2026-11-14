@@ -64,8 +64,8 @@ export function DeployMarket({ onDeployed }: { onDeployed: () => void }) {
       {slot === 'test' && !state.address && (
         <div className="mt-3 space-y-3">
           <div>
-            <Button size="sm" variant="outline" onClick={deploy} disabled={!!state.busy || !w.trader || !w.rightNetwork}>
-              <Rocket className="mr-1.5 h-4 w-4" /> {state.busy === 'deploy' ? 'Deploying…' : 'Deploy the market contract from your account'}
+            <Button size="sm" variant="outline" className="h-auto min-h-8 whitespace-normal py-1.5 text-left" onClick={deploy} disabled={!!state.busy || !w.trader || !w.rightNetwork}>
+              <Rocket className="mr-1.5 h-4 w-4 shrink-0" /> {state.busy === 'deploy' ? 'Deploying…' : 'Deploy the market contract from your account'}
             </Button>
             <p className="mt-1 text-[11px] text-muted-foreground">
               One EVM transaction of about 700,000 gas, signed by your quantum-safe account. The contract has no owner or settings; once its code checks out on chain,

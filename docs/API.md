@@ -220,20 +220,24 @@ Perp markets include `collateralToken`: what perps settle in on this network
 and refuse deposits, or `null` if unknown). `markPrice` / `oraclePrice` are
 `null` until validators have priced the market.
 
-### `GET /api/v1/perps/check?base=SOL`
+### `GET /api/v1/perps/check?token=0x…`
 
-Before creating a market (ARCHITECTURE.md §13): whether it exists, and whether
-validators can price its base from public USD spot prices.
+Before listing a token perpetual (ARCHITECTURE.md §13): whether the token's market exists, and
+whether the node could price it from the token's own spot pools. `token` is a token address, a
+verified slug or `QRDX`.
 
 ```json
-{ "base": "SOL", "quote": "USD", "marketId": "SOL-USD-PERP", "exists": false,
-  "path": "/perps/sol/usd", "nodeOk": true,
-  "oracle": { "underlying": "SOL", "price": "120.0425",
-              "sources": [ { "source": "coinbase", "price": "120.045" },
-                           { "source": "kraken", "price": "120.04" } ] } }
+{ "token": "0x4f…", "asset": <asset>, "quote": "USD",
+  "marketId": "0x4f…-USD-PERP", "exists": false, "path": "/perps/0x4f…/usd", "nodeOk": true,
+  "collateral": "QRDX", "collateralAsset": <asset>, "isCollateral": false,
+  "spot": { "route": "direct", "pools": [ <pool summary>, … ] } }
 ```
 
-`oracle.price` is null when no public exchange lists the base against USD.
+`spot.route` is `"direct"` when the token has a pool against the settlement asset, `"via-qrdx"`
+when its price goes through a QRDX pool, and `null` when it has no pool path (the node refuses the
+listing). `isCollateral` is true for the settlement asset itself, which cannot have a perpetual.
+The node, not this check, decides: it also needs `spotOracleTwapSeconds` of price history and
+`spotOracleMinDepth` of depth (`/features` `costs`).
 
 ### `GET /api/v1/perps/{base}/{quote}`
 
@@ -248,7 +252,9 @@ validators can price its base from public USD spot prices.
   "bestBid": "84957.5", "bestAsk": "85085.0",
   "fundingRate": "0.0000125", "fundingTime": 1790895300, "nextFundingTime": 1790898900,
   "maxLeverage": "20", "maintenanceRate": "0.025",
-  "szDecimals": 4, "liquidityVault": null, "deployer": null,
+  "szDecimals": 4, "liquidityVault": null,
+  "symbol": "BTC", "oracleSource": "validators", "token": null,
+  "spotPools": [], "spotDepth": null, "externalPerpPrice": null, "settledPrice": null,
   "change24h": "0.05", "volume24h": "17012.4",
   "indexPrice": "85440.25", "indexSource": "coinbase", "source": "node", "asOf": … }
 ```
@@ -259,8 +265,15 @@ validators can price its base from public USD spot prices.
 `szDecimals` is the market's order grid (nodes from 2026-10; `null` before): sizes are whole
 lots of 10^-szDecimals, and prices have at most 5 significant figures and 6 − szDecimals
 decimals (an integer always fits). The node refuses an order, trigger or modify off the grid.
-`liquidityVault` is the vault the protocol quotes on the market's book, when it has one;
-`deployer` the bonded deployer of a deployer market (`dex:ASSET`), which runs its oracle.
+`liquidityVault` is the vault the protocol quotes on the market's book, when it has one.
+
+`oracleSource` says who prices the market: `"validators"` (a genesis or governance listing,
+priced by the committee's stake-weighted median) or `"spot"` (a token perpetual, priced by the
+node from the token's own pools: `token` is its address, `spotPools` the pools on its price path
+and `spotDepth` their depth in the settlement asset). A token perpetual's `base` is the token's
+address and its `symbol` the token's symbol; it takes isolated margin only. `settledPrice` is set
+once a market has been settled and closed. `externalPerpPrice` is reference data when the node
+reports one.
 
 ### `GET /api/v1/perps/{base}/{quote}/orderbook?depth=20`
 
@@ -620,10 +633,14 @@ What this network's node runs and what the protocol charges on it, cached for a 
 - `history`: the node keeps the trading history database (`history_*`).
 - `costs`: QRDX a pool costs to create (burned for a subsidized one, staked for a standard one;
   constants of the node release), and from the chain spec (`null` where the node does not report
-  them): the perp listing fee, the exchange's gas price floor, whether anyone may list a
-  validator-priced perp market (`perpOpenListing`; else governance does, and anyone else lists a
-  deployer market), the liquidity a new market seeds its book with (`perpMinLiquidity`), a
-  deployer's minimum bond (`deployerMinBond`) and when an oracle goes stale (`oracleStaleSeconds`).
+  them): the perp listing fee (`perpListingFee`) and the liquidity a new market seeds its book
+  with (`perpMinLiquidity`, locked for `perpLiquidityLockupSeconds`), a token perpetual's leverage
+  cap (`perpSpotMaxLeverage`), the pool depth and price history its oracle needs
+  (`spotOracleMinDepth`, `spotOracleTwapSeconds`) and its open-interest cap as a multiple of that
+  depth (`spotOiDepthMultiple`), the smallest perp order (`perpMinOrderValue`), the gas price
+  floors (`exchangeMinGasPriceWei`, `evmMinGasPriceWei`), the QRDX every account keeps for fees
+  (`feeReserveQrdx`, `null` on a node without the reserve) and when an oracle goes stale
+  (`oracleStaleSeconds`).
 
 ## Trading features
 
@@ -654,10 +671,6 @@ profitShare, created, marketMakerFor, nav, totalShares, shareValue, leaderShares
 withdrawable, lockupSeconds, positions, holding }`. With `holder`, `holding` is its `{ shares, cost,
 value, unlock }`. Join with `VAULT_DEPOSIT {vault, amount}`, leave with `VAULT_WITHDRAW {vault,
 shares}`; the leader trades the vault by signing for it (`sender` the vault).
-
-### `GET /api/v1/deployers/{address-or-namespace}`
-
-A perp market deployer: `{ deployer: { address, dex, bond, unbonding, unlock, markets } | null }`.
 
 ### `GET /api/v1/tickers`
 

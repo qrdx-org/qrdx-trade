@@ -2,8 +2,8 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { AlertTriangle, ArrowLeftRight, BarChart3, Droplets, Gauge, Image as ImageIcon, Landmark, Menu, PieChart, Rocket, Search, Trophy, Vault, X } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { AlertTriangle, ArrowLeftRight, BarChart3, Droplets, Gauge, Image as ImageIcon, ChevronDown, Landmark, Menu, PieChart, Rocket, Search, Trophy, Vault, X } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
 import { Wordmark } from '@/components/chrome/Logo'
 import { ThemeToggle } from '@/components/theme-toggle'
 import { MarketSearch, openMarketSearch } from '@/components/trade/MarketSelector'
@@ -13,24 +13,40 @@ import { SLOTS, slotNetwork } from '@/lib/config'
 import { useNet, useWallet } from '@/lib/wallet/WalletContext'
 import { cn } from '@/lib/utils'
 
-const LINKS = [
+/** In the bar itself. */
+const PRIMARY = [
   { href: '/trade', label: 'Trade', icon: BarChart3 },
   { href: '/perps', label: 'Perps', icon: Gauge },
   { href: '/swap', label: 'Swap', icon: ArrowLeftRight },
   { href: '/pools', label: 'Pools', icon: Droplets },
   { href: '/launch', label: 'Launch', icon: Rocket },
-  { href: '/nfts', label: 'NFTs', icon: ImageIcon },
-  { href: '/vaults', label: 'Vaults', icon: Vault },
-  { href: '/stake', label: 'Stake', icon: Landmark },
-  { href: '/leaderboard', label: 'Leaders', icon: Trophy },
   { href: '/portfolio', label: 'Portfolio', icon: PieChart },
 ]
+/** Under "More": ten links do not fit a laptop's width beside search, network and wallet. */
+const MORE = [
+  { href: '/stake', label: 'Stake', icon: Landmark, hint: 'Delegate QRDX to validators' },
+  { href: '/vaults', label: 'Vaults', icon: Vault, hint: 'Follow a trader, share the result' },
+  { href: '/nfts', label: 'NFTs', icon: ImageIcon, hint: 'Collections and listings' },
+  { href: '/leaderboard', label: 'Leaderboard', icon: Trophy, hint: 'Traders by profit and volume' },
+]
+const LINKS = [...PRIMARY, ...MORE]
 
 /** The app's top bar. The only <nav> on the page (tests find the Connect button inside it). */
 export function AppNav() {
   const path = usePathname() ?? ''
   const [open, setOpen] = useState(false)
-  useEffect(() => setOpen(false), [path])
+  const [more, setMore] = useState(false)
+  const moreRef = useRef<HTMLDivElement>(null)
+  useEffect(() => (setOpen(false), setMore(false)), [path])
+  useEffect(() => {
+    if (!more) return
+    const away = (e: MouseEvent) => !moreRef.current?.contains(e.target as Node) && setMore(false)
+    const esc = (e: KeyboardEvent) => e.key === 'Escape' && setMore(false)
+    document.addEventListener('mousedown', away)
+    document.addEventListener('keydown', esc)
+    return () => (document.removeEventListener('mousedown', away), document.removeEventListener('keydown', esc))
+  }, [more])
+  const inMore = MORE.some((l) => path.startsWith(l.href))
 
   return (
     <>
@@ -39,7 +55,7 @@ export function AppNav() {
           <Wordmark />
         </Link>
         <div className="hidden h-full items-center lg:flex">
-          {LINKS.map((l) => {
+          {PRIMARY.map((l) => {
             const active = path.startsWith(l.href)
             return (
               <Link
@@ -50,24 +66,59 @@ export function AppNav() {
                   active ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'
                 )}
               >
-                <l.icon className="h-4 w-4" />
+                <l.icon className="hidden h-4 w-4 2xl:block" />
                 {l.label}
                 {active && <span className="absolute inset-x-3 -bottom-px h-0.5 rounded-full bg-primary" />}
               </Link>
             )
           })}
+          <div ref={moreRef} className="relative h-full">
+            <button
+              onClick={() => setMore((m) => !m)}
+              aria-expanded={more}
+              aria-haspopup="menu"
+              className={cn(
+                'relative flex h-full items-center gap-1 px-3 text-sm transition-colors',
+                inMore || more ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'
+              )}
+            >
+              {MORE.find((l) => path.startsWith(l.href))?.label ?? 'More'}
+              <ChevronDown className={cn('h-3.5 w-3.5 transition-transform', more && 'rotate-180')} />
+              {inMore && <span className="absolute inset-x-3 -bottom-px h-0.5 rounded-full bg-primary" />}
+            </button>
+            {more && (
+              <div role="menu" className="absolute left-0 top-full z-50 mt-1 w-72 rounded-xl border bg-popover p-1.5 shadow-xl">
+                {MORE.map((l) => (
+                  <Link
+                    key={l.href}
+                    href={l.href}
+                    role="menuitem"
+                    className={cn('flex items-center gap-3 rounded-lg px-2.5 py-2 transition-colors hover:bg-accent', path.startsWith(l.href) && 'bg-accent')}
+                  >
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border bg-background">
+                      <l.icon className="h-4 w-4 text-muted-foreground" />
+                    </span>
+                    <span>
+                      <span className="block text-sm font-medium">{l.label}</span>
+                      <span className="block text-xs text-muted-foreground">{l.hint}</span>
+                    </span>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
 
         <div className="ml-auto flex items-center gap-2">
           <button
             onClick={openMarketSearch}
-            className="hidden h-8 w-56 items-center gap-2 rounded-md border bg-background px-2.5 text-sm text-muted-foreground transition-colors hover:border-foreground/20 hover:text-foreground md:flex xl:w-64"
+            className="hidden h-8 w-52 items-center gap-2 rounded-md border bg-background px-2.5 text-sm text-muted-foreground transition-colors hover:border-foreground/20 hover:text-foreground xl:flex 2xl:w-64"
           >
             <Search className="h-3.5 w-3.5" />
             <span>Search markets</span>
             <kbd className="ml-auto rounded border bg-muted px-1.5 font-sans text-[10px]">⌘K</kbd>
           </button>
-          <button onClick={openMarketSearch} className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-accent md:hidden" aria-label="Search markets">
+          <button onClick={openMarketSearch} className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-accent xl:hidden" aria-label="Search markets">
             <Search className="h-4 w-4" />
           </button>
           <NetworkSelector />

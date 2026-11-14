@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input'
 import { ConnectButton } from '@/components/wallet/ConnectButton'
 import { S, dec, div, isAmount, lessSlippage, mul, round, str } from '@/lib/decimal'
 import { perpTriggerKind, spotLimitParams, spotTriggerParams, twapPlan } from '@/lib/orders'
+import { spendable } from '@/lib/reserve'
 import { useFeatures } from '@/lib/hooks/useFeatures'
 import { fixed, percent, price as fmtPrice, size as fmtSize } from '@/lib/format'
 import { useApi, useDebounced } from '@/lib/hooks/useApi'
@@ -42,7 +43,7 @@ export function SpotOrderForm({
 }) {
   const w = useWallet()
   const { apiBase } = useNet()
-  const { trading } = useFeatures()
+  const { trading, costs } = useFeatures()
   const [side, setSide] = useState<Side>('buy')
   const [kindState, setKind] = useState<Kind>('limit')
   const kind: Kind = !trading && (kindState === 'stop' || kindState === 'twap') ? 'limit' : kindState
@@ -93,8 +94,9 @@ export function SpotOrderForm({
 
   const balanceOf = (address: string | null) =>
     (address && account?.balances.find((b) => b.asset.address === address)?.balance) || '0'
-  const availQuote = balanceOf(quote.address)
-  const availBase = balanceOf(base.address)
+  // QRDX less the fee reserve the network keeps in every account (lib/reserve.ts).
+  const availQuote = spendable(balanceOf(quote.address), quote.address, costs.feeReserveQrdx)
+  const availBase = spendable(balanceOf(base.address), base.address, costs.feeReserveQrdx)
   const avail = side === 'buy' ? availQuote : availBase
   const availSym = side === 'buy' ? quote.symbol : base.symbol
 

@@ -80,9 +80,9 @@ export const VERIFIED_ASSETS: VerifiedAsset[] = [
     quoteRank: 100,
     color: '#2775ca',
     addresses: {
-      // "USDC" on test.qrdx.org since the reset of 2026-10-12 (18 decimals; the node's token,
-      // not bridged USDC), created at block 42,626 and paired with native QRDX.
-      testnet: '0x801ae63d236d7a4ea69868a9d7be5d27a09e5580',
+      // "USDC" on test.qrdx.org since the regenesis onto node 3.0.0 (18 decimals; the node's
+      // token, not bridged USDC), created at block 9,837 and paired with native QRDX.
+      testnet: '0xa0ad4f35bf2d518a62ebb7e39a32a8f791703362',
     },
   },
   {

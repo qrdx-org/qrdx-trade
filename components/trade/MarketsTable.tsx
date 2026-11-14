@@ -43,18 +43,39 @@ export function MarketsTable() {
         priced++
       }
     }
+    for (const m of markets.data?.perps ?? []) {
+      if (m.volume24h && Number(m.volume24h) > 0) {
+        vol += dec(m.volume24h)
+        priced++
+      }
+    }
     return {
       volume: priced ? str(vol) : null,
       community: spot.filter((m) => !m.base.verified).length,
     }
-  }, [spot])
-  const topVolume = useMemo(
-    () => spot.filter((m) => Number(m.volume24h ?? 0) > 0).sort((a, b) => Number(volumeUsd(b) ?? 0) - Number(volumeUsd(a) ?? 0)).slice(0, 4),
-    [spot]
+  }, [spot, markets.data])
+  // Spot and perpetual markets side by side. A perp's volume is already in USD (its quote).
+  const rows = useMemo<Mini[]>(
+    () => [
+      ...spot.map((m) => ({ id: m.id, path: m.path, badge: <PairBadge base={m.base} quote={m.quote} size="sm" />, name: m.base.symbol, tail: `/${m.quote.symbol}`, last: m.last, change: m.change24h, volume: m.volume24h, volumeUsd: volumeUsd(m) })),
+      ...(markets.data?.perps ?? []).map((m) => ({
+        id: m.id,
+        path: m.path,
+        badge: <TokenBadge asset={m.baseAsset ?? { symbol: m.symbol, color: '#64748b', verified: true }} size="sm" />,
+        name: m.symbol,
+        tail: '-PERP',
+        last: m.markPrice,
+        change: m.change24h,
+        volume: m.volume24h,
+        volumeUsd: m.volume24h,
+      })),
+    ],
+    [spot, markets.data]
   )
+  const topVolume = useMemo(() => rows.filter((m) => Number(m.volume ?? 0) > 0).sort((a, b) => Number(b.volumeUsd ?? 0) - Number(a.volumeUsd ?? 0)).slice(0, 4), [rows])
   const movers = useMemo(
-    () => spot.filter((m) => m.change24h !== null && Number(m.change24h) !== 0).sort((a, b) => Math.abs(Number(b.change24h)) - Math.abs(Number(a.change24h))).slice(0, 4),
-    [spot]
+    () => rows.filter((m) => m.change !== null && Number(m.change) !== 0).sort((a, b) => Math.abs(Number(b.change)) - Math.abs(Number(a.change))).slice(0, 4),
+    [rows]
   )
   const fresh = (launches.data?.launches ?? []).filter((l) => l.market).slice(0, 4)
 
@@ -82,7 +103,7 @@ export function MarketsTable() {
           </div>
 
           <div className="mt-8 grid grid-cols-2 gap-px overflow-hidden rounded-xl border bg-border md:grid-cols-4">
-            <Summary label="24h volume" value={summary.volume ? `≈ ${usd(summary.volume)}` : '—'} hint="Valued at each base asset's USD price" />
+            <Summary label="24h volume" value={summary.volume ? `≈ ${usd(summary.volume)}` : markets.data ? '$0' : '—'} hint="Spot at each base asset's USD price, plus perpetuals" />
             <Summary label="Spot markets" value={markets.data ? String(spot.length) : '—'} />
             <Summary label="Perpetuals" value={markets.data ? String(markets.data.perps.length) : '—'} />
             <Summary label="Community coins" value={markets.data ? String(summary.community) : '—'} />
@@ -92,17 +113,29 @@ export function MarketsTable() {
 
       <div className="mx-auto max-w-6xl px-4">
         <div className="mt-8 grid gap-4 md:grid-cols-3">
-          <Highlight title="Most traded" icon={<Flame className="h-4 w-4" />}>
+          <Highlight title="Most traded" icon={<Flame className="h-4 w-4" />} empty="No trades in the last 24 hours.">
             {topVolume.map((m) => (
-              <MiniRow key={m.id} m={m} right={<span className="num text-muted-foreground">{volumeUsd(m) ? compact(volumeUsd(m), '$') : compact(m.volume24h)}</span>} />
+              <MiniRow key={m.id} m={m} right={<span className="num text-muted-foreground">{m.volumeUsd ? compact(m.volumeUsd, '$') : compact(m.volume)}</span>} />
             ))}
           </Highlight>
-          <Highlight title="Biggest moves, 24h" icon={<TrendingUp className="h-4 w-4" />}>
+          <Highlight title="Biggest moves, 24h" icon={<TrendingUp className="h-4 w-4" />} empty="No market has a day of prices yet.">
             {movers.map((m) => (
-              <MiniRow key={m.id} m={m} right={<span className={cn('num font-medium', tone(m.change24h))}>{percent(m.change24h)}</span>} />
+              <MiniRow key={m.id} m={m} right={<span className={cn('num font-medium', tone(m.change))}>{percent(m.change)}</span>} />
             ))}
           </Highlight>
-          <Highlight title="New coins" icon={<Rocket className="h-4 w-4" />} href="/launch">
+          <Highlight
+            title="New coins"
+            icon={<Rocket className="h-4 w-4" />}
+            href="/launch"
+            empty={
+              <>
+                No coin has launched on {network.name} yet.{' '}
+                <Link href="/launch" className="font-medium text-foreground hover:underline">
+                  Launch the first
+                </Link>
+              </>
+            }
+          >
             {fresh.map((l) => (
               <Link key={l.token.segment} href={l.market!.path} className="flex items-center justify-between rounded-md px-2 py-1.5 text-sm hover:bg-accent">
                 <span className="flex min-w-0 items-center gap-2">
@@ -163,8 +196,8 @@ function Summary({ label, value, hint }: { label: string; value: string; hint?: 
   )
 }
 
-function Highlight({ title, icon, href, children }: { title: string; icon: React.ReactNode; href?: string; children: React.ReactNode }) {
-  const empty = !(Array.isArray(children) ? children.length : children)
+function Highlight({ title, icon, href, empty, children }: { title: string; icon: React.ReactNode; href?: string; empty: React.ReactNode; children: React.ReactNode }) {
+  const none = !(Array.isArray(children) ? children.length : children)
   return (
     <div className="rounded-xl border bg-card p-3">
       <div className="mb-1 flex items-center justify-between px-2 pt-1">
@@ -178,19 +211,31 @@ function Highlight({ title, icon, href, children }: { title: string; icon: React
           </Link>
         )}
       </div>
-      {empty ? <p className="px-2 py-6 text-center text-xs text-muted-foreground">Nothing yet.</p> : children}
+      {none ? <p className="px-2 py-6 text-center text-xs leading-relaxed text-muted-foreground">{empty}</p> : children}
     </div>
   )
 }
 
-function MiniRow({ m, right }: { m: SpotMarket; right: React.ReactNode }) {
+interface Mini {
+  id: string
+  path: string
+  badge: React.ReactNode
+  name: string
+  tail: string
+  last: string | null
+  change: string | null
+  volume: string | null
+  volumeUsd: string | null
+}
+
+function MiniRow({ m, right }: { m: Mini; right: React.ReactNode }) {
   return (
     <Link href={m.path} className="flex items-center justify-between rounded-md px-2 py-1.5 text-sm hover:bg-accent">
       <span className="flex items-center gap-2">
-        <PairBadge base={m.base} quote={m.quote} size="sm" />
+        {m.badge}
         <span className="font-medium">
-          {m.base.symbol}
-          <span className="text-muted-foreground">/{m.quote.symbol}</span>
+          {m.name}
+          <span className="text-muted-foreground">{m.tail}</span>
         </span>
       </span>
       <span className="flex items-center gap-3 text-xs">

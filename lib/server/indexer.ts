@@ -18,7 +18,8 @@ import { dec, div, str } from '../decimal'
 import { cached } from './cache'
 import { mapLimit } from './util'
 import type { Net } from './net'
-import type { NodeReceipt } from './node'
+import { decodeExchangeTx } from './exchange-wire'
+import type { NodeBlockExchangeTx, NodeReceipt } from './node'
 
 /** SWAP in qrdx/exchange/transactions.py ExchangeOpType. */
 const OP_SWAP = 4
@@ -60,18 +61,14 @@ function stateFor(net: Net): State {
   return s
 }
 
-export function tradeFromSwap(
-  tx: { tx_hash: string; params: Record<string, unknown> },
-  r: NodeReceipt
-): IndexedTrade | null {
-  if (!r.success) return null
-  const d = r.data as { amount_in?: string; amount_out?: string; source?: string; pool_id?: string | null }
+/** One leg of a swap as a trade of its pair, in the node's canonical orientation. */
+function hopTrade(r: NodeReceipt, k: number, h: { token_in: string; token_out: string; amount_in?: string; amount_out?: string; source?: string; pool_id?: string | null }): IndexedTrade | null {
   // Token addresses are stored lower-case (tokens.py deploy); normalise whatever the sender wrote.
-  const tokenIn = String(tx.params.token_in ?? '').toLowerCase()
-  const tokenOut = String(tx.params.token_out ?? '').toLowerCase()
-  if (!tokenIn || !tokenOut || !d.amount_in || !d.amount_out) return null
-  const amountIn = dec(d.amount_in)
-  const amountOut = dec(d.amount_out)
+  const tokenIn = h.token_in.toLowerCase()
+  const tokenOut = h.token_out.toLowerCase()
+  if (!tokenIn || !tokenOut || !h.amount_in || !h.amount_out) return null
+  const amountIn = dec(h.amount_in)
+  const amountOut = dec(h.amount_out)
   if (amountIn <= 0n || amountOut <= 0n) return null
   const { pair, token0 } = canonicalPair(tokenIn, tokenOut)
   // Paying token1 for token0 is a buy of the canonical base.
@@ -79,7 +76,7 @@ export function tradeFromSwap(
   const size = buy ? amountOut : amountIn
   const quoteSize = buy ? amountIn : amountOut
   return {
-    id: `${r.tx_hash}:0`,
+    id: `${r.tx_hash}:${k}`,
     time: Math.floor(r.block_time),
     blockHeight: r.block_height,
     txHash: r.tx_hash,
@@ -88,8 +85,47 @@ export function tradeFromSwap(
     size: str(size),
     quoteSize: str(quoteSize),
     side: buy ? 'buy' : 'sell',
-    venue: d.source ?? 'amm',
-    poolId: d.pool_id ?? null,
+    venue: h.source ?? 'amm',
+    poolId: h.pool_id ?? null,
+  }
+}
+
+/**
+ * The trades of one SWAP. A swap the node routed through several pairs (its own route, or the
+ * sender's `path`) lists each hop in its receipt, and each hop is a trade of that hop's pair;
+ * a single-hop swap is one trade between its two tokens.
+ */
+export function tradesFromSwap(tx: { tx_hash: string; params: Record<string, unknown> }, r: NodeReceipt): IndexedTrade[] {
+  if (!r.success) return []
+  const d = r.data as {
+    amount_in?: string
+    amount_out?: string
+    source?: string
+    pool_id?: string | null
+    hops?: { token_in: string; token_out: string; amount_in: string; amount_out: string; source?: string; pool_id?: string | null }[]
+  }
+  if (Array.isArray(d.hops) && d.hops.length) return d.hops.map((h, k) => hopTrade(r, k, h)).filter((t): t is IndexedTrade => !!t)
+  const path = Array.isArray(tx.params.path) ? tx.params.path.map(String) : null
+  const t = hopTrade(r, 0, {
+    token_in: String(tx.params.token_in ?? path?.[0] ?? ''),
+    token_out: String(tx.params.token_out ?? path?.[path.length - 1] ?? ''),
+    amount_in: d.amount_in,
+    amount_out: d.amount_out,
+    source: d.source,
+    pool_id: d.pool_id,
+  })
+  return t ? [t] : []
+}
+
+export const tradeFromSwap = (tx: { tx_hash: string; params: Record<string, unknown> }, r: NodeReceipt): IndexedTrade | null => tradesFromSwap(tx, r)[0] ?? null
+
+/** A block lists its exchange transactions as JSON objects, or since node 3.0.0 as base64 binary. */
+function blockTx(t: NodeBlockExchangeTx | string): { op_type: number; tx_hash: string; params: Record<string, unknown> } | null {
+  if (typeof t !== 'string') return t
+  try {
+    return decodeExchangeTx(t)
+  } catch {
+    return null
   }
 }
 
@@ -110,17 +146,17 @@ async function syncOnce(net: Net): Promise<void> {
     const blocks = await node.blocks(next, Math.min(CHUNK, height - next + 1))
     if (!blocks.length) break
     const swaps = blocks.flatMap((b) =>
-      (b.block.exchange_transactions ?? []).filter((t) => t.op_type === OP_SWAP && t.tx_hash)
+      (b.block.exchange_transactions ?? []).map(blockTx).filter((t): t is NonNullable<typeof t> => !!t && t.op_type === OP_SWAP && !!t.tx_hash)
     )
     const receipts = await mapLimit(swaps, RECEIPT_CONCURRENCY, (t) => node.receipt(t.tx_hash).catch(() => null))
     swaps.forEach((tx, k) => {
       const r = receipts[k]
-      const trade = r && tradeFromSwap(tx, r)
-      if (!trade) return
-      const list = state.byPair.get(trade.pair) ?? []
-      list.push(trade)
-      if (list.length > MAX_TRADES_PER_PAIR) list.splice(0, list.length - MAX_TRADES_PER_PAIR)
-      state.byPair.set(trade.pair, list)
+      for (const trade of r ? tradesFromSwap(tx, r) : []) {
+        const list = state.byPair.get(trade.pair) ?? []
+        list.push(trade)
+        if (list.length > MAX_TRADES_PER_PAIR) list.splice(0, list.length - MAX_TRADES_PER_PAIR)
+        state.byPair.set(trade.pair, list)
+      }
     })
     const last = blocks[blocks.length - 1].block
     next = Number(last.block_height ?? last.id ?? next + blocks.length - 1) + 1

@@ -16,6 +16,7 @@ import { useAccount } from '@/components/trade/SpotTradeView'
 import type { ApiAsset } from '@/lib/types'
 import type { RoutedQuote } from '@/lib/server/routing'
 import { MAX_PATH_HOPS, routeOps, routePathOp } from '@/lib/routing'
+import { spendable } from '@/lib/reserve'
 import { useFeatures } from '@/lib/hooks/useFeatures'
 import { useNet, useWallet } from '@/lib/wallet/WalletContext'
 import { cn } from '@/lib/utils'
@@ -28,7 +29,7 @@ export function SwapCard() {
   const router = useRouter()
   const params = useSearchParams()
   const from = (params.get('from') ?? 'usdc').toLowerCase()
-  const to = (params.get('to') ?? 'btc').toLowerCase()
+  const to = (params.get('to') ?? 'qrdx').toLowerCase()
   const list = useApi<AssetList>(`${apiBase}/assets?all=1`, 60_000)
   const account = useAccount()
   const [amount, setAmount] = useState('')
@@ -54,17 +55,19 @@ export function SwapCard() {
   const hops = q.data?.hops ?? []
   const multi = hops.length > 1
   // One atomic SWAP through the path, where the node takes them.
-  const { trading } = useFeatures()
+  const { trading, costs } = useFeatures()
   const atomic = multi && trading && hops.length <= MAX_PATH_HOPS
 
   const balance = (a: ApiAsset | null) => (a?.address && account.data?.balances.find((b) => b.asset.address === a.address)?.balance) || '0'
-  const avail = balance(fromAsset)
+  // QRDX less the fee reserve the network keeps in every account (lib/reserve.ts).
+  const avail = spendable(balance(fromAsset), fromAsset?.address, costs.feeReserveQrdx)
 
   const problem = (() => {
     if (!fromAsset || !toAsset) return 'Choose two tokens.'
     if (!fromAsset.listed || !toAsset.listed) return `${!fromAsset.listed ? fromAsset.symbol : toAsset.symbol} is not on this network yet.`
     if (!isAmount(amount, fromAsset.decimals) || dec(amount) <= 0n) return 'Enter an amount.'
-    if (w.trader && account.data && dec(amount) > dec(avail)) return `Not enough ${fromAsset.symbol}.`
+    if (w.trader && account.data && dec(amount) > dec(avail))
+      return dec(amount) <= dec(balance(fromAsset)) ? `The network keeps ${costs.feeReserveQrdx} QRDX in the wallet for fees.` : `Not enough ${fromAsset.symbol}.`
     if (q.error) return q.error.message
     if (!q.data || debounced !== amount) return 'Getting a quote…'
     if (!(Number(slippage) > 0 && Number(slippage) <= 50)) return 'Slippage must be between 0 and 50 %.'
@@ -131,7 +134,7 @@ export function SwapCard() {
         <p className="mt-2 text-sm text-muted-foreground">Any two tokens on QRDX, routed to the best of the order book and the pools.</p>
       </div>
       <div className="mx-auto w-full max-w-md rounded-2xl border bg-card p-2 shadow-2xl shadow-black/5">
-        <Side label="You pay" asset={fromAsset} balance={w.trader ? avail : null} onPick={() => setPicking('from')}>
+        <Side label="You pay" asset={fromAsset} balance={w.trader ? balance(fromAsset) : null} onPick={() => setPicking('from')}>
           <Input value={amount} onChange={(e) => setAmount(e.target.value.trim())} inputMode="decimal" placeholder="0" className="num h-12 border-0 bg-transparent px-0 text-right text-3xl font-medium shadow-none focus-visible:ring-0 dark:bg-transparent" />
         </Side>
         <div className="relative z-10 -my-2 flex justify-center">

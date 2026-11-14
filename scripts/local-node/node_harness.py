@@ -7,8 +7,8 @@ trade site and the wallet use. Differences from a real node:
 
   * blocks are produced by a timer (BLOCK_SECONDS) instead of consensus;
   * token / QRDX balances live in a dict instead of the database;
-  * liboqs is replaced by dilithium-py (pure-Python FIPS 204 ML-DSA-65), so
-    the node's own verify path checks the wallet's real signatures;
+  * liboqs is replaced by dilithium-py and kyber-py (pure-Python FIPS 204 ML-DSA-65 and
+    FIPS 203 ML-KEM-768), so the node's own verify path checks the wallet's real signatures;
   * perp oracle prices are set by the harness instead of validator votes.
 
 Seeds wQRDX, qBTC, qUSDC, qETH and an unverified PEPE with pools (two of them
@@ -38,9 +38,13 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 # ── liboqs stand-in ───────────────────────────────────────────────────────────
 from dilithium_py.ml_dsa import ML_DSA_65
+from kyber_py.ml_kem import ML_KEM_768
 
 
 class _Signature:
+    # What the node's start-up self-test reads (qrdx/crypto/pq/algorithms.py): FIPS 204 sizes.
+    details = {"length_public_key": 1952, "length_secret_key": 4032, "length_signature": 3309}
+
     def __init__(self, alg, secret_key=None):
         self.sk = secret_key
         self.pk = None
@@ -65,9 +69,32 @@ class _Signature:
         return False
 
 
-class _KEM:  # the node's PQ package also loads Kyber; key exchange is unused here
+class _KEM:  # key exchange is unused here, but the node proves ML-KEM-768 against a known answer
+    details = {"length_public_key": 1184, "length_secret_key": 2400,
+               "length_ciphertext": 1088, "length_shared_secret": 32}
+
     def __init__(self, alg, secret_key=None):
-        pass
+        self.sk = secret_key
+
+    def generate_keypair(self):
+        pk, self.sk = ML_KEM_768.keygen()
+        return pk
+
+    def export_secret_key(self):
+        return self.sk
+
+    def encap_secret(self, public_key):
+        key, ct = ML_KEM_768.encaps(public_key)
+        return ct, key
+
+    def decap_secret(self, ciphertext):
+        return ML_KEM_768.decaps(self.sk, ciphertext)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
 
 
 _oqs = types.ModuleType("oqs")
@@ -76,9 +103,9 @@ _oqs.KeyEncapsulation = _KEM
 sys.modules["oqs"] = _oqs
 
 os.environ.setdefault("QRDX_PERP_COLLATERAL_TOKEN", "QRDX")
-# Nodes from 2026-10 list validator-priced perp markets by governance and want 10,000 of seed
-# liquidity with each: a local network lists the seeded market directly, without seed.
-os.environ.setdefault("QRDX_PERP_OPEN_LISTING", "1")
+# The validator-priced perp markets a network starts with (node 3.0.0: CREATE_MARKET lists
+# token perps only; markets on off-chain assets come from genesis or governance).
+os.environ.setdefault("QRDX_PERP_GENESIS_MARKETS", "BTC:20:5,ETH:20:4")
 # The chain id exchange signatures bind to: the harness's (newer nodes' dev networks default to 88888).
 os.environ.setdefault("QRDX_CHAIN_ID", os.environ.get("CHAIN_ID", "9999"))
 os.environ.setdefault("QRDX_PERP_MARKET_MIN_LIQUIDITY", "0")
@@ -300,7 +327,8 @@ def seed():
                         "price": str(px.quantize(D("1e-10")).normalize()), "amount": str(size)})
 
     # perps: a BTC market with a two-sided book
-    run(FOUNDATION, ExchangeOpType.CREATE_MARKET, {"base_token": "BTC", "max_leverage": "20"})
+    if "BTC-USD-PERP" not in mgr.clearinghouse.markets:  # a node's first block makes them
+        mgr.create_genesis_markets()
     for i, maker in enumerate(MAKERS):
         run(maker, ExchangeOpType.PERP_DEPOSIT, {"amount": "2000000"})
         for k in range(1, 6):

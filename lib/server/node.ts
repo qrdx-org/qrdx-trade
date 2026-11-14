@@ -141,10 +141,24 @@ export interface NodePerpMarket {
   funding_rate: string | null
   funding_time: string | null
   next_funding_time: string | null
-  /** Nodes from 2026-10: the order grid, the liquidity vault, a deployer market's deployer. */
+  /** The order grid and the liquidity vault the protocol quotes on the book. */
   sz_decimals?: number | null
   liquidity_vault?: string | null
-  deployer?: string | null
+  /** Other venues' perp price as the validators vote it (the mark's third input); null: none. */
+  external_perp_price?: string | null
+  /** Set once governance delisted the market: every position was closed at this price. */
+  settled_price?: string | null
+  /**
+   * Node 3.0.0: what prices the market. "validators" vote an off-chain asset's price; "spot"
+   * is a token perp (docs/HYPERLIQUID_PARITY.md 13), read off its token's own pools.
+   */
+  oracle_source?: 'validators' | 'spot'
+  /** A token perp's token (an address, or "QRDX"), the pools last read and their depth. */
+  token?: string | null
+  spot_pools?: string[] | null
+  spot_depth?: string | null
+  /** A token perp's token's claimed ticker, if it holds one. */
+  ticker?: string | null
 }
 
 export interface NodePerpBook {
@@ -249,7 +263,8 @@ export interface NodeBlock {
     id?: number
     timestamp?: number | string
     hash?: string
-    exchange_transactions?: NodeBlockExchangeTx[]
+    /** JSON objects before node 3.0.0; base64 binary since (feature binary_exchange_txs, exchange-wire.ts). */
+    exchange_transactions?: (NodeBlockExchangeTx | string)[]
   }
 }
 
@@ -460,6 +475,9 @@ export interface NodeChainSpec {
   network: string
   chain_id: number
   params: { SLOT_DURATION_MS: number; SLOTS_PER_EPOCH: number; [key: string]: unknown }
+  /** The chain-spec features in force at the head (node 3.0.0: deferred_execution, two_block_deferral, …). */
+  active_features?: string[]
+  node_version?: string
 }
 
 /** market_getTicker / market_getMarkets (qrdx-node docs/PERPS_API.md §8). Prices quote per base of the canonical pair. */
@@ -774,9 +792,6 @@ export function createNodeClient(cfg: ServerConfig) {
     qnsResolve: (name: string) => optional<string | null>(cfg, 'qns_resolve', [name]),
     qnsReverse: (address: string) => optional<string | null>(cfg, 'qns_reverse', [address]),
     qnsPrice: (years: number) => optional<string>(cfg, 'qns_price', [years]),
-    /** A market deployer by address or namespace: its bond, unbonding, and markets (null: none). */
-    deployer: (who: string) =>
-      optional<{ address: string; dex: string; bond: string; unbonding: string; unlock: string | null; markets: string[] }>(cfg, 'perp_getDeployer', [who]),
     /** The ticker auction's price now (QRDX), its floor and its last sale (docs/HYPERLIQUID_PARITY.md 11). */
     tickerAuction: () =>
       optional<{ price: string; floor: string; opening_price: string; auction_seconds: number; last_sale: { price: string; time: string } | null; tickers: number; reserved: string[] }>(

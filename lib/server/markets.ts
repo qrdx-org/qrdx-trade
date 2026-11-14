@@ -475,7 +475,9 @@ export function perpCollateral(net: Net): Promise<string | null> {
 }
 
 async function perpSummary(net: Net, m: NodePerpMarket, idx: TokenIndex): Promise<PerpMarket> {
-  const asset = verifiedBySlug(m.base)
+  // A token perp is named by its token's address: show the token, as the spot markets do.
+  const tokenRef = m.token ? refForAddress(m.token, idx) : null
+  const asset = tokenRef ? (tokenRef.slug ? verifiedBySlug(tokenRef.slug) : undefined) : verifiedBySlug(m.base)
   const [ticker, fills, collateral] = await Promise.all([
     asset ? indexTicker(asset).catch(() => null) : null,
     cached(net.key(`perp-trades:${m.market_id}:500`), 1_500, () => net.node.perpTrades(m.market_id, 500)).catch(() => []),
@@ -489,7 +491,8 @@ async function perpSummary(net: Net, m: NodePerpMarket, idx: TokenIndex): Promis
     path: marketPath('perp', m.base.toLowerCase(), m.quote.toLowerCase()),
     base: m.base,
     quote: m.quote,
-    baseAsset: asset ? apiAsset(verifiedRef(asset, idx)) : null,
+    baseAsset: asset ? apiAsset(verifiedRef(asset, idx)) : tokenRef ? apiAsset(tokenRef) : null,
+    symbol: asset?.symbol ?? m.ticker ?? tokenRef?.symbol ?? m.base,
     markPrice: optPrice(m.mark_price),
     oraclePrice: optPrice(m.oracle_price),
     oracleTime: optNum(m.oracle_time),
@@ -504,7 +507,12 @@ async function perpSummary(net: Net, m: NodePerpMarket, idx: TokenIndex): Promis
     maintenanceRate: m.maintenance_rate,
     szDecimals: typeof m.sz_decimals === 'number' && m.sz_decimals >= 0 ? m.sz_decimals : null,
     liquidityVault: m.liquidity_vault ?? null,
-    deployer: m.deployer ?? null,
+    oracleSource: m.oracle_source === 'spot' || m.token ? 'spot' : 'validators',
+    token: m.token ?? null,
+    spotPools: m.spot_pools ?? null,
+    spotDepth: m.spot_depth ?? null,
+    externalPerpPrice: optPrice(m.external_perp_price ?? null),
+    settledPrice: optPrice(m.settled_price ?? null),
     change24h: s.change24h,
     volume24h: s.volume24h,
     indexPrice: ticker?.price ?? null,
@@ -522,7 +530,7 @@ export async function perpMarkets(net: Net): Promise<{ markets: PerpMarket[]; no
 }
 
 async function findPerp(net: Net, baseSegRaw: string, quoteSeg: string): Promise<NodePerpMarket> {
-  // A deployer market's base is `dex:ASSET`; its path segment may arrive percent-encoded.
+  // A token perp's base is its token's address; the path segment may arrive percent-encoded.
   const baseSeg = decodeURIComponent(baseSegRaw)
   const list = await perpList(net)
   const m = list.find(

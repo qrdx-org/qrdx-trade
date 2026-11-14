@@ -8,6 +8,8 @@ import { TradeGate } from '@/components/trade/TradeGate'
 import { cmp, dec, div, mul, round, str } from '@/lib/decimal'
 import { compact } from '@/lib/format'
 import { apiGet, useApi } from '@/lib/hooks/useApi'
+import { useFeatures } from '@/lib/hooks/useFeatures'
+import { explainNodeError } from '@/lib/reserve'
 import { useNet, useWallet } from '@/lib/wallet/WalletContext'
 import { cn } from '@/lib/utils'
 import { useStakeHistory, type StakeHistory } from '@/components/stake/useStakeHistory'
@@ -94,6 +96,7 @@ const delegatorBps = (rateBps: number, commissionBps: number) => (rateBps * (10_
 export function StakeView() {
   const { apiBase, network, slot } = useNet()
   const w = useWallet()
+  const { costs } = useFeatures()
   const staking = useApi<Staking>(`${apiBase}/staking`, 10_000)
   const mine = useApi<Mine>(w.trader ? `${apiBase}/staking/${w.trader}` : null, 8_000)
   // Re-read when the stake changes (a delegation landed), not on every poll.
@@ -131,7 +134,9 @@ export function StakeView() {
             ? 'More than your balance'
             : null
   const yearly = !problem && chosen ? str(div(mul(dec(amount), dec(delegatorBps(rate, chosen.commissionBps))), dec(10_000))) : null
-  const max = balance != null ? str(dec(balance) > dec(GAS_RESERVE) ? dec(balance) - dec(GAS_RESERVE) : 0n) : null
+  // Gas, and the fee reserve where the network keeps one (lib/reserve.ts).
+  const keep = costs.feeReserveQrdx && dec(costs.feeReserveQrdx) > dec(GAS_RESERVE) ? costs.feeReserveQrdx : GAS_RESERVE
+  const max = balance != null ? str(dec(balance) > dec(keep) ? dec(balance) - dec(keep) : 0n) : null
 
   const submit = async (op: 'STAKE_DELEGATE' | 'STAKE_UNDELEGATE', params: Record<string, string>, label: string) => {
     setStage({ kind: 'signing', label })
@@ -153,7 +158,7 @@ export function StakeView() {
         if (stage.since && Date.now() - stage.since > RECEIPT_WAIT_MS) setStage((cur) => (cur?.tx === stage.tx ? { ...cur, kind: 'unconfirmed' } : cur))
         return
       }
-      setStage((cur) => (cur?.tx === stage.tx ? { ...cur, kind: r.data.success ? 'done' : 'failed', error: r.data.success ? undefined : r.data.error || 'The node refused it.' } : cur))
+      setStage((cur) => (cur?.tx === stage.tx ? { ...cur, kind: r.data.success ? 'done' : 'failed', error: r.data.success ? undefined : (r.data.error && explainNodeError(r.data.error)) || 'The node refused it.' } : cur))
       if (r.data.success) {
         setAmount('')
         mine.refresh()
@@ -185,13 +190,13 @@ export function StakeView() {
             <Stat icon={<Coins className="h-4 w-4" />} label="Delegated" value={s ? compact(String(totalDelegated)) : '—'} sub="QRDX in pools" />
             <Stat icon={<ShieldCheck className="h-4 w-4" />} label="Active validators" value={s ? eligible.length : '—'} sub={s ? `${compact(String(totalWeight))} QRDX weight` : ''} />
             <Stat icon={<Hourglass className="h-4 w-4" />} label="Warm-up" value={s ? epochsAsTime(s.params.warmup_epochs, epochMs) : '—'} sub={s ? `${s.params.warmup_epochs} epochs` : ''} />
-            <Stat icon={<Clock className="h-4 w-4" />} label="Unstaking" value={s ? epochsAsTime(unbondEpochs, epochMs) : '—'} sub="unbonding + withdrawal delay" />
+            <Stat icon={<Clock className="h-4 w-4" />} label="Unstaking" value={s ? epochsAsTime(unbondEpochs, epochMs) : '—'} sub="unbonding + withdrawal delay" className="col-span-2 md:col-span-1" />
           </div>
         </div>
       </section>
 
       <div className="mx-auto mt-8 grid max-w-6xl gap-6 px-4 pb-10 lg:grid-cols-[minmax(0,1fr)_360px]">
-        <div className="space-y-6">
+        <div className="min-w-0 space-y-6">
           <section className="overflow-hidden rounded-xl border bg-card">
             <header className="flex items-center gap-2 border-b px-4 py-3">
               <ShieldCheck className="h-4 w-4 text-primary" />
@@ -563,15 +568,15 @@ function StageNote({ stage }: { stage: Stage }) {
   )
 }
 
-function Stat({ icon, label, value, sub }: { icon: React.ReactNode; label: string; value: React.ReactNode; sub?: string }) {
+function Stat({ icon, label, value, sub, className }: { icon: React.ReactNode; label: string; value: React.ReactNode; sub?: string; className?: string }) {
   return (
-    <div className="rounded-xl border bg-card px-4 py-3">
+    <div className={cn('rounded-xl border bg-card px-4 py-3', className)}>
       <div className="flex items-center justify-between text-xs text-muted-foreground">
         {label}
         <span className="text-muted-foreground/70">{icon}</span>
       </div>
       <div className="num mt-1 text-xl font-semibold tracking-tight">{value}</div>
-      {sub && <div className="mt-0.5 truncate text-xs text-muted-foreground">{sub}</div>}
+      {sub && <div className="mt-0.5 text-xs text-muted-foreground">{sub}</div>}
     </div>
   )
 }
