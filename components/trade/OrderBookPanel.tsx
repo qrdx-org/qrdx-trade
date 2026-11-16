@@ -22,6 +22,7 @@ export function OrderBookPanel({
   quoteSymbol,
   onPick,
   mark,
+  poolPrice,
 }: {
   book: OrderBook | null
   error: Error | null
@@ -30,6 +31,8 @@ export function OrderBookPanel({
   onPick?: (price: string) => void
   /** Perps: mark price, shown in the mid row's tooltip (the market bar shows it too). */
   mark?: string | null
+  /** Spot: the pool price, when the market has a pool (market orders fill there with no resting orders). */
+  poolPrice?: string | null
 }) {
   const [view, setView] = useState<View>('both')
   // As many whole rows as the panel has room for, per side.
@@ -47,6 +50,8 @@ export function OrderBookPanel({
     1e-18
   )
   const dir = useDirection(book?.mid ?? null)
+  // A market whose liquidity is all in its pool: say so instead of two empty sides.
+  const poolOnly = !!poolPrice && !!book && !book.bids.length && !book.asks.length
 
   const Row = ({ level, side }: { level: [string, string, string]; side: 'bid' | 'ask' }) => {
     const pct = Math.min(100, (Number(level[2]) / maxTotal) * 100)
@@ -105,6 +110,19 @@ export function OrderBookPanel({
         <Empty text="Order book unavailable: the QRDX node did not answer." />
       ) : !book ? (
         <Skeleton />
+      ) : poolOnly && view !== 'depth' ? (
+        <div className="flex flex-1 flex-col items-center justify-center gap-2 px-4 text-center">
+          <div className="num text-lg font-semibold">{fmtPrice(poolPrice!, Number(poolPrice))}</div>
+          <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Pool price</div>
+          <p className="max-w-56 text-xs leading-relaxed text-muted-foreground">
+            No resting orders yet. Market orders fill against the pool; a limit order here starts the book.
+          </p>
+          {onPick && (
+            <button type="button" onClick={() => onPick(poolPrice!)} className="rounded-md border px-2 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground">
+              Use pool price
+            </button>
+          )}
+        </div>
       ) : view === 'depth' ? (
         <DepthChart book={book} baseSymbol={baseSymbol} quoteSymbol={quoteSymbol} onPick={onPick} />
       ) : (

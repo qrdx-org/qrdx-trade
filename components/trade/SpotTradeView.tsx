@@ -82,7 +82,7 @@ export function SpotTradeView({ base, quote }: { base: string; quote: string }) 
   const route = m.baseUsd?.route ?? []
 
   const bookPanel = (
-    <OrderBookPanel book={book.data} error={book.error} baseSymbol={m.base.symbol} quoteSymbol={m.quote.symbol} onPick={setPicked} />
+    <OrderBookPanel book={book.data} error={book.error} baseSymbol={m.base.symbol} quoteSymbol={m.quote.symbol} onPick={setPicked} poolPrice={m.lastSource === 'pool' ? m.last : null} />
   )
   const tradesPanel = (
     <TradesPanel

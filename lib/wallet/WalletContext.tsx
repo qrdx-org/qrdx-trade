@@ -552,8 +552,11 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       const w = walletRef.current
       if (!w || !trader) throw new Error('Connect the QRDX Wallet first.')
       if (!rightNetwork) throw new Error(`Switch the wallet to ${network.name}.`)
-      const sender = actingAs && req.ops.every((o) => ACT_AS_OPS.has(o.op)) ? actingAs : undefined
-      if (actingAs && !sender) throw new Error('Switch the trading account back to your own for this.')
+      // Trading operations go as the chosen account; the wallet account's own (moving funds
+      // between sub-accounts, creating one) as itself. One batch is one sender.
+      const acting = req.ops.filter((o) => ACT_AS_OPS.has(o.op)).length
+      const sender = actingAs && acting === req.ops.length ? actingAs : undefined
+      if (actingAs && acting > 0 && !sender) throw new Error('Switch the trading account back to your own for this.')
       const batch = { actions: req.ops.map((o) => ({ op: o.op, params: o.params })) }
       if (oneClickLive(oneClick) && req.ops.length <= 20 && inAgentScope('BATCH', batch)) {
         const gasLimit = Math.min(10_000 + req.ops.reduce((n, o) => n + (o.gasLimit ?? 1_000_000), 0), 20_000_000)

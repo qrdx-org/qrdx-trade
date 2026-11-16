@@ -6,11 +6,11 @@
 import { VERIFIED_ASSETS, isNativeAsset, isTokenAddress, marketPath, preferredOrder } from '../assets'
 import { S, dec, mul, str } from '../decimal'
 import { isInverted, orientPrice } from '../pairs'
-import type { AccountResponse, AccountTrigger, AccountTwap, ApiAsset, SwapQuote } from '../types'
+import type { AccountFamily, AccountResponse, AccountSummary, AccountTrigger, AccountTwap, ApiAsset, SwapQuote } from '../types'
 import { ApiError, nowSec } from './http'
 import { apiAsset } from './markets'
 import type { Net } from './net'
-import type { NodeSpotOrder, NodeTrigger, NodeTwap } from './node'
+import type { NodePerpPosition, NodeSpotOrder, NodeTrigger, NodeTwap } from './node'
 import { refForAddress, resolveSegment, tokenIndex } from './resolve'
 import { mapLimit } from './util'
 
@@ -20,6 +20,8 @@ const PROTOCOL_ACCOUNT_RE = /^0x(SUBA|UVLT)[0-9a-fA-F]{36}$/
 /** Tokens checked per account read, newest first (plus verified, requested, and in-use ones). */
 const MAX_SCANNED_TOKENS = 300
 const BALANCE_CONCURRENCY = 16
+/** SUBACCOUNTS_PER_ACCOUNT (qrdx-node qrdx/exchange/trading.py). */
+const MAX_SUBACCOUNTS = 20
 
 export function checkTraderAddress(address: string): void {
   // Exchange operations are signed by the PQ key; accounts are keyed by the 0xPQ address.
@@ -101,6 +103,78 @@ export async function account(net: Net, address: string, extraTokens: string[]):
     source: 'node',
     asOf: nowSec(),
   }
+}
+
+/**
+ * The wallet account and every account it signs for (its sub-accounts, the vaults it leads), each
+ * with what it holds: the verified assets, the tokens of its orders, and `extraTokens` (the
+ * client passes the wallet account's own tokens, so one moved to a sub-account shows there). A
+ * lighter read than `account`: no scan of every token the node knows.
+ */
+export async function accountFamily(net: Net, master: string, extraTokens: string[]): Promise<AccountFamily> {
+  if (!PQ_ADDRESS_RE.test(master)) throw new ApiError('bad_request', 'Expected the wallet account (0xPQ…): sub-accounts belong to it')
+  const { node } = net
+  const idx = await tokenIndex(net)
+  if (!idx.nodeOk) throw new ApiError('node_unavailable', 'QRDX node unreachable')
+  const [subs, vaults] = await Promise.all([node.subaccounts(master), node.userVaults(master).catch(() => null)])
+  if (subs === null) throw new ApiError('not_implemented', "This network's node has no sub-accounts (qrdx-node's 2026-10 release adds them)")
+
+  const common = new Set<string>(['qrdx'])
+  for (const a of VERIFIED_ASSETS) {
+    const t = idx.verified.get(a.slug)
+    if (t) common.add(t.token_address.toLowerCase())
+  }
+  for (const t of extraTokens) if (isTokenAddress(t) || isNativeAsset(t)) common.add(t.toLowerCase())
+
+  const members: Pick<AccountSummary, 'address' | 'kind' | 'index' | 'name'>[] = [
+    { address: master, kind: 'main', index: null, name: '' },
+    ...[...subs].sort((a, b) => a.index - b.index).map((s) => ({ address: s.subaccount, kind: 'sub' as const, index: s.index, name: s.name })),
+    ...(vaults ?? []).filter((v) => !v.managed).map((v) => ({ address: v.vault, kind: 'vault' as const, index: null, name: v.name })),
+  ]
+
+  const accounts = await mapLimit(members, 4, async (m): Promise<AccountSummary> => {
+    const [orders, perp, triggers] = await Promise.all([
+      node.spotOrders(m.address).catch(() => []),
+      node.perpAccount(m.address).catch(() => null),
+      node.triggers(m.address).catch(() => null),
+    ])
+    const tokens = new Set(common)
+    for (const o of orders) for (const t of o.pair.split(':')) tokens.add(t.toLowerCase())
+    const held = await mapLimit([...tokens], BALANCE_CONCURRENCY, async (t) => ({
+      t,
+      balance: str(dec(await (isNativeAsset(t) ? node.nativeBalance(m.address) : node.tokenBalance(t, m.address)).catch(() => '0'))),
+    }))
+    const escrow = new Map<string, bigint>()
+    for (const o of orders) {
+      const [t0, t1] = o.pair.toLowerCase().split(':')
+      const [t, amt] = o.side === 'buy' ? [t1, mul(dec(o.remaining), dec(o.price))] : [t0, dec(o.remaining)]
+      escrow.set(t, (escrow.get(t) ?? 0n) + amt)
+    }
+    const balances = held
+      .map(({ t, balance }) => ({ asset: apiAsset(refForAddress(t, idx)), balance, inOrders: str(escrow.get(t) ?? 0n) }))
+      .filter((b) => !S.isZero(b.balance) || !S.isZero(b.inOrders))
+      .sort((a, b) => Number(b.asset.verified) - Number(a.asset.verified) || a.asset.symbol.localeCompare(b.asset.symbol))
+    const positions: NodePerpPosition[] = perp ? Object.values(perp.positions as Record<string, NodePerpPosition>).filter((p) => !S.isZero(p.size)) : []
+    return {
+      ...m,
+      balances,
+      qrdx: held.find((h) => isNativeAsset(h.t))?.balance ?? '0',
+      perp: perp
+        ? {
+            collateralToken: perp.collateral_token,
+            equity: perp.equity,
+            collateral: perp.collateral,
+            withdrawable: perp.withdrawable,
+            unrealizedPnl: str(positions.reduce((s, p) => s + dec(p.unrealized_pnl), 0n)),
+            positions: positions.length,
+            orders: perp.orders.length,
+          }
+        : null,
+      spotOrders: orders.length,
+      triggers: triggers?.length ?? 0,
+    }
+  })
+  return { master, accounts, maxSubaccounts: MAX_SUBACCOUNTS, source: 'node', asOf: nowSec() }
 }
 
 function orientOrder(o: NodeSpotOrder, idx: Awaited<ReturnType<typeof tokenIndex>>) {

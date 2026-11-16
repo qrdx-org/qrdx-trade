@@ -14,6 +14,9 @@ import { ConnectButton } from '@/components/wallet/ConnectButton'
 import { PnlChart, RANGES, RangeId, rangePoints } from '@/components/portfolio/PnlChart'
 import { ExportMenu } from '@/components/portfolio/ExportMenu'
 import { AccountTools } from '@/components/portfolio/AccountTools'
+import { AccountAvatar } from '@/components/accounts/AccountBits'
+import { useAccounts } from '@/components/accounts/AccountsContext'
+import { accountName } from '@/lib/subaccounts'
 import { OrderHistoryTable, TradeHistoryTable } from '@/components/portfolio/HistoryTables'
 import { useFeatures } from '@/lib/hooks/useFeatures'
 import { compact, fixed, size as fmtSize, timeAgo, tone } from '@/lib/format'
@@ -47,6 +50,7 @@ export function Portfolio() {
   const pnl = useApi<PnlResponse>(address ? `${apiBase}/accounts/${address}/pnl` : null, 30_000)
   const [range, setRange] = useState<RangeId>('all')
   const features = useFeatures()
+  const accounts = useAccounts()
 
   const held = useMemo(() => (a?.balances ?? []).filter((b) => Number(b.balance) > 0 || Number(b.inOrders) > 0), [a])
   const collateral = a?.perp?.collateral_token || null
@@ -89,6 +93,12 @@ export function Portfolio() {
               <span className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium text-muted-foreground">
                 <Eye className="h-3 w-3" /> Watching, read only
               </span>
+            )}
+            {!watched && accounts.active && accounts.active.kind !== 'main' && (
+              <Link href="/accounts" className="inline-flex items-center gap-1.5 rounded-full border py-0.5 pl-0.5 pr-2.5 text-xs font-medium transition-colors hover:bg-accent" title="The account the trading screens use: change it in the top bar">
+                <AccountAvatar account={accounts.active} size="sm" className="rounded-full" />
+                {accountName(accounts.active)}
+              </Link>
             )}
           </h1>
           <div className="mt-1.5 flex min-w-0 items-center gap-2">
@@ -161,7 +171,7 @@ export function Portfolio() {
               <Placeholder>
                 {pnl.error ? `PnL unavailable: ${pnl.error.message}` : !pnl.data ? 'Loading your trades…' : (
                   <>
-                    No trades yet in the node&apos;s recent history.{' '}
+                    No trades yet.{' '}
                     <Link href="/trade" className="text-primary hover:underline">
                       Find a market
                     </Link>
@@ -171,10 +181,11 @@ export function Portfolio() {
             )}
           </div>
           <p className="border-t px-4 py-2 text-[11px] leading-relaxed text-muted-foreground">
-            Solid: realized PnL, cumulative. Dashed: now, with open positions marked to the last price. Spot on an average-cost basis per market;
-            perps as the clearinghouse realized them. USD at today&apos;s prices (public index or pool route).
-            {pnl.data?.window.truncated ? ' Older trades are beyond the node’s per-market window.' : ''}
-            {pnl.data?.window.from ? ` First realization ${timeAgo(pnl.data.window.from)}.` : ''}
+            Solid: PnL after each trade, realized plus spot positions marked at that trade&apos;s price; arrows mark your spot buys and sells. Dashed: now, every
+            open position at today&apos;s price. Spot on an average cost per market (selling coins you held before counts against holding them); perps as the
+            clearinghouse realized them. USD at today&apos;s prices (public index or pool route).
+            {pnl.data?.window.truncated ? ' Older trades are beyond what is read here.' : ''}
+            {pnl.data?.window.from ? ` First trade ${timeAgo(pnl.data.window.from)}.` : ''}
           </p>
         </section>
 
@@ -239,7 +250,7 @@ export function Portfolio() {
 
       {pnl.data && pnl.data.markets.length > 0 && <MarketsPnl markets={pnl.data.markets} />}
 
-      {!watched && <AccountTools account={a} />}
+      {!watched && <AccountTools />}
 
       <section className="mt-4 h-[460px] overflow-hidden rounded-xl border bg-card">
         <AccountPanel
@@ -287,7 +298,7 @@ function MarketsPnl({ markets }: { markets: PnlMarket[] }) {
               <th className="px-3 py-2 font-medium">Realized</th>
               <th className="px-3 py-2 font-medium">Open PnL</th>
               <th className="hidden px-3 py-2 font-medium md:table-cell">Position</th>
-              <th className="hidden px-3 py-2 font-medium md:table-cell">Avg cost / entry</th>
+              <th className="hidden px-3 py-2 font-medium md:table-cell" title="Spot: the average price of the open position (bought, or sold when negative); perps: entry">Avg price / entry</th>
               <th className="px-4 py-2 font-medium">Total (USD)</th>
             </tr>
           </thead>
@@ -312,7 +323,15 @@ function MarketsPnl({ markets }: { markets: PnlMarket[] }) {
                   <td className={cn('px-3 py-2', tone(m.realized))}>{signed(m.realized)}</td>
                   <td className={cn('px-3 py-2', tone(m.unrealized))}>{signed(m.unrealized)}</td>
                   <td className="hidden px-3 py-2 md:table-cell">
-                    {Number(m.position) === 0 ? <span className="text-muted-foreground">—</span> : <>{fmtSize(m.position)} <span className="text-muted-foreground">{m.positionSymbol}</span></>}
+                    {Number(m.position) === 0 ? (
+                      <span className="text-muted-foreground">—</span>
+                    ) : (
+                      <span title={m.kind === 'spot' && Number(m.position) < 0 ? 'Sold more than bought here: measured against still holding it' : undefined}>
+                        {Number(m.position) > 0 && m.kind === 'perp' ? '+' : ''}
+                        {fmtSize(m.position)} <span className="text-muted-foreground">{m.positionSymbol}</span>
+                        {m.kind === 'spot' && Number(m.position) < 0 && <span className="ml-1 text-[10px] text-muted-foreground">net sold</span>}
+                      </span>
+                    )}
                   </td>
                   <td className="hidden px-3 py-2 text-muted-foreground md:table-cell">{m.avgCost ? `${fmtSize(m.avgCost, 6)} ${m.unit}` : '—'}</td>
                   <td className={cn('px-4 py-2 font-medium', tone(total === null ? null : String(total)))}>{total === null ? 'no USD price' : signedUsd(total)}</td>
@@ -328,7 +347,7 @@ function MarketsPnl({ markets }: { markets: PnlMarket[] }) {
 
 const signed = (v: string) => (Number(v) > 0 ? '+' : '') + compact(v)
 
-function Tile({ icon: Icon, k, v, sub, tone: t }: { icon: React.ComponentType<{ className?: string }>; k: string; v: string; sub?: string; tone?: string }) {
+export function Tile({ icon: Icon, k, v, sub, tone: t }: { icon: React.ComponentType<{ className?: string }>; k: string; v: string; sub?: string; tone?: string }) {
   return (
     <div className="rounded-xl border bg-card px-4 py-3.5">
       <div className="flex items-center justify-between text-xs text-muted-foreground">
@@ -345,7 +364,7 @@ function Placeholder({ children }: { children: React.ReactNode }) {
   return <div className="flex h-full min-h-[200px] items-center justify-center p-6 text-center text-xs text-muted-foreground">{children}</div>
 }
 
-function CopyIcon({ value }: { value: string }) {
+export function CopyIcon({ value }: { value: string }) {
   const [copied, setCopied] = useState(false)
   return (
     <button

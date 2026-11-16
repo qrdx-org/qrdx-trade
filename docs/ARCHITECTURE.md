@@ -241,14 +241,26 @@ Operations of nodes from 2026-10 (qrdx-node docs/TRADING_FEATURES.md), offered o
 
 **Trading account and one-click trading** (`lib/wallet/WalletContext.tsx`). `trader` is the wallet
 account's own address (staking, launches, NFTs and EVM calls are always its own). `tradingAccount` is
-what the trading screens read and trade: `trader`, or a sub-account or vault it leads, chosen above the
-order forms or in Portfolio. Trading operations and perps deposits are then sent with `sender` that
+what the trading screens read and trade: `trader`, or a sub-account or vault it leads, chosen in the
+top bar's account switcher, above the order forms, or on `/accounts`. Trading operations and perps deposits are then sent with `sender` that
 account, and the wallet signs as `signer` (the node checks it may). One-click trading (`lib/agent.ts`)
 keeps an ML-DSA key in this browser's storage per network and account, approved once by the wallet as
 an agent for 7 days; operations an agent may sign (`AGENT_SCOPE`) are then signed here
 (`lib/exchange-sign.ts`, the wallet's bytes, tested against the node's) and sent to the node's RPC
 directly, in the free lane where the account has free actions. Turning it off has the agent revoke
 itself. An agent can trade the account's funds but never move them out.
+
+**Accounts** (`components/accounts`). One `AccountsProvider` in the trading layout reads
+`/accounts/{trader}/family` (the wallet account, its sub-accounts and the vaults it leads, each with
+balances, its QRDX and perps summary) for the top bar's switcher, the picker above the order forms,
+`/accounts` and Portfolio, and owns the two dialogs that change it. Transfers are
+`SUBACCOUNT_TRANSFER` from the wallet account (`to_sub` / `from_sub`); one sub-account to another is
+two of them through the wallet account, sent as one `sendExchangeBatch` (one approval; the node does
+not batch them, so the wallet signs consecutive nonces). A sub-account's address is known before it
+exists (`lib/subaccounts.ts`, qrdx-node `subaccount_address`, tested against the node's), so creating
+one can fund it in the same approval; the derivation is used only once it reproduces the existing
+sub-accounts. A sub-account pays its own gas in QRDX: the screens warn when one holds funds but no
+QRDX, and offer the transfer that fixes it.
 
 **NFT market contract** (`lib/server/nfts.ts nftMarket`). The configured address, else the one the
 relay's registry holds (`relay/src/profiles-do.ts`, `POST /api/{v}/nfts/market`), in either case only

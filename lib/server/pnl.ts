@@ -3,46 +3,84 @@
  *
  *   perps   every fill the account was in (perp_getEvents), with the PnL the clearinghouse
  *           realized on it, in collateral units; open positions' unrealized PnL at mark.
- *   spot    the account's fills on each spot market (market_getTrades rows where it was the
- *           maker or the taker: book fills and pool swaps), on an average-cost basis per
- *           market in its quote token: selling realizes (price − average cost) × amount;
- *           what is still held is marked at the market's last price.
+ *   spot    the account's own trades (history_getTrades: book fills and pool swaps; on a node
+ *           without the trading history, the markets' recent trades it was in), each market
+ *           replayed as the site shows it (QRDX/USDC, not the node's USDC:QRDX) on a signed
+ *           average-cost basis in its quote token, like a perps position: buying adds to the
+ *           position, selling reduces it and realizes (price − average cost) × amount, and
+ *           selling more than was bought here (coins held from before, or received) opens a
+ *           short against holding them, realized when bought back. What is open is marked at
+ *           the market's pool price now (its last trade without a pool).
  *
- * Bounded by what the node keeps: the newest 1000 trades per market and 1000 perps events.
- * Sells of inventory bought before that window (or received by transfer) have no known
- * cost and realize nothing. USD values use today's prices (index or pool route), labelled.
+ * The series steps at every spot trade and perps realization: realized PnL so far plus each spot
+ * market's open PnL marked at its latest trade then. USD values use today's prices (index or pool
+ * route), labelled.
  */
 
 import { isNativeAsset, marketPath, preferredOrder } from '../assets'
 import { Dec, abs, dec, div, mul, str } from '../decimal'
-import type { PnlMarket, PnlResponse } from '../types'
+import { isInverted } from '../pairs'
+import type { PnlMarket, PnlResponse, PnlTrade } from '../types'
 import { cached } from './cache'
 import { nowSec } from './http'
 import { nodeTickers, nodeTrades } from './market-data'
 import type { Net } from './net'
-import type { NodeMarketTrade } from './node'
+import type { NodeHistoryTrade, NodeMarketTrade } from './node'
 import { refForAddress, tokenIndex } from './resolve'
 import { UsdQuote, usdQuotes } from './usd'
 import { mapLimit } from './util'
 
+const ONE = dec('1')
 const TRADE_WINDOW = 1000
 const EVENT_WINDOW = 1000
+/** history_getTrades pages (its MAX_PAGE) read per account: 5,000 trades. */
+const HISTORY_PAGE = 500
+const HISTORY_PAGES = 10
+/** Trades returned for the chart's markers, newest. */
+const MARKER_TRADES = 300
 
-interface Realization {
+/** One of the account's spot trades as the node keys it: the canonical pair, the account's side. */
+interface RawFill {
   time: number
-  /** USD, null when the market's quote token has no USD price. */
-  usd: Dec | null
+  /** token0:token1 */
+  market: string
+  side: 'buy' | 'sell'
+  /** token1 per token0 */
+  price: string
+  /** token0 */
+  amount: string
 }
 
-interface SpotBook {
+/** A trade as the site shows its market: base / quote. */
+export interface SpotFill {
+  time: number
+  side: 'buy' | 'sell'
+  price: Dec
+  amount: Dec
+}
+
+/** Something that moves the PnL line: a realization (USD), and for spot the market's open PnL after it. */
+interface Event {
+  time: number
+  /** USD; null when the quote token has no USD price. */
+  usd: Dec | null
+  /** Spot: the market and its open PnL in USD after this trade, marked at its price. */
+  market?: string
+  openUsd?: Dec | null
+}
+
+export interface SpotBook {
+  /** Signed: negative when more was sold than bought. */
   pos: Dec
+  /** Signed, in quote: what the open position cost (negative: what selling it brought in). */
   cost: Dec
   realized: Dec
   volume: Dec
   trades: number
   wins: number
   losses: number
-  events: Realization[]
+  /** After each trade: the PnL it realized and the open PnL marked at its price (quote). */
+  steps: { time: number; realized: Dec; open: Dec }[]
 }
 
 export function accountPnl(net: Net, address: string): Promise<PnlResponse> {
@@ -64,27 +102,46 @@ async function build(net: Net, address: string): Promise<PnlResponse> {
   }
 
   const markets: PnlMarket[] = []
-  const realizations: Realization[] = []
+  const events: Event[] = []
   let truncated = false
 
   // ── spot ────────────────────────────────────────────────────────────
-  const spot = [...(tickers?.values() ?? [])].filter((t) => t.type === 'spot')
-  const rows = await mapLimit(spot, 6, async (t) => ({ t, trades: (await nodeTrades(net, t.market, TRADE_WINDOW)) ?? [] }))
-  for (const { t, trades } of rows) {
-    if (trades.length >= TRADE_WINDOW) truncated = true
-    const mine = trades.filter((r) => isMine(r, me)).sort((a, b) => a.seq - b.seq)
-    if (!mine.length) continue
-    const quoteUsd = usdOf(t.quote)
-    const book = replaySpot(mine, me, quoteUsd)
-    const last = t.last_price ? dec(t.last_price) : null
-    const unrealized = last !== null && book.pos > 0n ? mul(book.pos, last) - book.cost : 0n
-    const [b, q] = [refForAddress(t.base, idx), refForAddress(t.quote, idx)]
-    const [dBase, dQuote] = preferredOrder(b, q)
-    realizations.push(...book.events)
+  const history = await spotHistory(net, address)
+  let raw: RawFill[]
+  if (history) {
+    raw = history.rows
+    if (history.truncated) truncated = true
+  } else {
+    // A node without the trading history: the account's fills among each market's recent trades.
+    const spot = [...(tickers?.values() ?? [])].filter((t) => t.type === 'spot')
+    const rows = await mapLimit(spot, 6, async (t) => (await nodeTrades(net, t.market, TRADE_WINDOW)) ?? [])
+    if (rows.some((r) => r.length >= TRADE_WINDOW)) truncated = true
+    raw = rows.flat().filter((r) => isMine(r, me)).map((r) => fromMarketTrade(r, me))
+  }
+  const byMarket = new Map<string, RawFill[]>()
+  for (const f of raw) byMarket.set(f.market.toLowerCase(), [...(byMarket.get(f.market.toLowerCase()) ?? []), f])
+  const tradeMarks: PnlTrade[] = []
+  for (const [key, fills] of byMarket) {
+    const [t0, t1] = key.split(':')
+    const [b, q] = preferredOrder(refForAddress(t0, idx), refForAddress(t1, idx))
+    const inverted = isInverted(b.address!, t0)
+    const shown = fills.sort((x, y) => x.time - y.time).map((f) => orientFill(f, inverted))
+    const quoteUsd = usdOf(q.address!)
+    const book = replaySpot(shown)
+    const ticker = tickers?.get(key) ?? null
+    // The pool's price now when the market has one (its last trade may be long ago), else the last trade.
+    const live = ticker?.amm_price || ticker?.last_price
+    const tickerLast = live ? dec(live) : null
+    const last = tickerLast !== null && tickerLast > 0n ? (inverted ? div(ONE, tickerLast) : tickerLast) : shown[shown.length - 1].price
+    const unrealized = mul(book.pos, last) - book.cost
+    const name = `${b.symbol}/${q.symbol}`
+    const toUsd = (x: Dec) => (quoteUsd === null ? null : mul(x, quoteUsd))
+    for (const st of book.steps) events.push({ time: st.time, usd: toUsd(st.realized), market: key, openUsd: toUsd(st.open) })
+    for (const f of shown) tradeMarks.push({ time: Math.floor(f.time), market: name, side: f.side, amount: str(f.amount), price: str(f.price), base: b.symbol, quote: q.symbol })
     markets.push({
       kind: 'spot',
-      market: `${dBase.symbol}/${dQuote.symbol}`,
-      path: marketPath('spot', dBase.segment, dQuote.segment),
+      market: name,
+      path: marketPath('spot', b.segment, q.segment),
       unit: q.symbol,
       trades: book.trades,
       wins: book.wins,
@@ -97,7 +154,8 @@ async function build(net: Net, address: string): Promise<PnlResponse> {
       unrealizedUsd: quoteUsd === null ? null : str(mul(unrealized, quoteUsd)),
       position: str(book.pos),
       positionSymbol: b.symbol,
-      avgCost: book.pos > 0n ? str(div(book.cost, book.pos)) : null,
+      avgCost: book.pos !== 0n ? str(div(book.cost, book.pos)) : null,
+      last: str(last),
     })
   }
 
@@ -118,7 +176,7 @@ async function build(net: Net, address: string): Promise<PnlResponse> {
     if (pnl > 0n) m.wins += 1
     if (pnl < 0n) m.losses += 1
     perMarket.set(f.market, m)
-    if (pnl !== 0n) realizations.push({ time: f.block_time, usd: collateralUsd === null ? null : mul(pnl, collateralUsd) })
+    if (pnl !== 0n) events.push({ time: f.block_time, usd: collateralUsd === null ? null : mul(pnl, collateralUsd) })
   }
   const positions = perp?.positions ?? {}
   for (const id of new Set([...perMarket.keys(), ...Object.keys(positions)])) {
@@ -143,6 +201,7 @@ async function build(net: Net, address: string): Promise<PnlResponse> {
       position: p ? p.size : '0',
       positionSymbol: base ?? id,
       avgCost: p ? p.entry_price : null,
+      last: p ? p.mark_price : null,
     })
   }
 
@@ -150,18 +209,24 @@ async function build(net: Net, address: string): Promise<PnlResponse> {
   const sum = (xs: (string | null)[]) => xs.reduce((s, x) => s + (x === null ? 0n : dec(x)), 0n)
   const realizedUsd = sum(markets.map((m) => m.realizedUsd))
   const unrealizedUsd = sum(markets.map((m) => m.unrealizedUsd))
+  // Realized so far plus every spot market's open PnL as its latest trade marked it.
   const series: PnlResponse['series'] = []
-  let running = 0n
-  for (const r of realizations.filter((r) => r.usd !== null).sort((a, b) => a.time - b.time)) {
-    running += r.usd!
-    const time = Math.floor(r.time)
-    if (series.length && series[series.length - 1].time === time) series[series.length - 1].realizedUsd = str(running)
-    else series.push({ time, realizedUsd: str(running) })
+  let realizedSoFar = 0n
+  const open = new Map<string, Dec>()
+  for (const e of events.sort((x, y) => x.time - y.time)) {
+    if (e.usd === null && (e.openUsd ?? null) === null) continue
+    realizedSoFar += e.usd ?? 0n
+    if (e.market && e.openUsd !== undefined && e.openUsd !== null) open.set(e.market, e.openUsd)
+    const openSum = [...open.values()].reduce((s, x) => s + x, 0n)
+    const time = Math.floor(e.time)
+    const point = { time, realizedUsd: str(realizedSoFar), pnlUsd: str(realizedSoFar + openSum) }
+    if (series.length && series[series.length - 1].time === time) series[series.length - 1] = point
+    else series.push(point)
   }
   const trades = markets.reduce((s, m) => s + m.trades, 0)
   const wins = markets.reduce((s, m) => s + m.wins, 0)
   const losses = markets.reduce((s, m) => s + m.losses, 0)
-  const first = [...realizations.map((r) => r.time)].sort((a, b) => a - b)[0] ?? null
+  const first = series[0]?.time ?? null
 
   markets.sort((a, b) => Number(abs(dec(b.realizedUsd ?? '0')) + abs(dec(b.unrealizedUsd ?? '0')) - abs(dec(a.realizedUsd ?? '0')) - abs(dec(a.unrealizedUsd ?? '0'))) || b.trades - a.trades)
 
@@ -178,6 +243,7 @@ async function build(net: Net, address: string): Promise<PnlResponse> {
       unpriced: markets.filter((m) => m.realizedUsd === null).map((m) => m.market),
     },
     series,
+    trades: tradeMarks.sort((a, b) => a.time - b.time).slice(-MARKER_TRADES),
     markets,
     perpUnit: collateralSymbol,
     window: { from: first, truncated },
@@ -193,35 +259,83 @@ const isMine = (r: NodeMarketTrade, me: string) => {
   return (maker === me) !== (taker === me)
 }
 
-/** Average-cost replay of one market's fills (oldest first), in its quote token. */
-export function replaySpot(fills: NodeMarketTrade[], me: string, quoteUsd: Dec | null): SpotBook {
-  const b: SpotBook = { pos: 0n, cost: 0n, realized: 0n, volume: 0n, trades: 0, wins: 0, losses: 0, events: [] }
-  for (const f of fills) {
-    const asTaker = (f.taker ?? '').toLowerCase() === me
-    const side = asTaker ? f.side : f.side === 'buy' ? 'sell' : 'buy'
-    const price = dec(f.price)
-    const amount = dec(f.amount)
-    if (price <= 0n || amount <= 0n) continue
-    b.trades += 1
-    b.volume += mul(price, amount)
-    if (side === 'buy') {
-      b.pos += amount
-      b.cost += mul(price, amount)
-      continue
+/** The account's spot trades from the trading history, newest pages first; null on a node without it. */
+async function spotHistory(net: Net, address: string): Promise<{ rows: RawFill[]; truncated: boolean } | null> {
+  const me = address.toLowerCase()
+  const rows: RawFill[] = []
+  let cursor: string | null = null
+  for (let i = 0; i < HISTORY_PAGES; i++) {
+    const page = await net.node.historyTrades({ address, limit: HISTORY_PAGE, cursor }).catch(() => null)
+    if (!page) return i === 0 ? null : { rows, truncated: true }
+    for (const t of page.items) {
+      const f = fromHistoryTrade(t, me)
+      if (f) rows.push(f)
     }
-    // A sell closes what this window bought; anything beyond has no known cost.
-    const closing = amount < b.pos ? amount : b.pos
-    if (closing <= 0n) continue
-    const avg = div(b.cost, b.pos)
-    const pnl = mul(closing, price - avg)
-    b.realized += pnl
-    b.cost -= mul(avg, closing)
-    b.pos -= closing
-    if (b.pos === 0n) b.cost = 0n
-    if (pnl > 0n) b.wins += 1
-    if (pnl < 0n) b.losses += 1
-    b.events.push({ time: f.block_time, usd: quoteUsd === null ? null : mul(pnl, quoteUsd) })
+    if (!page.next_cursor) return { rows, truncated: false }
+    cursor = page.next_cursor
+  }
+  return { rows, truncated: true }
+}
+
+/** A history row as the account's spot fill; null for perps rows and self-trades. */
+export function fromHistoryTrade(t: NodeHistoryTrade, me: string): RawFill | null {
+  if (!t.market.includes(':')) return null
+  const buyer = (t.buyer ?? '').toLowerCase() === me
+  const seller = (t.seller ?? '').toLowerCase() === me
+  if (buyer === seller) return null
+  return { time: t.block_time, market: t.market, side: buyer ? 'buy' : 'sell', price: t.price, amount: t.amount }
+}
+
+function fromMarketTrade(r: NodeMarketTrade, me: string): RawFill {
+  // market_getTrades gives the taker's side.
+  const asTaker = (r.taker ?? '').toLowerCase() === me
+  return { time: r.block_time, market: r.market, side: asTaker ? r.side : r.side === 'buy' ? 'sell' : 'buy', price: r.price, amount: r.amount }
+}
+
+/**
+ * A canonical fill as the site shows the market. Inverted (the shown base is token1): buying
+ * token0 at p is selling p·a of the base at 1/p.
+ */
+export function orientFill(f: Pick<RawFill, 'time' | 'side' | 'price' | 'amount'>, inverted: boolean): SpotFill {
+  const price = dec(f.price)
+  const amount = dec(f.amount)
+  if (!inverted || price <= 0n) return { time: f.time, side: f.side, price, amount }
+  return { time: f.time, side: f.side === 'buy' ? 'sell' : 'buy', price: div(ONE, price), amount: mul(amount, price) }
+}
+
+/** Signed average-cost replay of one market's trades (oldest first), in its quote token. */
+export function replaySpot(fills: SpotFill[]): SpotBook {
+  const b: SpotBook = { pos: 0n, cost: 0n, realized: 0n, volume: 0n, trades: 0, wins: 0, losses: 0, steps: [] }
+  for (const f of fills) {
+    if (f.price <= 0n || f.amount <= 0n) continue
+    b.trades += 1
+    b.volume += mul(f.price, f.amount)
+    const delta = f.side === 'buy' ? f.amount : -f.amount
+    let realized = 0n
+    if (b.pos === 0n || (b.pos > 0n) === (delta > 0n)) {
+      // Opens or adds to the position.
+      b.pos += delta
+      b.cost += mul(f.price, delta)
+    } else {
+      // Reduces it: realizes against the average cost; whatever is left over opens the other way.
+      const held = abs(b.pos)
+      const closing = f.amount < held ? f.amount : held
+      const avg = div(b.cost, b.pos)
+      const dir = b.pos > 0n ? 1n : -1n
+      realized = mul(closing, f.price - avg) * dir
+      b.cost -= mul(avg, closing) * dir
+      b.pos -= closing * dir
+      if (b.pos === 0n) b.cost = 0n
+      const rest = f.amount - closing
+      if (rest > 0n) {
+        b.pos = rest * -dir
+        b.cost = mul(f.price, b.pos)
+      }
+      b.realized += realized
+      if (realized > 0n) b.wins += 1
+      if (realized < 0n) b.losses += 1
+    }
+    b.steps.push({ time: f.time, realized, open: mul(b.pos, f.price) - b.cost })
   }
   return b
 }
-

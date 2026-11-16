@@ -428,35 +428,40 @@ Trading PnL, rebuilt from the node's market data (cached 10 s).
   "totals": { "realizedUsd": "182.4", "unrealizedUsd": "-12.9", "pnlUsd": "169.5",
               "volumeUsd": "10420.0", "trades": 41, "wins": 7, "losses": 3,
               "unpriced": [] },
-  "series": [ { "time": 1791219332, "realizedUsd": "-0.29" }, … ],
+  "series": [ { "time": 1791219332, "realizedUsd": "-0.29", "pnlUsd": "4.10" }, … ],
+  "trades": [ { "time": 1791219332, "market": "CLAV/QRDX", "side": "buy", "amount": "1000",
+                "price": "0.0001", "base": "CLAV", "quote": "QRDX" }, … ],
   "markets": [ { "kind": "spot", "market": "CLAV/QRDX", "path": "/trade/0x…/qrdx",
                  "unit": "QRDX", "trades": 12, "wins": 2, "losses": 1,
                  "volume": "183040.1", "volumeUsd": "…",
                  "realized": "69721.97", "realizedUsd": "…",
                  "unrealized": "68512.4", "unrealizedUsd": "…",
                  "position": "748785125", "positionSymbol": "CLAV",
-                 "avgCost": "0.00011957" } ],
+                 "avgCost": "0.00011957", "last": "0.0002" } ],
   "perpUnit": "QRDX",
   "window": { "from": 1791219332, "truncated": false },
   "source": "node", "asOf": … }
 ```
 
-- **Spot**: the account's fills on every spot market (`market_getTrades` rows
-  where it is the maker or the taker: book fills and pool swaps), on an
-  average-cost basis per market in the market's quote token (`unit`). A sell
-  realizes `(price − average cost) × amount`; what is still held is marked at the
-  last price. Amounts are in the node's canonical pair, so `position` is in
-  `positionSymbol` and `avgCost` in `unit` per one of it.
+- **Spot**: the account's own trades (`history_getTrades`: book fills and pool
+  swaps, up to 5,000; on a node without the trading history, its fills among each
+  market's recent `market_getTrades`), each market replayed as the site shows it
+  (`/trade/{base}/{quote}`) on a signed average-cost basis in its quote token
+  (`unit`). Buying adds to `position`; selling reduces it and realizes
+  `(price − average cost) × amount`; selling more than was bought (coins held
+  from before, or received) leaves `position` negative, measured against holding
+  them and realized when bought back. What is open is marked at `last`.
 - **Perps**: every fill the account was in (`perp_getEvents`) with the PnL the
   clearinghouse realized on it, in collateral units (`perpUnit`); open
   positions' unrealized PnL at mark.
-- `series` is cumulative realized PnL in USD at each realization's block time.
+- `series` has a point at each spot trade and perps realization: `realizedUsd`
+  so far, and `pnlUsd`, that plus every spot market's open position marked at
+  its latest trade then. `trades` are the newest 300 spot trades, for markers.
 - USD values use **today's** USD prices (`/prices`), not the price at the time;
   markets whose quote has no USD price are listed in `unpriced` and left out of
   the USD totals.
-- Bounded by what the node keeps: the newest 1000 trades per market and 1000
-  perps events (`window.truncated`). Selling inventory bought before the window
-  (or received by transfer) realizes nothing.
+- Bounded by what is read: 5,000 spot trades and 1000 perps events
+  (`window.truncated`).
 
 ### `GET /api/v1/receipts/{txHash}`
 
@@ -652,6 +657,16 @@ On a node with them (`/features` `trading`, or `history` for the history reads);
 Who may trade for an account and what it pays: `{ agents: [{ agent, name, valid_until,
 max_notional_per_day?, placed_today? }], subaccounts: [{ subaccount, index, name }], vaults: [<vault>],
 fees: <perp_getFeeSchedule for the address> }`. `vaults` are those it leads.
+
+### `GET /api/v1/accounts/{address}/family[?tokens=0x…,0x…]`
+
+The wallet account (`0xPQ…`) and every account it signs for, in one read: `{ master, maxSubaccounts,
+accounts: [{ address, kind: "main"|"sub"|"vault", index, name, balances: [<balance>], qrdx, perp: {
+collateralToken, equity, collateral, withdrawable, unrealizedPnl, positions, orders } | null,
+spotOrders, triggers }] }`. Balances (non-zero only) cover the verified assets, the tokens of the
+account's orders and `tokens` (at most 100); `qrdx` is what the account pays gas with. Move funds with
+`SUBACCOUNT_TRANSFER {subaccount, asset, amount, direction: "to_sub"|"from_sub"}`, signed by the
+wallet account.
 
 ### `GET /api/v1/accounts/{address}/history?kind=trades|orders&market=&limit=100&cursor=`
 

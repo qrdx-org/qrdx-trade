@@ -2,12 +2,13 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { AlertTriangle, ArrowLeftRight, BarChart3, Droplets, Gauge, Image as ImageIcon, ChevronDown, Landmark, Menu, PieChart, Rocket, Search, Trophy, Vault, X } from 'lucide-react'
+import { AlertTriangle, ArrowLeftRight, BarChart3, Droplets, Gauge, Image as ImageIcon, ChevronDown, Landmark, Layers, Menu, PieChart, Rocket, Search, Trophy, Vault, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Wordmark } from '@/components/chrome/Logo'
 import { ThemeToggle } from '@/components/theme-toggle'
 import { MarketSearch, openMarketSearch } from '@/components/trade/MarketSelector'
 import { ConnectButton } from '@/components/wallet/ConnectButton'
+import { AccountSwitcher } from '@/components/accounts/AccountSwitcher'
 import { Button } from '@/components/ui/button'
 import { SLOTS, slotNetwork } from '@/lib/config'
 import { useNet, useWallet } from '@/lib/wallet/WalletContext'
@@ -24,6 +25,7 @@ const PRIMARY = [
 ]
 /** Under "More": ten links do not fit a laptop's width beside search, network and wallet. */
 const MORE = [
+  { href: '/accounts', label: 'Accounts', icon: Layers, hint: 'Sub-accounts, transfers, trading keys' },
   { href: '/stake', label: 'Stake', icon: Landmark, hint: 'Delegate QRDX to validators' },
   { href: '/vaults', label: 'Vaults', icon: Vault, hint: 'Follow a trader, share the result' },
   { href: '/nfts', label: 'NFTs', icon: ImageIcon, hint: 'Collections and listings' },
@@ -51,7 +53,7 @@ export function AppNav() {
   return (
     <>
       <nav className="relative z-40 flex h-14 shrink-0 items-center gap-1 border-b bg-card px-3 sm:px-4">
-        <Link href="/trade" className="mr-4 flex items-center" aria-label="QRDX Trade">
+        <Link href="/trade" className="mr-2 flex items-center sm:mr-4" aria-label="QRDX Trade">
           <Wordmark />
         </Link>
         <div className="hidden h-full items-center lg:flex">
@@ -109,7 +111,7 @@ export function AppNav() {
           </div>
         </div>
 
-        <div className="ml-auto flex items-center gap-2">
+        <div className="ml-auto flex items-center gap-1.5 sm:gap-2">
           <button
             onClick={openMarketSearch}
             className="hidden h-8 w-52 items-center gap-2 rounded-md border bg-background px-2.5 text-sm text-muted-foreground transition-colors hover:border-foreground/20 hover:text-foreground xl:flex 2xl:w-64"
@@ -122,7 +124,8 @@ export function AppNav() {
             <Search className="h-4 w-4" />
           </button>
           <NetworkSelector />
-          <ThemeToggle />
+          <ThemeToggle className="hidden sm:inline-flex" />
+          <AccountSwitcher className="hidden sm:block" />
           <ConnectButton />
           <Button variant="ghost" size="icon" className="h-8 w-8 lg:hidden" onClick={() => setOpen((o) => !o)} aria-label="Menu">
             {open ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
@@ -144,7 +147,11 @@ export function AppNav() {
               {l.label}
             </Link>
           ))}
-          <NetworkSelector className="col-span-3 mt-1 flex justify-center sm:hidden" />
+          <div className="col-span-3 mt-1 flex items-center justify-center gap-2 sm:hidden">
+            <NetworkSelector className="flex" />
+            <ThemeToggle />
+          </div>
+          <AccountSwitcher named className="col-span-3 flex justify-center sm:hidden" />
         </div>
       )}
       <MarketSearch />

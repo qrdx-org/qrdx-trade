@@ -256,6 +256,41 @@ export interface AccountResponse {
   asOf: number
 }
 
+/** One account of a wallet's family: the wallet account itself, a sub-account, or a vault it leads. */
+export interface AccountSummary {
+  address: string
+  kind: 'main' | 'sub' | 'vault'
+  /** A sub-account's number (0–19). */
+  index: number | null
+  /** Set on chain when it was created ("" when none). */
+  name: string
+  /** Every asset it holds or has in orders, verified first. */
+  balances: AccountBalance[]
+  /** Its QRDX: what it pays gas with. */
+  qrdx: string
+  perp: {
+    collateralToken: string
+    equity: string
+    collateral: string
+    withdrawable: string
+    unrealizedPnl: string
+    positions: number
+    orders: number
+  } | null
+  spotOrders: number
+  triggers: number
+}
+
+/** GET /accounts/{address}/family: the wallet account, its sub-accounts and the vaults it leads. */
+export interface AccountFamily {
+  master: string
+  accounts: AccountSummary[]
+  /** The most sub-accounts one account may have. */
+  maxSubaccounts: number
+  source: DataSource
+  asOf: number
+}
+
 /**
  * A trigger order (perp_getTriggers). Perps ones judge the mark price; spot ones the pair's
  * last trade, shown in the market's orientation like spotOrders.
@@ -404,11 +439,24 @@ export interface PnlMarket {
   realizedUsd: string | null
   unrealized: string
   unrealizedUsd: string | null
-  /** Spot: base still held from this window's buys; perps: signed position size. */
+  /** Signed: perps, the position; spot, bought minus sold (negative: sold coins held from before). */
   position: string
   positionSymbol: string
-  /** Spot: average cost of what is held; perps: entry price. */
+  /** Spot: average price of the open position; perps: entry price. */
   avgCost: string | null
+  /** The price the open position is marked at (spot: last trade; perps: mark). */
+  last: string | null
+}
+
+/** One of the account's spot trades, as its market is shown (for the chart's markers). */
+export interface PnlTrade {
+  time: number
+  market: string
+  side: 'buy' | 'sell'
+  amount: string
+  price: string
+  base: string
+  quote: string
 }
 
 export interface PnlResponse {
@@ -424,8 +472,13 @@ export interface PnlResponse {
     /** Markets whose quote token has no USD price: left out of the USD totals. */
     unpriced: string[]
   }
-  /** Cumulative realized PnL in USD, at each realization's block time. */
-  series: { time: number; realizedUsd: string }[]
+  /**
+   * At each spot trade and perps realization: realized PnL so far in USD, and that plus every spot
+   * market's open PnL marked at its latest trade then (perps' open PnL is only known now).
+   */
+  series: { time: number; realizedUsd: string; pnlUsd: string }[]
+  /** The newest spot trades, oldest first. */
+  trades: PnlTrade[]
   markets: PnlMarket[]
   perpUnit: string
   /** The oldest realization seen, and whether the node's trade window cut history off. */

@@ -24,6 +24,7 @@ and reference charts.
 | `/trade/0x…/usdc` | an unverified token trades by its address |
 | `/perps/{base}/{quote}` | perpetual, e.g. `/perps/btc/usd` |
 | `/launch` | launch a community coin (token + pool + launch curve), and the feed of new ones |
+| `/accounts` | the wallet account's sub-accounts and vaults: transfers, new sub-accounts, which one trades |
 | `/swap`, `/pools`, `/pools/{id}`, `/pools/new`, `/portfolio` | |
 | `/api/v1/…` | public read-only API, mainnet |
 | `/api/v1-test/…` | the same API for testnet |

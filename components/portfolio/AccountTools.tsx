@@ -1,13 +1,14 @@
 'use client'
 
 import { useState } from 'react'
-import { KeyRound, Layers, Percent, ShieldOff } from 'lucide-react'
+import Link from 'next/link'
+import { ArrowLeftRight, KeyRound, Layers, Percent, Plus, ShieldOff } from 'lucide-react'
+import { AccountLabel, usdText } from '@/components/accounts/AccountBits'
+import { useAccounts } from '@/components/accounts/AccountsContext'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useAccountControl } from '@/components/trade/TradingAccount'
 import { fixed, compact } from '@/lib/format'
-import { isAmount } from '@/lib/decimal'
-import type { AccountResponse } from '@/lib/types'
 import { useWallet } from '@/lib/wallet/WalletContext'
 import { cn } from '@/lib/utils'
 
@@ -49,15 +50,15 @@ function Card({ icon: Icon, title, sub, children }: { icon: typeof Layers; title
 }
 
 /**
- * The wallet account's tools of the 2026-10 node (docs/TRADING_FEATURES.md): sub-accounts, fee
- * tier and referrals, trading keys (agents), and the dead man's switch.
+ * The wallet account's tools of the 2026-10 node (docs/TRADING_FEATURES.md): sub-accounts (managed
+ * on /accounts), fee tier and referrals, trading keys (agents), and the dead man's switch.
  */
-export function AccountTools({ account }: { account: AccountResponse | null }) {
+export function AccountTools() {
   const control = useAccountControl()
   if (!control.data) return null
   return (
     <div className="mt-4 grid gap-4 lg:grid-cols-2">
-      <SubAccounts account={account} />
+      <SubAccounts />
       <FeesAndReferrals />
       <TradingKeys />
       <DeadMansSwitch />
@@ -65,100 +66,51 @@ export function AccountTools({ account }: { account: AccountResponse | null }) {
   )
 }
 
-function SubAccounts({ account }: { account: AccountResponse | null }) {
+/** The accounts this wallet signs for, with their value: one click trades as one; the rest is on /accounts. */
+function SubAccounts() {
   const w = useWallet()
-  const control = useAccountControl()
-  const subs = control.data?.subaccounts ?? []
-  const { busy, run, note } = useAction()
-  const [name, setName] = useState('')
-  const [target, setTarget] = useState('')
-  const [asset, setAsset] = useState('QRDX')
-  const [amount, setAmount] = useState('')
-  const assets = (account?.balances ?? []).filter((b) => b.asset.address).map((b) => ({ id: b.asset.address!, symbol: b.asset.symbol }))
-  const move = (direction: 'to_sub' | 'from_sub') =>
-    run(direction, async () => {
-      if (!target) throw new Error('Choose a sub-account.')
-      if (!isAmount(amount) || Number(amount) <= 0) throw new Error('Enter an amount.')
-      const symbol = assets.find((a) => a.id === asset)?.symbol ?? asset
-      await w.sendExchange({
-        op: 'SUBACCOUNT_TRANSFER',
-        params: { subaccount: target, asset, amount, direction },
-        label: `Move ${amount} ${symbol} ${direction === 'to_sub' ? 'to' : 'from'} sub-account ${short(target)}`,
-      })
-      setAmount('')
-      control.refresh()
-    })
+  const { accounts, usd, maxSubaccounts, openTransfer, openCreate } = useAccounts()
+  const subs = accounts.filter((a) => a.kind !== 'main')
   return (
-    <Card icon={Layers} title="Sub-accounts" sub="Separate balances, margin and orders, signed for by this wallet. Up to 20.">
+    <Card icon={Layers} title="Sub-accounts" sub={`Separate balances, margin and orders, signed for by this wallet. ${subs.filter((a) => a.kind === 'sub').length} of ${maxSubaccounts}.`}>
       {subs.length === 0 ? (
-        <p className="text-xs text-muted-foreground">None yet.</p>
+        <p className="text-xs text-muted-foreground">None yet. One per strategy keeps its risk away from the rest of your funds.</p>
       ) : (
-        <ul className="space-y-1 text-xs">
-          {subs.map((s) => (
-            <li key={s.subaccount} className="flex items-center gap-2">
-              <span className="font-medium">{s.name || `#${s.index}`}</span>
-              <span className="font-mono text-muted-foreground">{short(s.subaccount)}</span>
-              <button
-                type="button"
-                onClick={() => w.setActingAs(w.actingAs === s.subaccount ? null : s.subaccount)}
-                className={cn('ml-auto rounded border px-2 py-0.5', w.actingAs === s.subaccount ? 'border-bid/40 text-bid' : 'hover:bg-accent')}
-              >
-                {w.actingAs === s.subaccount ? 'Trading as it' : 'Trade as'}
-              </button>
-            </li>
-          ))}
+        <ul className="-mx-1 space-y-0.5 text-xs">
+          {subs.map((a) => {
+            const active = w.tradingAccount?.toLowerCase() === a.address.toLowerCase()
+            return (
+              <li key={a.address}>
+                <button
+                  type="button"
+                  onClick={() => w.setActingAs(active ? null : a.address)}
+                  className={cn('flex w-full items-center gap-2 rounded-md px-1 py-1 text-left transition-colors hover:bg-accent', active && 'bg-accent')}
+                >
+                  <AccountLabel account={a} className="flex-1" />
+                  <span className="num text-muted-foreground">{usdText(usd(a))}</span>
+                  <span className={cn('w-16 text-right', active ? 'font-medium' : 'text-muted-foreground')}>{active ? 'Trading' : 'Trade as'}</span>
+                </button>
+              </li>
+            )
+          })}
         </ul>
       )}
-      <div className="mt-3 flex gap-2">
-        <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Name (optional)" className="h-8 text-xs" maxLength={32} />
-        <Button
-          size="sm"
-          variant="outline"
-          className="h-8 text-xs"
-          disabled={!!busy || subs.length >= 20}
-          onClick={() =>
-            void run('create', async () => {
-              await w.sendExchange({ op: 'SUBACCOUNT_CREATE', params: name.trim() ? { name: name.trim() } : {}, label: `Create sub-account${name.trim() ? ` ${name.trim()}` : ''}` })
-              setName('')
-              setTimeout(control.refresh, 2000)
-            })
-          }
-        >
-          {busy === 'create' ? '…' : 'Create'}
+      <div className="mt-3 flex flex-wrap gap-2">
+        <Button size="sm" variant="outline" className="h-8 text-xs" onClick={openCreate}>
+          <Plus className="mr-1 h-3.5 w-3.5" /> New
+        </Button>
+        <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => openTransfer()} disabled={!subs.length}>
+          <ArrowLeftRight className="mr-1 h-3.5 w-3.5" /> Transfer
+        </Button>
+        <Button size="sm" variant="ghost" className="ml-auto h-8 text-xs" asChild>
+          <Link href="/accounts">Manage accounts</Link>
         </Button>
       </div>
-      {subs.length > 0 && (
-        <div className="mt-3 grid grid-cols-[1fr_1fr_1fr] gap-2 text-xs">
-          <select value={target} onChange={(e) => setTarget(e.target.value)} className="h-8 rounded-md border bg-background px-1.5" aria-label="Sub-account">
-            <option value="">Sub-account…</option>
-            {subs.map((s) => (
-              <option key={s.subaccount} value={s.subaccount}>
-                {s.name || `#${s.index}`}
-              </option>
-            ))}
-          </select>
-          <select value={asset} onChange={(e) => setAsset(e.target.value)} className="h-8 rounded-md border bg-background px-1.5" aria-label="Asset">
-            {(assets.length ? assets : [{ id: 'QRDX', symbol: 'QRDX' }]).map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.symbol}
-              </option>
-            ))}
-          </select>
-          <Input value={amount} onChange={(e) => setAmount(e.target.value.trim())} placeholder="Amount" inputMode="decimal" className="num h-8 text-xs" />
-          <Button size="sm" variant="outline" className="h-8 text-xs" disabled={!!busy} onClick={() => void move('to_sub')}>
-            {busy === 'to_sub' ? '…' : 'Move to it'}
-          </Button>
-          <Button size="sm" variant="outline" className="h-8 text-xs" disabled={!!busy} onClick={() => void move('from_sub')}>
-            {busy === 'from_sub' ? '…' : 'Move back'}
-          </Button>
-        </div>
-      )}
-      {note}
     </Card>
   )
 }
 
-function FeesAndReferrals() {
+export function FeesAndReferrals() {
   const w = useWallet()
   const control = useAccountControl()
   const fees = control.data?.fees
@@ -209,7 +161,7 @@ function FeesAndReferrals() {
   )
 }
 
-function TradingKeys() {
+export function TradingKeys() {
   const w = useWallet()
   const control = useAccountControl()
   const agents = control.data?.agents ?? []
@@ -263,7 +215,7 @@ function TradingKeys() {
 }
 
 /** SCHEDULE_CANCEL: cancel every order, trigger and TWAP at a time unless renewed (Hyperliquid's dead man's switch). */
-function DeadMansSwitch() {
+export function DeadMansSwitch() {
   const w = useWallet()
   const { busy, run, note } = useAction()
   const arm = (minutes: number) =>

@@ -7,16 +7,18 @@ import {
   CrosshairMode,
   IChartApi,
   ISeriesApi,
+  ISeriesMarkersPluginApi,
   LineSeries,
   LineStyle,
   LineType,
   UTCTimestamp,
   createChart,
+  createSeriesMarkers,
 } from 'lightweight-charts'
 import { useTheme } from 'next-themes'
 import { cssColor } from '@/components/trade/PriceChart'
-import { compact } from '@/lib/format'
-import type { PnlResponse } from '@/lib/types'
+import { compact, price as fmtPrice, size as fmtSize } from '@/lib/format'
+import type { PnlResponse, PnlTrade } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
 export const RANGES = [
@@ -33,12 +35,13 @@ interface Point {
 }
 
 /**
- * The range's points: cumulative realized PnL (stepping at each realization), starting
- * from where it stood when the range opens, plus "now" with unrealized PnL added.
+ * The range's points: PnL as it stood after each trade or realization (realized so far, plus
+ * spot positions marked at their trade then), starting from where it stood when the range opens,
+ * plus "now" with every open position marked at today's prices.
  */
 export function rangePoints(pnl: PnlResponse, range: RangeId, now = Math.floor(Date.now() / 1000)) {
   const span = RANGES.find((r) => r.id === range)!.seconds
-  const all = pnl.series.map((p) => ({ time: p.time, value: Number(p.realizedUsd) }))
+  const all = pnl.series.map((p) => ({ time: p.time, value: Number(p.pnlUsd ?? p.realizedUsd) }))
   const from = Number.isFinite(span) ? now - span : Math.min(all[0]?.time ?? now, now) - 60
   let start = 0
   const inRange: Point[] = []
@@ -52,10 +55,12 @@ export function rangePoints(pnl: PnlResponse, range: RangeId, now = Math.floor(D
     else realized.push(p)
   }
   const lastRealized = realized[realized.length - 1]
-  const total = lastRealized.value + Number(pnl.totals.unrealizedUsd)
+  const total = Number(pnl.totals.pnlUsd)
   const end = Math.max(now, lastRealized.time + 1)
+  const trades = (pnl.trades ?? []).filter((t) => t.time >= from)
   return {
     realized,
+    trades,
     projection: [lastRealized, { time: end, value: total }],
     start,
     end: total,
@@ -68,8 +73,14 @@ export function PnlChart({ pnl, range, className }: { pnl: PnlResponse; range: R
   const chart = useRef<IChartApi | null>(null)
   const line = useRef<ISeriesApi<'Baseline'> | null>(null)
   const tail = useRef<ISeriesApi<'Line'> | null>(null)
+  const marks = useRef<ISeriesMarkersPluginApi<UTCTimestamp> | null>(null)
   const { resolvedTheme } = useTheme()
   const [hover, setHover] = useState<{ time: number; value: number } | null>(null)
+  const tradesAt = useMemo(() => {
+    const m = new Map<number, PnlTrade[]>()
+    for (const t of pnl.trades ?? []) m.set(t.time, [...(m.get(t.time) ?? []), t])
+    return m
+  }, [pnl.trades])
   const pts = useMemo(() => rangePoints(pnl, range), [pnl, range])
 
   useEffect(() => {
@@ -116,6 +127,7 @@ export function PnlChart({ pnl, range, className }: { pnl: PnlResponse; range: R
       lastValueVisible: true,
       crosshairMarkerVisible: true,
     })
+    marks.current = createSeriesMarkers(line.current, [], { zOrder: 'aboveSeries' }) as ISeriesMarkersPluginApi<UTCTimestamp>
     c.subscribeCrosshairMove((p) => {
       if (typeof p.time !== 'number') return setHover(null)
       const d = (p.seriesData.get(tail.current!) ?? p.seriesData.get(line.current!)) as { value?: number } | undefined
@@ -125,6 +137,7 @@ export function PnlChart({ pnl, range, className }: { pnl: PnlResponse; range: R
     return () => {
       c.remove()
       chart.current = null
+      marks.current = null
     }
   }, [resolvedTheme])
 
@@ -132,10 +145,21 @@ export function PnlChart({ pnl, range, className }: { pnl: PnlResponse; range: R
     if (!line.current || !tail.current || !chart.current) return
     line.current.setData(pts.realized.map((p) => ({ time: p.time as UTCTimestamp, value: p.value })))
     tail.current.setData(pts.projection.map((p) => ({ time: p.time as UTCTimestamp, value: p.value })))
+    // A spot trade: an arrow up under the line for a buy, down over it for a sell.
+    marks.current?.setMarkers(
+      pts.trades.map((t) => ({
+        time: t.time as UTCTimestamp,
+        position: t.side === 'buy' ? ('belowBar' as const) : ('aboveBar' as const),
+        shape: t.side === 'buy' ? ('arrowUp' as const) : ('arrowDown' as const),
+        color: cssColor(t.side === 'buy' ? '--bid' : '--ask'),
+        size: 0.8,
+      }))
+    )
     chart.current.timeScale().fitContent()
   }, [pts, resolvedTheme])
 
   const shown = hover ?? { time: pts.projection[1].time, value: pts.end }
+  const hoverTrades = hover ? (tradesAt.get(hover.time) ?? []) : []
   return (
     <div className={cn('relative', className)}>
       <div className="pointer-events-none absolute left-3 top-2 z-10 text-xs">
@@ -146,6 +170,11 @@ export function PnlChart({ pnl, range, className }: { pnl: PnlResponse; range: R
         <span className="ml-2 text-muted-foreground">
           {hover ? new Date(hover.time * 1000).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : 'now, incl. unrealized'}
         </span>
+        {hoverTrades.map((t, i) => (
+          <div key={i} className="num mt-0.5 text-[11px] text-muted-foreground">
+            <span className={t.side === 'buy' ? 'text-bid' : 'text-ask'}>{t.side === 'buy' ? 'Bought' : 'Sold'}</span> {fmtSize(t.amount)} {t.base} at {fmtPrice(t.price)} {t.quote}
+          </div>
+        ))}
       </div>
       <div ref={box} className="h-full w-full" />
     </div>

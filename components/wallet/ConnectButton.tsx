@@ -50,7 +50,10 @@ export function ConnectButton({ className }: { className?: string }) {
       <Button size="sm" variant="outline" onClick={() => setOpen((o) => !o)} className={className}>
         <span className={cn('mr-2 h-2 w-2 rounded-full', !w.rightNetwork ? 'bg-warn' : reachable ? 'bg-bid' : 'bg-muted-foreground')} />
         {remote && <Smartphone className="mr-1 h-3.5 w-3.5" />}
-        <span className="font-mono text-xs">{shortAddress(pq, 5)}</span>
+        <span className="font-mono text-xs">
+          <span className="hidden sm:inline">{shortAddress(pq, 5)}</span>
+          <span className="sm:hidden">{shortAddress(pq, 3)}</span>
+        </span>
       </Button>
       {open && (
         <div className="absolute right-0 mt-2 w-72 rounded-lg border bg-popover p-3 text-sm shadow-lg z-50" onMouseLeave={() => setOpen(false)}>
