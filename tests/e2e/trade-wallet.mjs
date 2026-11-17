@@ -49,6 +49,8 @@ const ctx = await chromium.launchPersistentContext(mkdtempSync(join(tmpdir(), 'q
   colorScheme: 'dark',
   args: [`--disable-extensions-except=${EXT}`, `--load-extension=${EXT}`],
 })
+// The site asks a new visitor to accept the Terms (lib/terms.ts, TERMS_VERSION); accept them up front.
+await ctx.addInitScript(() => localStorage.setItem('qrdx-trade:terms', JSON.stringify({ version: '2026-11-17', at: new Date().toISOString() })))
 let [sw] = ctx.serviceWorkers()
 if (!sw) sw = await ctx.waitForEvent('serviceworker', { timeout: 15_000 })
 const extId = new URL(sw.url()).host

@@ -3,6 +3,7 @@
 import React from 'react'
 import Link from 'next/link'
 import { Github, Twitter, MessageCircle, Shield, Sparkles } from 'lucide-react'
+import { PRIVACY_URL, TERMS_URL } from '@/lib/terms'
 
 export default function Footer() {
   return (
@@ -91,15 +92,15 @@ export default function Footer() {
                 </a>
               </li>
               <li>
-                <a href="https://twitter.com/qrdx" target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-primary transition-colors flex items-center gap-2">
+                <a href="https://x.com/qrdx_org" target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-primary transition-colors flex items-center gap-2">
                   <Twitter className="h-4 w-4" />
-                  Twitter
+                  X
                 </a>
               </li>
               <li>
-                <a href="https://discord.gg/qrdx" target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-primary transition-colors flex items-center gap-2">
+                <a href="https://t.me/qrdx_official" target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-primary transition-colors flex items-center gap-2">
                   <MessageCircle className="h-4 w-4" />
-                  Discord
+                  Telegram
                 </a>
               </li>
             </ul>
@@ -112,18 +113,15 @@ export default function Footer() {
             © {new Date().getFullYear()} QRDX Foundation. All rights reserved.
           </p>
           <div className="flex items-center gap-6 text-sm">
-            <a href="https://qrdx.org/advertise" target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-primary transition-colors">
-              Advertise
-            </a>
-            <a href="https://trade.qrdx.org/partner" className="text-muted-foreground hover:text-primary transition-colors">
+            <Link href="/partner" className="text-muted-foreground hover:text-primary transition-colors">
               Partner
-            </a>
-            <Link href="/terms" className="text-muted-foreground hover:text-primary transition-colors">
+            </Link>
+            <a href={TERMS_URL} className="text-muted-foreground hover:text-primary transition-colors">
               Terms of Service
-            </Link>
-            <Link href="/privacy" className="text-muted-foreground hover:text-primary transition-colors">
+            </a>
+            <a href={PRIVACY_URL} className="text-muted-foreground hover:text-primary transition-colors">
               Privacy Policy
-            </Link>
+            </a>
           </div>
         </div>
       </div>

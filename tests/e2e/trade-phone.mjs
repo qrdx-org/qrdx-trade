@@ -56,6 +56,8 @@ const server = createServer(async (req, res) => {
 const browser = await chromium.launch()
 const phoneCtx = await browser.newContext({ ...devices['iPhone 13'], serviceWorkers: 'block' })
 const deskCtx = await browser.newContext({ viewport: { width: 1440, height: 900 }, colorScheme: 'dark' })
+// The site asks a new visitor to accept the Terms (lib/terms.ts, TERMS_VERSION); accept them up front.
+await deskCtx.addInitScript(() => localStorage.setItem('qrdx-trade:terms', JSON.stringify({ version: '2026-11-17', at: new Date().toISOString() })))
 
 // ── phone: import a wallet ──
 console.log('Phone: wallet web app')

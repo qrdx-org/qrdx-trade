@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { ShieldCheck } from 'lucide-react'
 import { Wordmark } from '@/components/chrome/Logo'
+import { PRIVACY_URL, TERMS_URL } from '@/lib/terms'
 
 const COLUMNS: { title: string; links: { label: string; href: string }[] }[] = [
   {
@@ -38,8 +39,8 @@ const COLUMNS: { title: string; links: { label: string; href: string }[] }[] = [
     title: 'Community',
     links: [
       { label: 'GitHub', href: 'https://github.com/qrdx-org' },
-      { label: 'X / Twitter', href: 'https://twitter.com/qrdx' },
-      { label: 'Discord', href: 'https://discord.gg/qrdx' },
+      { label: 'X', href: 'https://x.com/qrdx_org' },
+      { label: 'Telegram', href: 'https://t.me/qrdx_official' },
     ],
   },
 ]
@@ -81,7 +82,15 @@ export function SiteFooter() {
       </div>
       <div className="border-t">
         <div className="mx-auto flex max-w-6xl flex-col gap-2 px-4 py-5 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
-          <span>© {new Date().getFullYear()} QRDX Foundation</span>
+          <span className="flex flex-wrap gap-x-4 gap-y-1">
+            <span>© {new Date().getFullYear()} QRDX Foundation</span>
+            <a href={TERMS_URL} target="_blank" rel="noopener noreferrer" className="hover:text-foreground">
+              Terms of Service
+            </a>
+            <a href={PRIVACY_URL} target="_blank" rel="noopener noreferrer" className="hover:text-foreground">
+              Privacy Policy
+            </a>
+          </span>
           <span>Markets, books and fills come from the QRDX chain. USD index prices are labelled reference data.</span>
         </div>
       </div>

@@ -10,11 +10,11 @@
  */
 
 /** Kept on reset: they are validated when read and cannot break a page. */
-const KEEP = new Set(['qrdx-trade:favorites', 'qrdx-trade:chart-kind', 'theme'])
+const KEEP = new Set(['qrdx-trade:favorites', 'qrdx-trade:chart-kind', 'qrdx-trade:terms', 'theme'])
 
 /**
  * Clears the wallet link and phone session, the network choice, tracked transactions and
- * launch progress (every `qrdx-trade:` key but favourites and the chart style).
+ * launch progress (every `qrdx-trade:` key but favourites, the chart style and the accepted Terms).
  */
 export async function resetSavedState(): Promise<void> {
   try {
