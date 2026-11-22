@@ -115,8 +115,8 @@ export default function PartnerPage() {
                 </Card>
 
                 <Card className="text-center p-6">
-                  <div className="w-12 h-12 rounded-full bg-blue-500/10 flex items-center justify-center mx-auto mb-4">
-                    <TrendingUp className="h-6 w-6 text-blue-500" />
+                  <div className="w-12 h-12 rounded-full bg-signal/10 flex items-center justify-center mx-auto mb-4">
+                    <TrendingUp className="h-6 w-6 text-signal" />
                   </div>
                   <h3 className="font-bold mb-2">Tiered System</h3>
                   <p className="text-sm text-muted-foreground">
@@ -154,7 +154,7 @@ export default function PartnerPage() {
                   <CardContent className="p-6">
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-sm text-muted-foreground">Posts Shared</span>
-                      <Share2 className="h-4 w-4 text-blue-500" />
+                      <Share2 className="h-4 w-4 text-signal" />
                     </div>
                     <div className="text-2xl font-bold">{userStats.postsShared}</div>
                   </CardContent>

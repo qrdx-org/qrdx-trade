@@ -66,7 +66,7 @@ export const VERIFIED_ASSETS: VerifiedAsset[] = [
     decimals: 18,
     prices: {},
     quoteRank: 60,
-    color: '#2563eb',
+    color: '#0091b8',
     native: true,
   },
   {

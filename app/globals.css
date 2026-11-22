@@ -28,12 +28,14 @@
   --color-border: hsl(var(--border));
   --color-input: hsl(var(--input));
   --color-ring: hsl(var(--ring));
+  --color-signal: hsl(var(--signal));
   /* Trading: bids / buys and asks / sells. */
   --color-bid: hsl(var(--bid));
   --color-ask: hsl(var(--ask));
   --color-warn: hsl(var(--warn));
   --color-canvas: hsl(var(--canvas));
-  --font-mono: var(--font-jetbrains), ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-sans: var(--font-geist), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
   --radius-lg: var(--radius);
   --radius-md: calc(var(--radius) - 2px);
   --radius-sm: calc(var(--radius) - 4px);
@@ -41,65 +43,68 @@
 
 @layer base {
   /*
-   * Light: strictly black on white. Greys are neutral (no hue), the accent is
-   * black, and colour appears only where it carries meaning (buy / sell, warnings).
+   * Light: ink on paper, the same tokens as qrdx.org. Buttons are ink; Cherenkov blue
+   * (`signal`) deepens to stay legible; colour otherwise carries meaning only (buy / sell,
+   * warnings).
    */
   :root {
-    --background: 0 0% 100%;
-    --foreground: 0 0% 4%;
+    --background: 40 20% 97.5%;
+    --foreground: 228 18% 8%;
     /* the canvas behind the trading terminal's panels */
-    --canvas: 0 0% 96.5%;
-    --card: 0 0% 100%;
-    --card-foreground: 0 0% 4%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 0 0% 4%;
-    --primary: 0 0% 4%;
-    --primary-foreground: 0 0% 100%;
-    --secondary: 0 0% 95%;
-    --secondary-foreground: 0 0% 4%;
-    --muted: 0 0% 95.5%;
-    --muted-foreground: 0 0% 40%;
-    --accent: 0 0% 94%;
-    --accent-foreground: 0 0% 4%;
-    --destructive: 354 70% 48%;
+    --canvas: 40 14% 94.5%;
+    --card: 40 25% 99%;
+    --card-foreground: 228 18% 8%;
+    --popover: 40 25% 99%;
+    --popover-foreground: 228 18% 8%;
+    --primary: 228 18% 8%;
+    --primary-foreground: 40 20% 97.5%;
+    --secondary: 40 10% 93%;
+    --secondary-foreground: 228 18% 8%;
+    --muted: 40 10% 93.5%;
+    --muted-foreground: 228 6% 38%;
+    --accent: 40 12% 91.5%;
+    --accent-foreground: 228 18% 8%;
+    --destructive: 356 72% 47%;
     --destructive-foreground: 0 0% 100%;
-    --border: 0 0% 89%;
-    --input: 0 0% 86%;
-    --ring: 0 0% 4%;
-    --radius: 0.625rem;
-    --bid: 152 62% 33%;
-    --ask: 354 72% 48%;
-    --warn: 32 95% 42%;
+    --border: 40 8% 86.5%;
+    --input: 40 8% 82%;
+    --signal: 196 100% 34%;
+    --ring: 196 100% 34%;
+    --radius: 0.5rem;
+    --bid: 152 62% 31%;
+    --ask: 356 72% 47%;
+    --warn: 30 90% 40%;
   }
 
   /*
-   * Dark: QRDX navy. Surfaces step up from a near-black navy, and QRDX blue
-   * (the token mark's #3b82f6) is the one accent.
+   * Dark: ink. Surfaces step up from a near-black with a trace of blue, text is a warm
+   * off-white, and Cherenkov blue is the one accent.
    */
   .dark {
-    --background: 224 71% 4%;
-    --foreground: 214 32% 96%;
-    --canvas: 225 72% 3%;
-    --card: 223 58% 6.5%;
-    --card-foreground: 214 32% 96%;
-    --popover: 223 55% 8%;
-    --popover-foreground: 214 32% 96%;
-    --primary: 217 91% 60%;
-    --primary-foreground: 0 0% 100%;
-    --secondary: 222 42% 12%;
-    --secondary-foreground: 214 32% 96%;
-    --muted: 222 42% 11%;
-    --muted-foreground: 217 18% 62%;
-    --accent: 221 45% 13%;
-    --accent-foreground: 214 32% 96%;
-    --destructive: 355 78% 58%;
-    --destructive-foreground: 0 0% 100%;
-    --border: 221 40% 14%;
-    --input: 221 38% 17%;
-    --ring: 217 91% 60%;
-    --bid: 156 66% 46%;
-    --ask: 355 80% 61%;
-    --warn: 38 92% 56%;
+    --background: 228 14% 4.3%;
+    --foreground: 40 18% 92%;
+    --canvas: 228 16% 3%;
+    --card: 228 11% 6.8%;
+    --card-foreground: 40 18% 92%;
+    --popover: 228 11% 8.5%;
+    --popover-foreground: 40 18% 92%;
+    --primary: 191 100% 63%;
+    --primary-foreground: 228 30% 6%;
+    --secondary: 228 9% 10.5%;
+    --secondary-foreground: 40 18% 92%;
+    --muted: 228 9% 10%;
+    --muted-foreground: 40 4% 60%;
+    --accent: 228 9% 12%;
+    --accent-foreground: 40 18% 92%;
+    --destructive: 357 85% 64%;
+    --destructive-foreground: 228 30% 6%;
+    --border: 228 7% 14%;
+    --input: 228 7% 18%;
+    --signal: 191 100% 63%;
+    --ring: 191 100% 63%;
+    --bid: 150 62% 50%;
+    --ask: 357 85% 64%;
+    --warn: 38 95% 60%;
   }
 }
 
@@ -111,7 +116,7 @@
   body {
     background-color: hsl(var(--background));
     color: hsl(var(--foreground));
-    font-feature-settings: "rlig" 1, "calt" 1, "cv11" 1;
+    font-feature-settings: "ss01" 1, "calt" 1;
     -webkit-font-smoothing: antialiased;
   }
   ::selection {

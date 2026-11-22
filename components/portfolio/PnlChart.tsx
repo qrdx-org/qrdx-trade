@@ -91,7 +91,8 @@ export function PnlChart({ pnl, range, className }: { pnl: PnlResponse; range: R
         background: { type: ColorType.Solid, color: 'transparent' },
         textColor: cssColor('--muted-foreground'),
         fontSize: 11,
-        fontFamily: 'var(--font-inter), Inter, system-ui, sans-serif',
+        // A canvas cannot resolve CSS variables: hand it the page's resolved font stack.
+        fontFamily: getComputedStyle(document.body).fontFamily,
         attributionLogo: false,
       },
       grid: { vertLines: { visible: false }, horzLines: { color: cssColor('--border', 0.45) } },

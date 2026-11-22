@@ -117,7 +117,8 @@ export function PriceChart({
         background: { type: ColorType.Solid, color: 'transparent' },
         textColor: cssColor('--muted-foreground'),
         fontSize: 11,
-        fontFamily: 'var(--font-inter), Inter, system-ui, sans-serif',
+        // A canvas cannot resolve CSS variables: hand it the page's resolved font stack.
+        fontFamily: getComputedStyle(document.body).fontFamily,
         attributionLogo: false,
       },
       grid: { vertLines: { color: cssColor('--border', 0.45) }, horzLines: { color: cssColor('--border', 0.45) } },

@@ -1,4 +1,4 @@
-import { Inter, JetBrains_Mono } from 'next/font/google'
+import { Geist, Geist_Mono } from 'next/font/google'
 import './globals.css'
 import { ThemeProvider } from '@/components/theme-provider'
 import { WalletProvider } from '@/lib/wallet/WalletContext'
@@ -6,8 +6,8 @@ import { StaleBuildGuard } from '@/components/StaleBuildGuard'
 import { TermsGate } from '@/components/chrome/TermsGate'
 import type { Metadata } from 'next'
 
-const inter = Inter({ subsets: ['latin'], variable: '--font-inter' })
-const mono = JetBrains_Mono({ subsets: ['latin'], variable: '--font-jetbrains' })
+const sans = Geist({ subsets: ['latin'], variable: '--font-geist' })
+const mono = Geist_Mono({ subsets: ['latin'], variable: '--font-geist-mono' })
 
 export const metadata: Metadata = {
   title: 'QRDX Trade',
@@ -58,7 +58,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={`${inter.className} ${inter.variable} ${mono.variable}`}>
+      <body className={`${sans.className} ${sans.variable} ${mono.variable}`}>
         <StaleBuildGuard />
         <ThemeProvider
           attribute="class"
