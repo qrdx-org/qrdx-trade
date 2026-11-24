@@ -17,9 +17,9 @@ type Size = keyof typeof SIZES
 const LOGOS = new Set(['qrdx', 'btc', 'eth', 'usdc', 'usdt', 'sol', 'bnb', 'avax', 'link', 'uni', 'ada', 'dot', 'doge'])
 
 /**
- * A token's mark: the asset's logo when it is verified and has one; else the image
- * its creator published (docs/PROFILES.md), when there is one; else a coloured disc
- * with the ticker's initials. Unverified tokens always keep a dashed warning ring,
+ * A token's mark, in greyscale like the rest of the site: the asset's logo when it is
+ * verified and has one; else the image its creator published (docs/PROFILES.md), when
+ * there is one; else a disc with the ticker's initials. Unverified tokens always keep a dashed warning ring,
  * image or not, so a copycat that borrows a real logo still looks unverified.
  */
 export function TokenBadge({
@@ -36,7 +36,7 @@ export function TokenBadge({
   if (slug && LOGOS.has(slug)) {
     return (
       // eslint-disable-next-line @next/next/no-img-element
-      <img src={`/tokens/${slug}.svg`} alt="" aria-hidden className={cn('shrink-0 rounded-full bg-background select-none', SIZES[size], className)} />
+      <img src={`/tokens/${slug}.svg`} alt="" aria-hidden className={cn('logo-mono shrink-0 rounded-full bg-background select-none', SIZES[size], className)} />
     )
   }
   if (asset?.image && broken !== asset.image) {
@@ -50,7 +50,7 @@ export function TokenBadge({
         referrerPolicy="no-referrer"
         onError={() => setBroken(asset.image ?? null)}
         className={cn(
-          'shrink-0 rounded-full bg-muted object-cover select-none',
+          'logo-mono shrink-0 rounded-full bg-muted object-cover select-none',
           SIZES[size],
           !asset.verified && 'outline-1 outline-dashed outline-offset-1 outline-warn',
           className
@@ -62,12 +62,11 @@ export function TokenBadge({
   return (
     <span
       className={cn(
-        'inline-flex shrink-0 items-center justify-center rounded-full font-semibold uppercase text-white select-none',
+        'inline-flex shrink-0 items-center justify-center rounded-full bg-foreground/10 font-semibold uppercase text-foreground select-none',
         SIZES[size],
         asset && !asset.verified && 'outline-1 outline-dashed outline-offset-1 outline-warn',
         className
       )}
-      style={{ background: asset?.color ?? 'hsl(var(--muted-foreground))' }}
       aria-hidden
     >
       {label}

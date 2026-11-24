@@ -125,8 +125,8 @@ export default function PartnerPage() {
                 </Card>
 
                 <Card className="text-center p-6">
-                  <div className="w-12 h-12 rounded-full bg-purple-500/10 flex items-center justify-center mx-auto mb-4">
-                    <Users className="h-6 w-6 text-purple-500" />
+                  <div className="w-12 h-12 rounded-full bg-foreground/10 flex items-center justify-center mx-auto mb-4">
+                    <Users className="h-6 w-6 text-foreground" />
                   </div>
                   <h3 className="font-bold mb-2">Build Community</h3>
                   <p className="text-sm text-muted-foreground">
@@ -164,7 +164,7 @@ export default function PartnerPage() {
                   <CardContent className="p-6">
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-sm text-muted-foreground">Total Engagement</span>
-                      <TrendingUp className="h-4 w-4 text-purple-500" />
+                      <TrendingUp className="h-4 w-4 text-foreground" />
                     </div>
                     <div className="text-2xl font-bold">{userStats.engagement.toLocaleString()}</div>
                   </CardContent>
@@ -223,9 +223,9 @@ export default function PartnerPage() {
                       <div key={post.id} className="flex items-start gap-4 p-4 rounded-lg bg-muted/30 border">
                         <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
                           {post.platform === 'Twitter' ? (
-                            <Twitter className="h-5 w-5 text-[#1DA1F2]" />
+                            <Twitter className="h-5 w-5 text-foreground" />
                           ) : (
-                            <MessageCircle className="h-5 w-5 text-[#0088cc]" />
+                            <MessageCircle className="h-5 w-5 text-foreground" />
                           )}
                         </div>
                         <div className="flex-1">
@@ -272,7 +272,7 @@ export default function PartnerPage() {
                     <div className="p-4 rounded-lg border text-center">
                       <div className="text-lg font-bold mb-1">Platinum</div>
                       <div className="text-sm text-muted-foreground mb-2">51+ posts</div>
-                      <div className="text-2xl font-bold text-purple-500">3x</div>
+                      <div className="text-2xl font-bold text-foreground">3x</div>
                     </div>
                   </div>
                 </CardContent>

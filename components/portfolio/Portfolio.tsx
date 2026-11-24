@@ -206,7 +206,7 @@ export function Portfolio() {
                     <div
                       key={r.b?.asset.segment ?? 'perps'}
                       title={r.b?.asset.symbol ?? 'Perps equity'}
-                      style={{ width: `${(100 * r.usd!) / holdings.total}%`, background: r.b?.asset.color ?? 'hsl(var(--primary))' }}
+                      style={{ width: `${(100 * r.usd!) / holdings.total}%`, background: `hsl(var(--foreground) / ${Math.max(0.85 - i * 0.17, 0.18)})` }}
                       className={cn('h-full', i > 0 && 'border-l border-card')}
                     />
                   ))}

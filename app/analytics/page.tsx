@@ -25,10 +25,10 @@ const generateVolumeData = () => {
 }
 
 const generateTokenDistribution = () => [
-  { name: 'qETH', value: 35, color: '#8b5cf6' },
-  { name: 'QRDX', value: 28, color: '#ec4899' },
-  { name: 'qBTC', value: 22, color: '#f59e0b' },
-  { name: 'USDT', value: 15, color: '#10b981' },
+  { name: 'qETH', value: 35, color: '#d4d4d4' },
+  { name: 'QRDX', value: 28, color: '#a3a3a3' },
+  { name: 'qBTC', value: 22, color: '#737373' },
+  { name: 'USDT', value: 15, color: '#525252' },
 ]
 
 interface TopPool {
@@ -195,30 +195,30 @@ export default function AnalyticsPage() {
                       <AreaChart data={volumeData}>
                         <defs>
                           <linearGradient id="volumeGradient" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.3}/>
-                            <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0}/>
+                            <stop offset="5%" stopColor="#a3a3a3" stopOpacity={0.3}/>
+                            <stop offset="95%" stopColor="#a3a3a3" stopOpacity={0}/>
                           </linearGradient>
                         </defs>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#333" />
+                        <CartesianGrid strokeDasharray="3 3" stroke="#80808033" />
                         <XAxis 
                           dataKey="date" 
-                          stroke="#666"
+                          stroke="#808080"
                           tick={{ fontSize: 12 }}
                           interval={4}
                         />
                         <YAxis 
-                          stroke="#666"
+                          stroke="#808080"
                           tick={{ fontSize: 12 }}
                           tickFormatter={(value) => `$${(value / 1000000).toFixed(0)}M`}
                         />
                         <Tooltip
-                          contentStyle={{ backgroundColor: '#1a1a1a', border: '1px solid #333', borderRadius: '8px' }}
+                          contentStyle={{ backgroundColor: 'hsl(var(--popover))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }}
                           formatter={(value: number) => [`$${(value / 1000000).toFixed(2)}M`, 'Volume']}
                         />
                         <Area 
                           type="monotone" 
                           dataKey="volume" 
-                          stroke="#8b5cf6" 
+                          stroke="#a3a3a3" 
                           strokeWidth={2}
                           fill="url(#volumeGradient)" 
                         />
@@ -231,30 +231,30 @@ export default function AnalyticsPage() {
                       <AreaChart data={volumeData}>
                         <defs>
                           <linearGradient id="tvlGradient" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="#10b981" stopOpacity={0.3}/>
-                            <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                            <stop offset="5%" stopColor="#a3a3a3" stopOpacity={0.3}/>
+                            <stop offset="95%" stopColor="#a3a3a3" stopOpacity={0}/>
                           </linearGradient>
                         </defs>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#333" />
+                        <CartesianGrid strokeDasharray="3 3" stroke="#80808033" />
                         <XAxis 
                           dataKey="date" 
-                          stroke="#666"
+                          stroke="#808080"
                           tick={{ fontSize: 12 }}
                           interval={4}
                         />
                         <YAxis 
-                          stroke="#666"
+                          stroke="#808080"
                           tick={{ fontSize: 12 }}
                           tickFormatter={(value) => `$${(value / 1000000).toFixed(0)}M`}
                         />
                         <Tooltip
-                          contentStyle={{ backgroundColor: '#1a1a1a', border: '1px solid #333', borderRadius: '8px' }}
+                          contentStyle={{ backgroundColor: 'hsl(var(--popover))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }}
                           formatter={(value: number) => [`$${(value / 1000000).toFixed(2)}M`, 'TVL']}
                         />
                         <Area 
                           type="monotone" 
                           dataKey="tvl" 
-                          stroke="#10b981" 
+                          stroke="#a3a3a3" 
                           strokeWidth={2}
                           fill="url(#tvlGradient)" 
                         />
@@ -291,7 +291,7 @@ export default function AnalyticsPage() {
                       ))}
                     </Pie>
                     <Tooltip
-                      contentStyle={{ backgroundColor: '#1a1a1a', border: '1px solid #333', borderRadius: '8px' }}
+                      contentStyle={{ backgroundColor: 'hsl(var(--popover))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }}
                       formatter={(value: number) => [`${value}%`, 'Share']}
                     />
                   </PieChart>

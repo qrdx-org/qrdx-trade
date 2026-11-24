@@ -141,10 +141,12 @@ are cards on a darker canvas.
   ticker and have their own tab in the market search.
 - **Status bar** reads `/api/{v}/status` (`/get_status`, which the node does not
   cost-limit) every 5 s.
-- **Themes:** dark is QRDX navy with QRDX blue (#3b82f6) as the only accent;
-  light is strictly black on white. Green/red mark buys/sells, amber warns.
-  Tokens live in `app/globals.css`; verified assets show their logo
-  (`public/tokens`), anything else an initials disc with a dashed warning ring.
+- **Themes:** monochrome, the same tokens as qrdx.org, the explorer and the
+  wallet: white on near-black in dark mode, ink on white in light, greys
+  between, no accent colour. Green/red mark buys/sells, amber warns. Tokens
+  live in `app/globals.css`; verified assets show their logo in greyscale
+  (`public/tokens`, `.logo-mono`), anything else an initials disc with a
+  dashed warning ring.
 
 Phones get one panel at a time (Chart · Order book · Trades), then the form
 and the account panel below.
