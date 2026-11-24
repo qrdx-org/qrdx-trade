@@ -13,6 +13,7 @@ import { useApi } from '@/lib/hooks/useApi'
 import type { IndexPrice, Launch, MarketsResponse, SpotMarket } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { useNet } from '@/lib/wallet/WalletContext'
+import { PriceHalftone } from './PriceHalftone'
 
 /** A spot market's 24 h volume in USD: quote volume ÷ price × the base's USD price. Null when any part is unknown. */
 function volumeUsd(m: SpotMarket): string | null {
@@ -78,6 +79,8 @@ export function MarketsTable() {
     [rows]
   )
   const fresh = (launches.data?.launches ?? []).filter((l) => l.market).slice(0, 4)
+  // The header's chart: the first perpetual (BTC on QRDX networks).
+  const lead = markets.data?.perps[0] ?? null
 
   return (
     <div>
@@ -88,7 +91,7 @@ export function MarketsTable() {
               <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
                 {slot === 'test' ? `${network.name} · test tokens` : network.name}
               </p>
-              <h1 className="mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">Markets</h1>
+              <h1 className="mt-2 text-4xl font-semibold tracking-[-0.04em] sm:text-5xl">Markets</h1>
               <p className="mt-2 max-w-xl text-sm leading-relaxed text-muted-foreground">
                 Spot pairs and perpetuals on the QRDX chain. Order books, pool prices and fills come from the chain itself; USD index prices
                 from public exchanges are marked as reference.
@@ -101,6 +104,7 @@ export function MarketsTable() {
               <Rocket className="h-4 w-4" /> Launch a coin
             </Link>
           </div>
+          {lead && <PriceHalftone apiBase={apiBase} market={lead} className="mt-8" />}
 
           <div className="mt-8 grid grid-cols-2 gap-px overflow-hidden rounded-xl border bg-border md:grid-cols-4">
             <Summary label="24h volume" value={summary.volume ? `≈ ${usd(summary.volume)}` : markets.data ? '$0' : '—'} hint="Spot at each base asset's USD price, plus perpetuals" />
